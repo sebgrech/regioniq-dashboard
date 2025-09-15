@@ -1,0 +1,21 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Dummy Region" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-3, 54],
+            [-3, 55],
+            [-2, 55],
+            [-2, 54],
+            [-3, 54]
+          ]
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+.pnpm-debug.log*
+yarn-error.log
+package-lock.json
+
+# Next.js
+.next/
+out/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+*.log
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# MacOS
+.DS_Store
+
+# Python artifacts (since scripts/ exist here too)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite
+
+# Other build
+dist/
