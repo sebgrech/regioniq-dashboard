@@ -41,6 +41,16 @@ function DashboardContent() {
   const router = useRouter()
   const { toast } = useToast()
 
+  // ----- Persisted readiness for skipping the Supabase test gate -----
+  const READY_KEY = "riq:sb-ready"
+  const [showSupabaseTest, setShowSupabaseTest] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false
+    const forceSetup = (searchParams?.get("setup") ?? "0") === "1"
+    if (forceSetup) return true
+    return localStorage.getItem(READY_KEY) !== "1"
+  })
+  // -------------------------------------------------------------------
+
   // Defaults
   const region = getSearchParam(searchParams, "region", "UKI")
   const year = getSearchParamNumber(searchParams, "year", 2024)
@@ -49,7 +59,6 @@ function DashboardContent() {
   const [mapMetric, setMapMetric] = useState("gva")
 
   // Supabase test state
-  const [showSupabaseTest, setShowSupabaseTest] = useState(true)
   const [connectionStatus, setConnectionStatus] = useState<string>("Not tested")
   const [testData, setTestData] = useState<any[]>([])
   const [supabaseLoading, setSupabaseLoading] = useState(false)
@@ -63,31 +72,26 @@ function DashboardContent() {
   const testConnection = async () => {
     setSupabaseLoading(true)
     setConnectionStatus("Testing...")
-    
     try {
       const success = await testSupabaseConnection()
       setConnectionStatus(success ? "✅ Connected!" : "❌ Failed")
     } catch (error) {
       setConnectionStatus(`❌ Error: ${error}`)
     }
-    
     setSupabaseLoading(false)
   }
 
   const testDataFetch = async () => {
     setSupabaseLoading(true)
-    
     try {
-      // Test with current dashboard parameters
       const data = await fetchSeries({
-        metricId: "nominal_gva_mn_gbp", // Correct metric ID from Supabase
+        metricId: "nominal_gva_mn_gbp",
         region: region,
-        scenario: scenario
+        scenario: scenario,
       })
-      
       setTestData(data)
       console.log("📊 Fetched test data:", data)
-      
+
       if (data.length > 0) {
         toast({
           title: "✅ Supabase Data Retrieved!",
@@ -109,14 +113,13 @@ function DashboardContent() {
         variant: "destructive",
       })
     }
-    
     setSupabaseLoading(false)
   }
 
-  // Auto-test connection on load
+  // Auto-test connection only when the test gate is showing
   useEffect(() => {
-    testConnection()
-  }, [])
+    if (showSupabaseTest) testConnection()
+  }, [showSupabaseTest])
 
   // Fetch dashboard data
   useEffect(() => {
@@ -130,7 +133,7 @@ function DashboardContent() {
           }))
           const allMetricsData = await Promise.all(allMetricsPromises)
           setDashboardData({ allMetricsData, isLoading: false })
-          
+
           toast({
             title: "✅ Dashboard Loaded",
             description: "All metrics loaded from Supabase!",
@@ -173,6 +176,21 @@ function DashboardContent() {
     }, 2000)
   }
 
+  // When user chooses to load the dashboard, persist readiness and clean ?setup
+  const handleLoadDashboard = () => {
+    try {
+      localStorage.setItem(READY_KEY, "1")
+    } catch {}
+    setShowSupabaseTest(false)
+
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      params.delete("setup")
+      const qs = params.toString()
+      router.replace(qs ? `?${qs}` : ".", { scroll: false })
+    }
+  }
+
   // If showing Supabase test
   if (showSupabaseTest) {
     return (
@@ -183,26 +201,26 @@ function DashboardContent() {
               <h1 className="text-3xl font-bold">🧪 Supabase Connection Test</h1>
               <ThemeToggle />
             </div>
-            
+
             <div className="p-6 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
               <h2 className="text-lg font-semibold mb-2">Testing Parameters:</h2>
               <p><strong>Region:</strong> {region}</p>
               <p><strong>Year:</strong> {year}</p>
               <p><strong>Scenario:</strong> {scenario}</p>
             </div>
-            
+
             <div className="space-y-4">
               <div className="flex gap-4 flex-wrap">
                 <Button onClick={testConnection} disabled={supabaseLoading}>
                   {supabaseLoading ? "Testing..." : "Test Connection"}
                 </Button>
-                
+
                 <Button onClick={testDataFetch} disabled={supabaseLoading}>
                   {supabaseLoading ? "Fetching..." : "Test Data Fetch"}
                 </Button>
-                
-                <Button 
-                  onClick={() => setShowSupabaseTest(false)}
+
+                <Button
+                  onClick={handleLoadDashboard}
                   variant="outline"
                   disabled={testData.length === 0}
                 >
@@ -311,31 +329,20 @@ function DashboardContent() {
         onExport={handleExport}
       />
 
-      {/* Header with back to test button */}
+      {/* Header */}
       <div className="container mx-auto px-4 py-8 space-y-4 border-b border-border/40">
         <div className="flex items-center justify-between pb-4">
           <div>
             <h1 className="text-4xl font-bold tracking-tight">
-              <span className="bg-gradient-to-r from-[#00FFF7] via-[#C400FF] to-[#FF3C78] bg-clip-text text-transparent">
-                Main
-              </span>{" "}
-              Dashboard 🚀
+              Main Dashboard
             </h1>
             <p className="text-xl text-muted-foreground">
               Regional Overview • {regionName} ({regionCode}) • {year}{" "}
-              {scenario.charAt(0).toUpperCase() + scenario.slice(1)} •{" "}
-              <span className="text-green-600">Live Supabase Data</span>
+              {scenario.charAt(0).toUpperCase() + scenario.slice(1)}
             </p>
             <Breadcrumbs items={breadcrumbItems} />
           </div>
           <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => setShowSupabaseTest(true)}
-            >
-              🧪 Test Mode
-            </Button>
             <ThemeToggle />
           </div>
         </div>

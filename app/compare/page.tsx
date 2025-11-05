@@ -34,74 +34,112 @@ import { formatValue } from "@/lib/data-service"
 import { YEARS } from "@/lib/metrics.config"
 
 const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, isLoading, className }: any) => {
-  const chartData = useMemo(() => {
-    if (!regions || regions.length === 0) return []
-    
-    // Create a map of years to values for each region
-    const yearMap = new Map<number, any>()
-    
-    // Get all unique years across all regions
-    const allYears = new Set<number>()
-    regions.forEach(({ data }: any) => {
-      data?.forEach((point: any) => allYears.add(point.year))
-    })
-    
-    // Initialize each year
-    Array.from(allYears).forEach((year) => {
-      yearMap.set(year, { year })
-    })
-    
-    // Add data for each region
-    regions.forEach(({ regionName, data }: any, index: number) => {
-      // Use index-based keys to avoid issues with special characters in region names
-      const dataKey = `region${index}`
-      data?.forEach((point: any) => {
-        const existing = yearMap.get(point.year)
-        if (existing) {
-          if (!('type' in existing)) {
-            existing.type = point.type
-          }
-          existing[dataKey] = point.value
-        }
-      })
-    })
-    
-    return Array.from(yearMap.values()).sort((a, b) => a.year - b.year)
+  // Palette
+  const colors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"]
+
+  // Visibility state for regions
+  const [visible, setVisible] = useState<boolean[]>(() => regions.map(() => true))
+
+  useEffect(() => {
+    setVisible(regions.map(() => true))
   }, [regions])
 
-  // Find where forecast starts - the first year that has type "forecast"
-  const forecastStartYear = useMemo(() => {
-    if (!chartData || chartData.length === 0) return null
-    
-    const firstForecastPoint = chartData.find(point => point.type === "forecast")
-    return firstForecastPoint ? firstForecastPoint.year : null
-  }, [chartData])
+  // 1) Compute the LAST historical year across all supplied region series
+  const lastHistoricalYear = useMemo(() => {
+    const histYears: number[] = []
+    for (const r of regions ?? []) {
+      for (const pt of r?.data ?? []) {
+        const year = (pt.year ?? pt.period) as number
+        const t = (pt.type ?? pt.data_type) as "historical" | "forecast" | undefined
+        if (year != null && t === "historical") histYears.push(year)
+      }
+    }
+    if (!histYears.length) return null
+    return Math.max(...histYears)
+  }, [regions])
 
-  // Custom tooltip to show actual region names
+  // 2) Build a combined year → values map with SPLIT keys per region:
+  //    region{idx}_hist for years <= lastHistoricalYear, region{idx}_fcst for > lastHistoricalYear.
+  //    We also tag each row's "type" so the tooltip shows Historical/Forecast correctly.
+  const chartData = useMemo(() => {
+    if (!regions?.length) return []
+
+    const yearMap = new Map<number, any>()
+
+    // Collect all years first
+    for (const { data } of regions) {
+      for (const pt of data ?? []) {
+        const y = (pt.year ?? pt.period) as number
+        if (y == null) continue
+        if (!yearMap.has(y)) yearMap.set(y, { year: y })
+      }
+    }
+
+    // Fill rows per region with split hist/fcst keys
+    regions.forEach(({ data }: any, idx: number) => {
+      const kHist = `region${idx}_hist`
+      const kFcst = `region${idx}_fcst`
+
+      for (const pt of data ?? []) {
+        const y = (pt.year ?? pt.period) as number
+        if (y == null) continue
+        const row = yearMap.get(y)!
+        const t = (pt.type ?? pt.data_type) as "historical" | "forecast" | undefined
+
+        // Decide forecast vs historical per point.
+        // Prefer the provided type; fall back to the lastHistoricalYear threshold.
+        const isForecast = t ? t === "forecast" : (lastHistoricalYear != null ? y > lastHistoricalYear : false)
+
+        if (isForecast) row[kFcst] = pt.value
+        else row[kHist] = pt.value
+      }
+    })
+
+    // To connect the lines without gap, duplicate the last historical value into the forecast key for each region
+    if (lastHistoricalYear != null) {
+      regions.forEach((_, idx: number) => {
+        const kHist = `region${idx}_hist`
+        const kFcst = `region${idx}_fcst`
+        const row = yearMap.get(lastHistoricalYear)
+        if (row && row[kHist] != null && row[kFcst] == null) {
+          row[kFcst] = row[kHist]
+        }
+      })
+    }
+
+    // Tag the row type by the year threshold so tooltip stays consistent across regions
+    for (const row of yearMap.values()) {
+      row.type = lastHistoricalYear != null && row.year <= lastHistoricalYear ? "historical" : "forecast"
+    }
+
+    return Array.from(yearMap.values()).sort((a, b) => a.year - b.year)
+  }, [regions, lastHistoricalYear])
+
+  // 3) Custom tooltip (deduces region name from key "region{idx}_hist|_fcst")
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload || !payload.length) return null
-
-    const dataPoint = payload[0]?.payload
-    const isHistorical = dataPoint?.type === "historical"
+    const rowType = payload[0]?.payload?.type
+    const seen = new Set<number>() // avoid dup same region from hist/fcst overlap (shouldn't occur, but safe)
 
     return (
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 min-w-[200px]">
         <div className="flex items-center gap-2 mb-2">
           <span className="font-medium text-gray-900 dark:text-gray-100">{label}</span>
-          <Badge variant={isHistorical ? "secondary" : "outline"} className="text-xs">
-            {isHistorical ? "Historical" : "Forecast"}
+          <Badge variant={rowType === "historical" ? "secondary" : "outline"} className="text-xs">
+            {rowType === "historical" ? "Historical" : "Forecast"}
           </Badge>
         </div>
         <div className="space-y-1">
           {payload
-            .filter((entry: any) => entry.value != null)
-            .map((entry: any, index: number) => {
-              // Extract region index from dataKey (e.g., "region0" -> 0)
-              const regionIndex = parseInt(entry.dataKey.replace('region', ''))
-              const regionName = regions[regionIndex]?.regionName || entry.dataKey
-              
+            .filter((e: any) => e.value != null)
+            .map((entry: any, i: number) => {
+              const m = String(entry.dataKey).match(/^region(\d+)_/)
+              const idx = m ? parseInt(m[1], 10) : -1
+              if (idx >= 0 && seen.has(idx)) return null
+              if (idx >= 0) seen.add(idx)
+              const regionName = idx >= 0 ? (regions[idx]?.regionName ?? `Region ${idx + 1}`) : entry.dataKey
               return (
-                <div key={index} className="flex items-center justify-between gap-4">
+                <div key={i} className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
                     <span className="text-sm text-gray-700 dark:text-gray-300">{regionName}</span>
@@ -134,7 +172,7 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
     )
   }
 
-  if (!chartData || chartData.length === 0) {
+  if (!chartData.length) {
     return (
       <Card className={className}>
         <CardHeader>
@@ -150,8 +188,8 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
     )
   }
 
-  // Color palette for lines
-  const colors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"]
+  const yearMin = Math.min(...chartData.map((d: any) => d.year))
+  const yearMax = Math.max(...chartData.map((d: any) => d.year))
 
   return (
     <Card className={className}>
@@ -159,25 +197,21 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
         <CardTitle className="flex items-center justify-between">
           <span>{title}</span>
           <Badge variant="outline" className="text-xs">
-            {Math.min(...chartData.map(d => d.year))}-{Math.max(...chartData.map(d => d.year))}
+            {yearMin}-{yearMax}
           </Badge>
         </CardTitle>
         {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
+
       <CardContent>
         <div className="h-[400px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart 
-              data={chartData} 
-              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-            >
-              <CartesianGrid 
-                strokeDasharray="3 3" 
-                stroke="#e5e7eb" 
-                opacity={0.5}
-              />
+            <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
               <XAxis
                 dataKey="year"
+                type="number"
+                domain={["dataMin", "dataMax"]}
                 tick={{ fontSize: 12, fill: "#6b7280" }}
                 tickLine={{ stroke: "#e5e7eb" }}
                 axisLine={{ stroke: "#e5e7eb" }}
@@ -186,49 +220,91 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
                 tick={{ fontSize: 12, fill: "#6b7280" }}
                 tickLine={{ stroke: "#e5e7eb" }}
                 axisLine={{ stroke: "#e5e7eb" }}
-                tickFormatter={(value) => formatValue(value, unit)}
+                tickFormatter={(v) => formatValue(v, unit)}
               />
               <Tooltip content={<CustomTooltip />} />
 
-              {/* Vertical line at forecast start */}
-              {forecastStartYear && (
+              {/* Forecast divider on LAST historical year */}
+              {lastHistoricalYear != null && (
                 <ReferenceLine
-                  x={forecastStartYear}
+                  x={lastHistoricalYear}
                   stroke="#9ca3af"
                   strokeDasharray="5 5"
                   strokeOpacity={0.8}
-                  label={{ value: "Forecast", position: "top", fill: "#6b7280", fontSize: 12 }}
+                  label={({ viewBox }: any) => {
+                    const { x } = viewBox
+                    return (
+                      <text 
+                        x={x + 5} 
+                        y={30} 
+                        fill="#6b7280" 
+                        fontSize={12}
+                        textAnchor="start"
+                      >
+                        Forecast
+                      </text>
+                    )
+                  }}
                 />
               )}
-              
-              {/* Render a line for each region */}
-              {regions.map((region: any, index: number) => (
-                <Line
-                  key={`region${index}`}
-                  type="monotone"
-                  dataKey={`region${index}`}
-                  name={region.regionName}
-                  stroke={colors[index % colors.length]}
-                  strokeWidth={2.5}
-                  dot={false}
-                  activeDot={{ r: 5, stroke: colors[index % colors.length], strokeWidth: 2, fill: "#fff" }}
-                  connectNulls={false}
-                />
-              ))}
-              
-              <Legend 
+
+              {/* Render each region as 2 lines: solid historical + dashed forecast (legend only on hist) */}
+              {regions.map((region: any, index: number) => {
+                const color = colors[index % colors.length]
+                const kHist = `region${index}_hist`
+                const kFcst = `region${index}_fcst`
+                const isVisible = visible[index]
+                return (
+                  <React.Fragment key={`region-lines-${index}`}>
+                    <Line
+                      type="monotone"
+                      dataKey={kHist}
+                      name={region.regionName}
+                      stroke={color}
+                      strokeWidth={2.5}
+                      dot={false}
+                      connectNulls={false}
+                      hide={!isVisible}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey={kFcst}
+                      name={region.regionName}
+                      stroke={color}
+                      strokeWidth={2.5}
+                      strokeDasharray="6 3"   // <-- dashed from forecast
+                      dot={false}
+                      connectNulls={false}
+                      legendType="none"       // keep legend single per region
+                      hide={!isVisible}
+                    />
+                  </React.Fragment>
+                )
+              })}
+
+              <Legend
                 wrapperStyle={{ paddingTop: "20px" }}
                 formatter={(value, entry: any) => {
-                  // Extract region index from dataKey
-                  const regionIndex = parseInt(value.replace('region', ''))
-                  return regions[regionIndex]?.regionName || value
+                  // Extract region index from dataKey (e.g., "region0_hist" -> 0)
+                  const m = String(value).match(/^region(\d+)/)
+                  const idx = m ? parseInt(m[1], 10) : -1
+                  return idx >= 0 ? (regions[idx]?.regionName || value) : value
+                }}
+                onClick={(e: any) => {
+                  const dataKey = e.dataKey
+                  const m = String(dataKey).match(/^region(\d+)/)
+                  const idx = m ? parseInt(m[1], 10) : -1
+                  if (idx >= 0) {
+                    setVisible((prev) =>
+                      prev.map((v, i) => (i === idx ? !v : v))
+                    )
+                  }
                 }}
               />
             </LineChart>
           </ResponsiveContainer>
         </div>
-        
-        {/* Footer info */}
+
         <div className="flex items-center justify-between mt-4 pt-4 border-t text-sm text-muted-foreground">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -241,7 +317,7 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
             </div>
           </div>
           <div className="text-xs">
-            Forecast data shown with dashed lines
+            Divider marks last historical year • forecast is dashed.
           </div>
         </div>
       </CardContent>

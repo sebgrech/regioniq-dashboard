@@ -11,10 +11,15 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { formatValue } from "@/lib/data-service"
 
-// Define the component with a default export
 const ChartTimeseriesCompare = ({
   title,
   description,
@@ -32,30 +37,30 @@ const ChartTimeseriesCompare = ({
   isLoading?: boolean
   className?: string
 }) => {
-  // Combine all regional data
   const chartData = useMemo(() => {
-    if (!regions || regions.length === 0) return []
+    if (!regions?.length) return []
 
     const yearMap = new Map<number, any>()
-    
-    // Get all unique years
+
+    // Collect all years across all regions
     regions.forEach(({ data }) => {
-      data?.forEach((point: any) => {
-        if (!yearMap.has(point.year)) {
-          yearMap.set(point.year, { year: point.year })
-        }
+      data?.forEach((pt: any) => {
+        if (!yearMap.has(pt.year)) yearMap.set(pt.year, { year: pt.year })
       })
     })
 
-    // Add data for each region
+    // Populate values, split hist vs forecast
     regions.forEach(({ regionName, data }, index) => {
-      const dataKey = `region${index}`
-      data?.forEach((point: any) => {
-        const existing = yearMap.get(point.year)
-        if (existing) {
-          existing[dataKey] = point.value
-          existing[`${dataKey}_name`] = regionName
+      const baseKey = `region${index}`
+      data?.forEach((pt: any) => {
+        const row = yearMap.get(pt.year)
+        if (!row) return
+        if (pt.type === "historical") {
+          row[`${baseKey}_hist`] = pt.value
+        } else if (pt.type === "forecast") {
+          row[`${baseKey}_fcst`] = pt.value
         }
+        row[`${baseKey}_name`] = regionName
       })
     })
 
@@ -65,26 +70,20 @@ const ChartTimeseriesCompare = ({
   if (isLoading) {
     return (
       <Card className={className}>
-        <CardHeader>
-          <CardTitle>Loading...</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Loading…</CardTitle></CardHeader>
         <CardContent>
-          <div className="h-[400px] w-full flex items-center justify-center">
-            Loading chart data...
-          </div>
+          <div className="h-[400px] flex items-center justify-center">Loading chart…</div>
         </CardContent>
       </Card>
     )
   }
 
-  if (!chartData || chartData.length === 0) {
+  if (!chartData.length) {
     return (
       <Card className={className}>
-        <CardHeader>
-          <CardTitle>{title}</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
         <CardContent>
-          <div className="h-[400px] w-full flex items-center justify-center text-muted-foreground">
+          <div className="h-[400px] flex items-center justify-center text-muted-foreground">
             No data available
           </div>
         </CardContent>
@@ -102,28 +101,47 @@ const ChartTimeseriesCompare = ({
       </CardHeader>
       <CardContent>
         <div className="h-[400px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer>
             <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="year" />
-              <YAxis tickFormatter={(value) => formatValue(value, unit)} />
-              <Tooltip 
-                formatter={(value: any) => formatValue(value, unit)}
+              <YAxis tickFormatter={(v) => formatValue(v, unit)} />
+              <Tooltip
+                formatter={(v: any) => formatValue(v, unit)}
                 labelFormatter={(label) => `Year: ${label}`}
               />
-              
-              {regions.map((region, index) => (
-                <Line
-                  key={`region${index}`}
-                  type="monotone"
-                  dataKey={`region${index}`}
-                  name={region.regionName}
-                  stroke={colors[index % colors.length]}
-                  strokeWidth={2}
-                  dot={false}
-                />
-              ))}
-              
+              {regions.map((region, index) => {
+                const baseKey = `region${index}`
+                const stroke = colors[index % colors.length]
+                return (
+                  <>
+                    {/* Historical = solid */}
+                    <Line
+                      key={`${baseKey}_hist`}
+                      type="monotone"
+                      dataKey={`${baseKey}_hist`}
+                      name={`${region.regionName} (Hist)`}
+                      stroke={stroke}
+                      strokeWidth={2}
+                      dot={false}
+                      connectNulls
+                    />
+                    {/* Forecast = dashed */}
+                    <Line
+                      key={`${baseKey}_fcst`}
+                      type="monotone"
+                      dataKey={`${baseKey}_fcst`}
+                      name={`${region.regionName} (Fcst)`}
+                      stroke={stroke}
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={false}
+                      connectNulls
+                      legendType="none" // avoid duplicate legend item
+                    />
+                  </>
+                )
+              })}
               <Legend />
             </LineChart>
           </ResponsiveContainer>
@@ -133,6 +151,5 @@ const ChartTimeseriesCompare = ({
   )
 }
 
-// IMPORTANT: Export both as default and named export
 export default ChartTimeseriesCompare
 export { ChartTimeseriesCompare }

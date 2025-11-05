@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Map, useMap } from "@vis.gl/react-mapbox"
 import "mapbox-gl/dist/mapbox-gl.css"
 
-import { ZoomIn, ZoomOut, Maximize, Layers, Info, MapPin } from "lucide-react"
+import { ZoomIn, ZoomOut, Maximize, Info, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { REGIONS } from "@/lib/metrics.config"
 
-// 👇 import the dynamic overlay you just finished
+// ✅ Dynamic overlay
 import { MapOverlaysDynamic } from "@/components/map-overlays-dynamic"
 
 interface MapScaffoldProps {
@@ -27,13 +27,9 @@ interface MapScaffoldProps {
 
 /** Controls rendered INSIDE <Map> so useMap("default") is valid */
 function MapControls({
-  showLayers,
-  setShowLayers,
   isFullscreen,
   setIsFullscreen,
 }: {
-  showLayers: boolean
-  setShowLayers: (v: boolean) => void
   isFullscreen: boolean
   setIsFullscreen: (v: boolean) => void
 }) {
@@ -47,6 +43,12 @@ function MapControls({
   const handleZoomOut = () => {
     const z = map?.getZoom() ?? 5
     map?.zoomTo(Math.max(z - 1, 3), { duration: 250 })
+  }
+
+  const handleFullscreen = () => {
+    setIsFullscreen(!isFullscreen)
+    // resize after DOM settles to avoid lag
+    setTimeout(() => map?.resize(), 300)
   }
 
   return (
@@ -74,27 +76,13 @@ function MapControls({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => setShowLayers(!showLayers)}
-            className="h-8 w-8 p-0"
-          >
-            <Layers className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{showLayers ? "Hide ITL1" : "Show ITL1"}</TooltipContent>
-      </Tooltip>
-
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setIsFullscreen(!isFullscreen)}
+            onClick={handleFullscreen}
             className="h-8 w-8 p-0"
           >
             <Maximize className="h-4 w-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Fullscreen</TooltipContent>
+        <TooltipContent>{isFullscreen ? "Exit Fullscreen" : "Fullscreen"}</TooltipContent>
       </Tooltip>
     </div>
   )
@@ -109,7 +97,6 @@ export function MapScaffold({
   className,
 }: MapScaffoldProps) {
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [showLayers, setShowLayers] = useState(true)
 
   const region = REGIONS.find((r) => r.code === selectedRegion)
 
@@ -129,34 +116,37 @@ export function MapScaffold({
         </CardHeader>
 
         <CardContent className="p-0">
-          <div className={cn("relative h-[450px]", isFullscreen && "fixed inset-4 z-50 rounded-xl shadow-2xl")}>
+          <div
+            className={cn(
+              "relative h-[450px]",
+              isFullscreen && "fixed inset-0 z-50"
+            )}
+          >
             <Map
-              id="default" // REQUIRED so useMap("default") resolves
+              id="default"
               mapLib={import("mapbox-gl")}
               mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN}
               initialViewState={{ longitude: -2, latitude: 54.5, zoom: 5 }}
               style={{ width: "100%", height: "100%" }}
               mapStyle="mapbox://styles/mapbox/light-v11"
             >
-              {/* ✅ Dynamic overlay that fetches Supabase + decorates GeoJSON in-memory */}
+              {/* ✅ Dynamic overlay */}
               <MapOverlaysDynamic
-                show={showLayers}
+                show={true}
                 metric={metric}
                 year={year}
                 scenario={scenario}
                 onRegionSelect={onRegionSelect}
               />
 
-              {/* ✅ Controls live inside <Map> so they can use useMap("default") */}
+              {/* ✅ Controls */}
               <MapControls
-                showLayers={showLayers}
-                setShowLayers={setShowLayers}
                 isFullscreen={isFullscreen}
                 setIsFullscreen={setIsFullscreen}
               />
             </Map>
 
-            {/* Selected Region Info (optional) */}
+            {/* Selected Region Info */}
             {region && (
               <div className="absolute bottom-4 left-4 bg-card/95 backdrop-blur rounded-lg border p-3 min-w-[220px] z-[1]">
                 <div className="flex items-center gap-2 mb-2">
@@ -175,13 +165,11 @@ export function MapScaffold({
             )}
           </div>
 
-          {/* Legend */}
+          {/* Legend (static) */}
           <div className="p-4 border-t bg-muted/20">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium">Legend</span>
-              <span className="text-xs text-muted-foreground">
-                {showLayers ? "ITL1 regions visible" : "Base map only"}
-              </span>
+              <span className="text-xs text-muted-foreground">ITL1 regions</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Region values</span>

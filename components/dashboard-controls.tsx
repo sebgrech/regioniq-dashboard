@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import Image from "next/image"
 import { Search, Download, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -33,6 +33,13 @@ export function DashboardControls({
   const [regionSearch, setRegionSearch] = useState("")
   const [isRegionOpen, setIsRegionOpen] = useState(false)
   const [itlLevel, setItlLevel] = useState("ITL1")
+  const sliderRef = useRef<HTMLDivElement>(null)
+
+  // Calculate the position of the year label
+  const getYearLabelPosition = () => {
+    const percentage = ((year - YEARS.min) / (YEARS.max - YEARS.min)) * 100
+    return percentage
+  }
 
   // Filter regions based on search
   const filteredRegions = REGIONS.filter(
@@ -60,26 +67,25 @@ export function DashboardControls({
       <div className="w-full px-6 py-4 flex items-center justify-between">
         {/* Left cluster: Logo + ITL + Region */}
         <div className="flex items-center gap-6 min-w-0 flex-shrink-0">
-                 {/* Logo */}
-        <div className="relative h-20 w-20 flex-shrink-0">
-          {/* Light mode logo */}
-          <Image
-            src="/x.png"
-            alt="RegionIQ"
-            fill
-            className="object-contain dark:hidden"
-            priority
-          />
-          {/* Dark mode logo */}
-          <Image
-            src="/Frame 11.png"
-            alt="RegionIQ"
-            fill
-            className="object-contain hidden dark:block"
-            priority
-          />
-        </div>
-
+          {/* Logo */}
+          <div className="relative h-20 w-20 flex-shrink-0">
+            {/* Light mode logo */}
+            <Image
+              src="/x.png"
+              alt="RegionIQ"
+              fill
+              className="object-contain dark:hidden"
+              priority
+            />
+            {/* Dark mode logo */}
+            <Image
+              src="/Frame 11.png"
+              alt="RegionIQ"
+              fill
+              className="object-contain hidden dark:block"
+              priority
+            />
+          </div>
 
           {/* ITL Level Toggle */}
           <div className="flex rounded-lg border p-1">
@@ -155,13 +161,13 @@ export function DashboardControls({
           </Popover>
         </div>
 
-        {/* Middle cluster: Year slider fills remaining width */}
+        {/* Middle cluster: Year slider with dynamic label */}
         <div className="flex-1 px-12">
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Year</span>
-              <span className="font-medium">{year}</span>
             </div>
+            
             <Slider
               value={[year]}
               onValueChange={(value) => onYearChange(value[0])}
@@ -170,9 +176,22 @@ export function DashboardControls({
               step={1}
               className="w-full"
             />
+            
+            {/* Dynamic year text below slider */}
+            <div className="relative h-4">
+              <div 
+                className="absolute transform -translate-x-1/2 text-sm font-medium pointer-events-none"
+                style={{ 
+                  left: `${getYearLabelPosition()}%`,
+                  transition: 'none'
+                }}
+              >
+                {year}
+              </div>
+            </div>
+            
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>{YEARS.min}</span>
-              <span className="text-primary">{YEARS.forecastStart}</span>
               <span>{YEARS.max}</span>
             </div>
           </div>
