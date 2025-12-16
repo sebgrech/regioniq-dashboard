@@ -1,24 +1,23 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useRef } from "react"
 import Image from "next/image"
-import { Search, Download, Clock } from "lucide-react"
+import { Download, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Slider } from "@/components/ui/slider"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Badge } from "@/components/ui/badge"
 import { REGIONS, YEARS, type Scenario } from "@/lib/metrics.config"
+import { RegionSearch, type RegionMetadata } from "@/components/region-search"
 import { cn } from "@/lib/utils"
 
 interface DashboardControlsProps {
   region: string
   year: number
   scenario: Scenario
-  onRegionChange: (region: string) => void
+  onRegionChange: (metadata: RegionMetadata) => void
   onYearChange: (year: number) => void
   onScenarioChange: (scenario: Scenario) => void
   onExport?: () => void
+  activeTab?: string // Optional - only passed from metric detail page
 }
 
 export function DashboardControls({
@@ -29,10 +28,8 @@ export function DashboardControls({
   onYearChange,
   onScenarioChange,
   onExport,
+  activeTab,
 }: DashboardControlsProps) {
-  const [regionSearch, setRegionSearch] = useState("")
-  const [isRegionOpen, setIsRegionOpen] = useState(false)
-  const [itlLevel, setItlLevel] = useState("ITL1")
   const sliderRef = useRef<HTMLDivElement>(null)
 
   // Calculate the position of the year label
@@ -41,31 +38,27 @@ export function DashboardControls({
     return percentage
   }
 
-  // Filter regions based on search
-  const filteredRegions = REGIONS.filter(
-    (r) =>
-      r.name.toLowerCase().includes(regionSearch.toLowerCase()) ||
-      r.code.toLowerCase().includes(regionSearch.toLowerCase()),
-  )
-
-  // Group regions by country
-  const groupedRegions = filteredRegions.reduce(
-    (acc, region) => {
-      if (!acc[region.country]) {
-        acc[region.country] = []
-      }
-      acc[region.country].push(region)
-      return acc
-    },
-    {} as Record<string, typeof REGIONS>,
-  )
-
   const selectedRegion = REGIONS.find((r) => r.code === region)
+
+  // Determine visibility and positioning based on active tab
+  const isMetricDetailPage = activeTab !== undefined
+  const hideYearSlider = isMetricDetailPage && (activeTab === "overview" || activeTab === "scenarios")
+  const hideScenarioToggles = isMetricDetailPage && activeTab === "scenarios"
+  const moveScenarioTogglesLeft = isMetricDetailPage && activeTab === "overview"
+
+  // Snapshot year quick picks (kept lightweight + deterministic)
+  // "Latest" is interpreted as the default "now-ish" snapshot for this product: forecast start year.
+  const snapshotPresets = [
+    { label: "Latest", year: YEARS.forecastStart },
+    { label: "2026", year: 2026 },
+    { label: "2030", year: 2030 },
+    { label: "2035", year: 2035 },
+  ].filter((p, idx, arr) => arr.findIndex((x) => x.year === p.year) === idx)
 
   return (
     <div className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-      <div className="w-full px-6 py-4 flex items-center justify-between">
-        {/* Left cluster: Logo + ITL + Region */}
+      <div className="w-full px-6 py-4 flex items-center justify-between relative">
+        {/* Left cluster: Logo + Region + Scenario Toggles (when on overview) */}
         <div className="flex items-center gap-6 min-w-0 flex-shrink-0">
           {/* Logo */}
           <div className="relative h-20 w-20 flex-shrink-0">
@@ -87,85 +80,63 @@ export function DashboardControls({
             />
           </div>
 
-          {/* ITL Level Toggle */}
-          <div className="flex rounded-lg border p-1">
-            {(["ITL1", "ITL2", "ITL3"] as const).map((level) => (
-              <Button
-                key={level}
-                variant={itlLevel === level ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setItlLevel(level)}
-                className="text-xs"
-              >
-                {level}
-              </Button>
-            ))}
-          </div>
-
           {/* Region Picker */}
-          <Popover open={isRegionOpen} onOpenChange={setIsRegionOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                role="combobox"
-                aria-expanded={isRegionOpen}
-                className="w-[240px] justify-between bg-transparent"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <Badge variant="secondary" className="text-xs shrink-0">
-                    {selectedRegion?.code}
-                  </Badge>
-                  <span className="truncate">{selectedRegion?.name}</span>
-                </div>
-                <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[320px] p-0" align="start">
-              <div className="p-3 border-b">
-                <Input
-                  placeholder="Search regions..."
-                  value={regionSearch}
-                  onChange={(e) => setRegionSearch(e.target.value)}
-                  className="h-8"
-                />
-              </div>
-              <div className="max-h-[300px] overflow-y-auto">
-                {Object.entries(groupedRegions).map(([country, regions]) => (
-                  <div key={country}>
-                    <div className="px-3 py-2 text-sm font-medium text-muted-foreground border-b">
-                      {country}
-                    </div>
-                    {regions.map((r) => (
-                      <button
-                        key={r.code}
-                        onClick={() => {
-                          onRegionChange(r.code)
-                          setIsRegionOpen(false)
-                          setRegionSearch("")
-                        }}
-                        className={cn(
-                          "w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground",
-                          region === r.code && "bg-accent text-accent-foreground",
-                        )}
-                      >
-                        <Badge variant="outline" className="text-xs">
-                          {r.code}
-                        </Badge>
-                        <span className="truncate">{r.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
+          <RegionSearch
+            value={region}
+            onValueChange={onRegionChange}
+            placeholder="Select region..."
+          />
+
+          {/* Scenario Toggle - positioned next to search when on overview */}
+          {moveScenarioTogglesLeft && (
+            <div 
+              className={cn(
+                "flex rounded-lg border p-1 slide-in-from-right"
+              )}
+            >
+              {(["baseline", "upside", "downside"] as const).map((s) => (
+                <Button
+                  key={s}
+                  variant={scenario === s ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => onScenarioChange(s)}
+                  className="capitalize"
+                >
+                  {s}
+                </Button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Middle cluster: Year slider with dynamic label */}
-        <div className="flex-1 px-12">
-          <div className="space-y-2">
+        {/* Middle cluster: Year slider with dynamic label - animated hide/show */}
+        <div 
+          ref={sliderRef}
+          className={cn(
+            // NOTE: When hiding the slider we must collapse height too (not just opacity/translate),
+            // otherwise it still affects layout and makes the header feel taller on some tabs.
+            "flex-1 px-12 overflow-hidden transition-all duration-700 ease-in-out",
+            hideYearSlider 
+              ? "opacity-0 translate-x-full px-0 max-h-0 pointer-events-none" 
+              : "opacity-100 translate-x-0 max-h-[240px]"
+          )}
+        >
+          <div className="space-y-2 min-w-[200px]">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Year</span>
+              <span className="text-muted-foreground">Snapshot year</span>
+              <div className="hidden lg:flex flex-wrap items-center justify-end gap-2">
+                {snapshotPresets.map((p) => (
+                  <Button
+                    key={p.label}
+                    variant={year === p.year ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => onYearChange(p.year)}
+                    className="h-7 px-2 text-xs"
+                  >
+                    {p.label}
+                  </Button>
+                ))}
+              </div>
             </div>
             
             <Slider
@@ -199,8 +170,16 @@ export function DashboardControls({
 
         {/* Right cluster: Scenario + Export */}
         <div className="flex items-center gap-6 flex-shrink-0">
-          {/* Scenario Toggle */}
-          <div className="flex rounded-lg border p-1">
+          {/* Scenario Toggle - on right side when NOT on overview */}
+          {!moveScenarioTogglesLeft && (
+            <div 
+              className={cn(
+                "flex rounded-lg border p-1 transition-all duration-700 ease-in-out",
+                hideScenarioToggles
+                  ? "opacity-0 translate-x-full"
+                  : "opacity-100 translate-x-0"
+              )}
+            >
             {(["baseline", "upside", "downside"] as const).map((s) => (
               <Button
                 key={s}
@@ -209,10 +188,11 @@ export function DashboardControls({
                 onClick={() => onScenarioChange(s)}
                 className="capitalize"
               >
-                {s}
+                  {activeTab === "scenarios" ? `${s} scenario` : s}
               </Button>
             ))}
           </div>
+          )}
 
           {/* Updated + Export */}
           <div className="flex items-center gap-4">

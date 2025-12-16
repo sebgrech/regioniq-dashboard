@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase"
+import { getCacheKey, getCached, getOrFetch } from "@/lib/cache/choropleth-cache"
 import { REGIONS, YEARS, type Scenario, getDbRegionCode, getUIRegionCode } from "./metrics.config"
 import type { DataMetadata, DataResponse } from "./types"
 
@@ -6,6 +7,7 @@ export interface DataPoint {
   year: number
   value: number
   type: "historical" | "forecast"
+  data_quality?: string | null // 'ONS', 'interpolated', or null (for forecasts)
 }
 
 export interface SeriesData {
@@ -35,6 +37,35 @@ function generateMetadata(): DataMetadata {
     },
   }
 }
+
+// -----------------------------------------------------------------------------
+// Core Utility Functions
+// -----------------------------------------------------------------------------
+
+/**
+ * Get the appropriate Supabase table name based on region level
+ */
+function getTableName(regionCode: string): string {
+  const region = REGIONS.find(r => r.code === regionCode)
+  const level = region?.level || "ITL1"
+  
+  switch(level) {
+    case "ITL1":
+      return "itl1_latest_all"
+    case "ITL2":
+      return "itl2_latest_all"
+    case "ITL3":
+      return "itl3_latest_all"
+    case "LAD": // ADDED LAD TABLE CASE
+      return "lad_latest_all"
+    default:
+      return "itl1_latest_all"
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Debug Functions
+// -----------------------------------------------------------------------------
 
 /**
  * Debug function to diagnose Supabase data issues
@@ -157,36 +188,48 @@ export async function debugSupabaseQuery() {
   }
 }
 
+// -----------------------------------------------------------------------------
+// Data Fetching Functions
+// -----------------------------------------------------------------------------
+
 /**
- * Main data fetching function - connects to your itl1_latest_all table
+ * Main data fetching function - dynamically queries the correct table based on region level
  * Handles scenario selection by choosing the appropriate column:
  * - baseline: value column
  * - downside: ci_lower column  
  * - upside: ci_upper column
- * Also handles ITL to E-code conversion for regions
+ * Also handles ITL/LAD code to DB code conversion for regions
  */
 export async function fetchSeries(params: {
   metricId: string
-  region: string  // ITL code from UI (e.g., "UKI")
+  region: string  // ITL/LAD code from UI (e.g., "UKI" or "E06000001")
   scenario: Scenario
 }): Promise<DataPoint[]> {
   const { metricId, region, scenario } = params
+
+  const DEBUG_FETCH = process.env.NEXT_PUBLIC_RIQ_DEBUG === "1"
   
-  // Convert ITL code to E-code for database query
+  // Convert UI code to DB code for database query
   const dbRegionCode = getDbRegionCode(region)
+  
+  // Determine which table to query based on region level
+  const tableName = getTableName(region)
 
   try {
-    console.log(`🔍 Fetching from Supabase:`)
-    console.log(`   Metric: ${metricId}`)
-    console.log(`   UI Region: ${region} → DB Region: ${dbRegionCode}`)
-    console.log(`   Scenario: ${scenario}`)
+    if (DEBUG_FETCH) {
+      console.log(`🔍 Fetching from Supabase:`)
+      console.log(`   Table: ${tableName}`)
+      console.log(`   Metric: ${metricId}`)
+      console.log(`   UI Region: ${region} → DB Region: ${dbRegionCode}`)
+      console.log(`   Scenario: ${scenario}`)
+    }
     
-    // Query with the E-code
+    // Query with the E-code from the appropriate table
     const { data, error } = await supabase
-      .from("itl1_latest_all")
-      .select("period, value, ci_lower, ci_upper, data_type")
+      .from(tableName)
+      .select("period, value, ci_lower, ci_upper, data_type, data_quality")
       .eq("metric_id", metricId)
-      .eq("region_code", dbRegionCode)  // Use E-code here
+      .eq("region_code", dbRegionCode)
       .order("period", { ascending: true })
 
     if (error) {
@@ -197,14 +240,14 @@ export async function fetchSeries(params: {
     if (!data || data.length === 0) {
       console.warn(`⚠️ No data found`)
       console.log("Query attempted:", { 
-        table: "itl1_latest_all",
+        table: tableName,
         metric_id: metricId, 
         region_code: dbRegionCode
       })
       return []
     }
 
-    console.log(`✅ Fetched ${data.length} rows from Supabase`)
+    if (DEBUG_FETCH) console.log(`✅ Fetched ${data.length} rows from Supabase`)
     
     // Transform data based on scenario selection
     const transformedData: DataPoint[] = data.map(row => {
@@ -233,7 +276,8 @@ export async function fetchSeries(params: {
       return {
         year: row.period,
         value: value,
-        type: row.data_type as "historical" | "forecast"
+        type: row.data_type as "historical" | "forecast",
+        data_quality: row.data_quality ?? null
       }
     })
 
@@ -242,7 +286,7 @@ export async function fetchSeries(params: {
 
   } catch (error) {
     console.error("💥 fetchSeries failed:", error)
-    throw error // Don't fall back to mock data - fail explicitly
+    throw error
   }
 }
 
@@ -261,22 +305,38 @@ export async function fetchSeriesWithMetadata(params: {
 
 /**
  * Fetch choropleth map data for all regions at a specific year
- * Returns data with ITL codes for UI display
+ * Returns data with ITL/LAD codes for UI display
  */
 export async function fetchChoropleth(params: {
   metricId: string
-  level: string
+  level: string  // "ITL1", "ITL2", "ITL3", or "LAD"
   year: number
   scenario: Scenario
 }): Promise<ChoroplethData> {
-  const { metricId, year, scenario } = params
+  const { metricId, level, year, scenario } = params
+
+  // Determine table name based on level (UPDATED TO INCLUDE LAD)
+  const tableName = level === "ITL1" ? "itl1_latest_all" :
+                    level === "ITL2" ? "itl2_latest_all" :
+                    level === "ITL3" ? "itl3_latest_all" :
+                    level === "LAD" ? "lad_latest_all" :
+                    "itl1_latest_all"
+
+  const cacheKey = getCacheKey(["choropleth", level, metricId, year, scenario])
+  const cached = getCached<ChoroplethData>(cacheKey)
+  if (cached) return cached
 
   try {
-    console.log(`🗺️ Fetching choropleth data for ${metricId} at year ${year}, scenario ${scenario}`)
+    console.log(`🗺️ Fetching choropleth data:`)
+    console.log(`   Table: ${tableName}`)
+    console.log(`   Metric: ${metricId}`)
+    console.log(`   Year: ${year}`)
+    console.log(`   Scenario: ${scenario}`)
     
+    const result = await getOrFetch<ChoroplethData>(cacheKey, async () => {
     // Fetch all regions for this metric and year
     const { data, error } = await supabase
-      .from("itl1_latest_all")
+      .from(tableName)
       .select("region_code, value, ci_lower, ci_upper, data_type")
       .eq("metric_id", metricId)
       .eq("period", year)
@@ -314,20 +374,22 @@ export async function fetchChoropleth(params: {
           }
         }
         
-        // Convert E-code back to ITL for UI
-        const itlCode = getUIRegionCode(row.region_code)
-        values[itlCode] = value
+        // Convert E-code/DB code back to UI code
+        const uiCode = getUIRegionCode(row.region_code)
+        values[uiCode] = value
         min = Math.min(min, value)
         max = Math.max(max, value)
       })
     }
 
-    console.log(`🗺️ Choropleth data: ${Object.keys(values).length} regions (ITL codes)`)
+    console.log(`🗺️ Choropleth data: ${Object.keys(values).length} regions (UI codes)`)
     return { min, max, values }
+    })
+
+    return result
 
   } catch (error) {
     console.error("💥 fetchChoropleth failed:", error)
-    // Return empty choropleth data on error
     return { min: 0, max: 0, values: {} }
   }
 }
@@ -346,86 +408,54 @@ export async function fetchChoroplethWithMetadata(params: {
   return { data, metadata }
 }
 
+// -----------------------------------------------------------------------------
+// Metadata/Inspection Functions
+// -----------------------------------------------------------------------------
+
 /**
  * Test Supabase connection and show available data
+ * Tests all available tables (ITL1, ITL2, ITL3, LAD, Macro)
  */
 export async function testSupabaseConnection(): Promise<boolean> {
+  // UPDATED TO INCLUDE LAD
+  const tables = ["itl1_latest_all", "itl2_latest_all", "itl3_latest_all", "lad_latest_all", "macro_latest_all"]
+  
   try {
-    console.log("🧪 Testing Supabase connection to itl1_latest_all...")
+    console.log("🧪 Testing Supabase connections...")
     
-    const { data, error } = await supabase
-      .from("itl1_latest_all")
-      .select("*")
-      .limit(100)
+    for (const table of tables) {
+      console.log(`\n📊 Testing ${table}...`)
+      
+      const { data, error } = await supabase
+        .from(table)
+        .select("*")
+        .limit(100)
 
-    if (error) {
-      console.error("❌ Supabase connection failed:", error)
-      return false
-    }
-
-    if (!data || data.length === 0) {
-      console.warn("⚠️ Table is empty or inaccessible")
-      return false
-    }
-
-    console.log("✅ Supabase connection successful!")
-    console.log(`📊 Found ${data.length} sample rows`)
-    
-    // Analyze available data
-    const metrics = [...new Set(data.map(row => row.metric_id))].filter(Boolean)
-    const regions = [...new Set(data.map(row => row.region_code))].filter(Boolean)
-    const dataTypes = [...new Set(data.map(row => row.data_type))].filter(Boolean)
-    const years = [...new Set(data.map(row => row.period))].filter(Boolean).sort((a, b) => a - b)
-    
-    console.log("\n📈 Available Data Summary:")
-    console.log("=========================")
-    console.log("Metrics (exact values):", metrics)
-    console.log("Regions (E-codes):", regions)
-    console.log("Data Types:", dataTypes)
-    console.log("Year Range:", years.length > 0 ? `${years[0]} - ${years[years.length - 1]}` : "No years found")
-    
-    // Show ITL mapping
-    console.log("\n🗺️ Region Code Mapping:")
-    console.log("========================")
-    regions.forEach(eCode => {
-      const itlCode = getUIRegionCode(eCode)
-      if (itlCode !== eCode) {
-        console.log(`${eCode} → ${itlCode}`)
+      if (error) {
+        console.error(`❌ ${table} connection failed:`, error)
+        continue
       }
-    })
-    
-    // Show sample row structure
-    console.log("\n🔍 Sample Row Structure:")
-    console.log("========================")
-    const sampleRow = data[0]
-    Object.entries(sampleRow).forEach(([key, value]) => {
-      if (value !== null && value !== undefined) {
-        console.log(`${key}: ${typeof value} = ${value}`)
+
+      if (!data || data.length === 0) {
+        console.warn(`⚠️ ${table} is empty or inaccessible`)
+        continue
       }
-    })
-    
-    // Check for data completeness
-    const historicalRows = data.filter(row => row.data_type === "historical")
-    const forecastRows = data.filter(row => row.data_type === "forecast")
-    
-    console.log("\n📊 Data Breakdown:")
-    console.log("==================")
-    console.log(`Historical rows: ${historicalRows.length}`)
-    console.log(`Forecast rows: ${forecastRows.length}`)
-    
-    // Check scenario columns
-    const forecastWithCI = forecastRows.filter(row => 
-      row.ci_lower !== null && row.ci_upper !== null
-    )
-    console.log(`Forecast rows with confidence intervals: ${forecastWithCI.length}`)
-    
-    // Validate metric IDs match config
-    const expectedMetrics = ["population_total", "nominal_gva_mn_gbp", "gdhi_per_head_gbp", "emp_total_jobs"]
-    const missingMetrics = expectedMetrics.filter(m => !metrics.includes(m))
-    if (missingMetrics.length > 0) {
-      console.warn("⚠️ Missing expected metrics:", missingMetrics)
-    } else {
-      console.log("✅ All expected metrics found!")
+
+      console.log(`✅ ${table} connection successful!`)
+      console.log(`📊 Found ${data.length} sample rows`)
+      
+      // Analyze available data
+      const metrics = [...new Set(data.map(row => row.metric_id))].filter(Boolean)
+      const regions = [...new Set(data.map(row => row.region_code))].filter(Boolean)
+      const dataTypes = [...new Set(data.map(row => row.data_type))].filter(Boolean)
+      const years = [...new Set(data.map(row => row.period))].filter(Boolean).sort((a, b) => a - b)
+      
+      console.log("\n📈 Available Data Summary:")
+      console.log("=========================")
+      console.log("Metrics:", metrics)
+      console.log("Regions:", regions.slice(0, 10), regions.length > 10 ? `... (${regions.length} total)` : "")
+      console.log("Data Types:", dataTypes)
+      console.log("Year Range:", years.length > 0 ? `${years[0]} - ${years[years.length - 1]}` : "No years found")
     }
     
     return true
@@ -439,17 +469,24 @@ export async function testSupabaseConnection(): Promise<boolean> {
 /**
  * Get available metrics from the database
  */
-export async function getAvailableMetrics(): Promise<string[]> {
+export async function getAvailableMetrics(level: string = "ITL1"): Promise<string[]> {
+  // UPDATED TO INCLUDE LAD
+  const tableName = level === "ITL1" ? "itl1_latest_all" :
+                    level === "ITL2" ? "itl2_latest_all" :
+                    level === "ITL3" ? "itl3_latest_all" :
+                    level === "LAD" ? "lad_latest_all" :
+                    "itl1_latest_all"
+  
   try {
     const { data, error } = await supabase
-      .from("itl1_latest_all")
+      .from(tableName)
       .select("metric_id")
       .limit(1000)
 
     if (error) throw error
     
     const metrics = [...new Set(data?.map(row => row.metric_id) || [])].filter(Boolean)
-    console.log("📊 Available metrics in database:", metrics)
+    console.log(`📊 Available metrics in ${tableName}:`, metrics)
     return metrics
     
   } catch (error) {
@@ -459,42 +496,35 @@ export async function getAvailableMetrics(): Promise<string[]> {
 }
 
 /**
- * Get available regions from the database (returns ITL codes for UI)
+ * Get available regions from the database (returns UI codes)
  */
-export async function getAvailableRegions(): Promise<string[]> {
+export async function getAvailableRegions(level: string = "ITL1"): Promise<string[]> {
+  // UPDATED TO INCLUDE LAD
+  const tableName = level === "ITL1" ? "itl1_latest_all" :
+                    level === "ITL2" ? "itl2_latest_all" :
+                    level === "ITL3" ? "itl3_latest_all" :
+                    level === "LAD" ? "lad_latest_all" :
+                    "itl1_latest_all"
+  
   try {
     const { data, error } = await supabase
-      .from("itl1_latest_all")
+      .from(tableName)
       .select("region_code, region_name")
       .limit(1000)
 
     if (error) throw error
     
-    // Get E-codes from database
-    const eCodes = [...new Set(data?.map(row => row.region_code) || [])].filter(Boolean)
+    // Get DB codes from database
+    const dbCodes = [...new Set(data?.map(row => row.region_code) || [])].filter(Boolean)
     
-    // Convert to ITL codes for UI
-    const itlCodes = eCodes.map(eCode => getUIRegionCode(eCode))
+    // Convert to UI codes
+    const uiCodes = dbCodes.map(dbCode => getUIRegionCode(dbCode))
     
-    console.log("🏴󠁧󠁢󠁳󠁣󠁴󠁿 Available regions:")
-    console.log("E-codes in database:", eCodes)
-    console.log("ITL codes for UI:", itlCodes)
+    console.log(`🏴 Available ${level} regions:`)
+    console.log("DB codes in database:", dbCodes.slice(0, 10), dbCodes.length > 10 ? `... (${dbCodes.length} total)` : "")
+    console.log("UI codes:", uiCodes.slice(0, 10), uiCodes.length > 10 ? `... (${uiCodes.length} total)` : "")
     
-    // Also log region names for reference
-    const regionMap = new Map()
-    data?.forEach(row => {
-      if (row.region_code && row.region_name) {
-        const itlCode = getUIRegionCode(row.region_code)
-        regionMap.set(itlCode, row.region_name)
-      }
-    })
-    
-    console.log("ITL code to name mapping:")
-    regionMap.forEach((name, code) => {
-      console.log(`  ${code}: ${name}`)
-    })
-    
-    return itlCodes  // Return ITL codes for UI
+    return uiCodes
     
   } catch (error) {
     console.error("Failed to get available regions:", error)
@@ -507,10 +537,11 @@ export async function getAvailableRegions(): Promise<string[]> {
  */
 export async function verifyDataExists(metricId: string, regionCode: string): Promise<boolean> {
   const dbRegionCode = getDbRegionCode(regionCode)
+  const tableName = getTableName(regionCode)
   
   try {
     const { data, error } = await supabase
-      .from("itl1_latest_all")
+      .from(tableName)
       .select("metric_id")
       .eq("metric_id", metricId)
       .eq("region_code", dbRegionCode)
@@ -524,7 +555,7 @@ export async function verifyDataExists(metricId: string, regionCode: string): Pr
     const exists = data && data.length > 0
     
     if (!exists) {
-      console.warn(`No data for metric="${metricId}", region="${regionCode}" (${dbRegionCode})`)
+      console.warn(`No data for metric="${metricId}", region="${regionCode}" (${dbRegionCode}) in ${tableName}`)
     }
     
     return exists
@@ -534,7 +565,10 @@ export async function verifyDataExists(metricId: string, regionCode: string): Pr
   }
 }
 
-// Utility functions
+// -----------------------------------------------------------------------------
+// UI Formatting / Calculation Functions
+// -----------------------------------------------------------------------------
+
 export function formatValue(value: number, unit: string, decimals = 0): string {
   const absValue = Math.abs(value)
 
@@ -557,11 +591,30 @@ export function formatValue(value: number, unit: string, decimals = 0): string {
   // For people/jobs
   if (unit === "people" || unit === "jobs") {
     if (absValue >= 1e9) {
-      return `${(value / 1e9).toFixed(decimals)}B ${unit}`
+      // For population, round to whole number. For jobs, remove trailing .0
+      if (unit === "people") {
+        return `${Math.round(value / 1e9)}B ${unit}`
+      }
+      const formatted = (value / 1e9).toFixed(decimals)
+      return `${parseFloat(formatted).toString()}B ${unit}`
     } else if (absValue >= 1e6) {
-      return `${(value / 1e6).toFixed(decimals)}M ${unit}`
+      // For population, round to whole number. For jobs, remove trailing .0
+      if (unit === "people") {
+        return `${Math.round(value / 1e6)}M ${unit}`
+      }
+      const formatted = (value / 1e6).toFixed(decimals)
+      return `${parseFloat(formatted).toString()}M ${unit}`
     } else if (absValue >= 1e3) {
-      return `${(value / 1e3).toFixed(decimals)}K ${unit}`
+      // For population, round to whole number. For jobs, remove trailing .0
+      if (unit === "people") {
+        return `${Math.round(value / 1e3)}K ${unit}`
+      }
+      const formatted = (value / 1e3).toFixed(decimals)
+      return `${parseFloat(formatted).toString()}K ${unit}`
+    }
+    // For values < 1k, show decimals only for population < 100k
+    if (unit === "people" && absValue < 1e5) {
+      return `${value.toFixed(decimals)} ${unit}`
     }
     return `${value.toLocaleString()} ${unit}`
   }
@@ -605,4 +658,79 @@ export function formatRelativeTime(isoString: string): string {
   if (diffInDays < 7) return `${diffInDays} days ago`
 
   return date.toLocaleDateString()
+}
+
+/**
+ * Fetch UK average time series for a metric
+ * Aggregates across all ITL1 regions for each year
+ */
+export async function fetchUKSeries(params: {
+  metricId: string
+  scenario: Scenario
+}): Promise<DataPoint[]> {
+  const { metricId, scenario } = params
+
+  try {
+    const { data, error } = await supabase
+      .from("itl1_latest_all")
+      .select("period, value, ci_lower, ci_upper, data_type")
+      .eq("metric_id", metricId)
+      .order("period", { ascending: true })
+
+    if (error || !data || data.length === 0) {
+      return []
+    }
+
+    // Group by year and calculate averages
+    const yearMap = new Map<number, number[]>()
+    
+    data.forEach((row) => {
+      let value: number
+      if (row.data_type === "historical") {
+        value = row.value || 0
+      } else {
+        switch (scenario) {
+          case "baseline":
+            value = row.value || 0
+            break
+          case "downside":
+            value = row.ci_lower ?? row.value ?? 0
+            break
+          case "upside":
+            value = row.ci_upper ?? row.value ?? 0
+            break
+          default:
+            value = row.value || 0
+        }
+      }
+
+      const year = row.period
+      if (!yearMap.has(year)) {
+        yearMap.set(year, [])
+      }
+      yearMap.get(year)!.push(value)
+    })
+
+    // Calculate averages and create DataPoint array
+    const result: DataPoint[] = Array.from(yearMap.entries())
+      .map(([year, values]) => {
+        const sum = values.reduce((acc, val) => acc + val, 0)
+        const avg = values.length > 0 ? sum / values.length : 0
+        
+        // Determine type (assume historical if year <= 2023, forecast otherwise)
+        const type: "historical" | "forecast" = year <= 2023 ? "historical" : "forecast"
+        
+        return {
+          year,
+          value: avg,
+          type,
+        }
+      })
+      .sort((a, b) => a.year - b.year)
+
+    return result
+  } catch (error) {
+    console.error("Error fetching UK series:", error)
+    return []
+  }
 }

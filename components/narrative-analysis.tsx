@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
+import ReactMarkdown from "react-markdown"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { RefreshCw, Sparkles, Clock, MessageSquare, ArrowLeft } from "lucide-react"
+import { RefreshCw, Sparkles, Clock, MessageSquare, ArrowLeft, TrendingUp, TrendingDown, Minus, ArrowRight } from "lucide-react"
 import { REGIONS, METRICS, type Scenario } from "@/lib/metrics.config"
 import { formatValue } from "@/lib/data-service"
 
@@ -16,16 +17,88 @@ interface NarrativeAnalysisProps {
     metricId: string
     value: number
   }[]
+  allMetricsSeriesData?: {
+    metricId: string
+    data: Array<{ year: number; value: number; type: "historical" | "forecast" }>
+  }[]
   isLoading?: boolean
 }
 
 type ChatMessage = { role: "user" | "assistant"; content: string }
+
+/** Helper to extract text content from React children */
+function extractText(children: React.ReactNode): string {
+  if (typeof children === 'string') {
+    return children
+  }
+  if (typeof children === 'number') {
+    return String(children)
+  }
+  if (typeof children === 'boolean' || children === null || children === undefined) {
+    return ''
+  }
+  if (Array.isArray(children)) {
+    return children.map(extractText).join('')
+  }
+  if (children && typeof children === 'object') {
+    // Handle React elements
+    if ('props' in children && children.props) {
+      return extractText(children.props.children)
+    }
+    // Handle other object types
+    if ('toString' in children) {
+      return children.toString()
+    }
+  }
+  return ''
+}
+
+/** Helper to extract and highlight key metrics from text */
+function highlightNumbers(text: string | React.ReactNode): React.ReactNode {
+  // Extract text if it's a React node
+  const textContent = typeof text === 'string' ? text : extractText(text)
+  
+  if (!textContent) return text
+  
+  // Match: £ amounts, percentages, large numbers
+  const numberPattern = /(£[\d,]+(?:K|M|B)?|\d+\.\d+%|\d+%)/g
+  
+  const parts: React.ReactNode[] = []
+  let lastIndex = 0
+  let match
+  let key = 0
+  
+  while ((match = numberPattern.exec(textContent)) !== null) {
+    // Add text before match
+    if (match.index > lastIndex) {
+      parts.push(<span key={key++}>{textContent.substring(lastIndex, match.index)}</span>)
+    }
+    // Add highlighted number
+    parts.push(
+      <span
+        key={key++}
+        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 rounded-md bg-primary/15 text-primary font-bold text-sm border border-primary/20 shadow-sm"
+      >
+        {match[0]}
+      </span>
+    )
+    lastIndex = match.index + match[0].length
+  }
+  
+  // Add remaining text
+  if (lastIndex < textContent.length) {
+    parts.push(<span key={key++}>{textContent.substring(lastIndex)}</span>)
+  }
+  
+  return parts.length > 0 ? <>{parts}</> : text
+}
 
 export function NarrativeAnalysis({
   region,
   year,
   scenario,
   allMetricsData,
+  allMetricsSeriesData,
   isLoading = false,
 }: NarrativeAnalysisProps) {
   const [isGenerating, setIsGenerating] = useState(false)
@@ -41,15 +114,15 @@ export function NarrativeAnalysis({
   const generateFallbackNarrative = () => {
     if (!regionData || !allMetricsData.length) return "No data available"
 
-    const populationData = allMetricsData.find((d) => d.metricId === "population")
-    const gvaData = allMetricsData.find((d) => d.metricId === "gva")
-    const incomeData = allMetricsData.find((d) => d.metricId === "income")
-    const employmentData = allMetricsData.find((d) => d.metricId === "employment")
+    const populationData = allMetricsData.find((d) => d.metricId === "population_total")
+    const gvaData = allMetricsData.find((d) => d.metricId === "nominal_gva_mn_gbp")
+    const incomeData = allMetricsData.find((d) => d.metricId === "gdhi_per_head_gbp")
+    const employmentData = allMetricsData.find((d) => d.metricId === "emp_total_jobs")
 
-    const populationMetric = METRICS.find((m) => m.id === "population")
-    const gvaMetric = METRICS.find((m) => m.id === "gva")
-    const incomeMetric = METRICS.find((m) => m.id === "income")
-    const employmentMetric = METRICS.find((m) => m.id === "employment")
+    const populationMetric = METRICS.find((m) => m.id === "population_total")
+    const gvaMetric = METRICS.find((m) => m.id === "nominal_gva_mn_gbp")
+    const incomeMetric = METRICS.find((m) => m.id === "gdhi_per_head_gbp")
+    const employmentMetric = METRICS.find((m) => m.id === "emp_total_jobs")
 
     const popValue = formatValue(populationData?.value || 0, populationMetric?.unit || "")
     const gvaValue = formatValue(gvaData?.value || 0, gvaMetric?.unit || "")
@@ -73,7 +146,7 @@ export function NarrativeAnalysis({
       setMessages([{ role: "assistant", content: initialNarrative }])
       setLastGenerated(new Date())
     }
-  }, [region, year, scenario, allMetricsData, isLoading])
+  }, [region, year, scenario, allMetricsData, allMetricsSeriesData, isLoading])
 
   const handleRefresh = async () => {
     setIsGenerating(true)
@@ -85,14 +158,16 @@ export function NarrativeAnalysis({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           region,
+          regionName: regionData?.name || region,
           year,
           scenario,
-          metrics: {
-            population: allMetricsData.find((d) => d.metricId === "population")?.value,
-            gva: allMetricsData.find((d) => d.metricId === "gva")?.value,
-            income: allMetricsData.find((d) => d.metricId === "income")?.value,
-            employment: allMetricsData.find((d) => d.metricId === "employment")?.value,
+          currentValues: {
+            population_total: allMetricsData.find((d) => d.metricId === "population_total")?.value,
+            nominal_gva_mn_gbp: allMetricsData.find((d) => d.metricId === "nominal_gva_mn_gbp")?.value,
+            gdhi_per_head_gbp: allMetricsData.find((d) => d.metricId === "gdhi_per_head_gbp")?.value,
+            emp_total_jobs: allMetricsData.find((d) => d.metricId === "emp_total_jobs")?.value,
           },
+          allMetricsSeriesData: allMetricsSeriesData || [],
         }),
       })
 
@@ -125,15 +200,18 @@ export function NarrativeAnalysis({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           region,
+          regionName: regionData?.name || region,
           year,
           scenario,
-          metrics: {
-            population: allMetricsData.find((d) => d.metricId === "population")?.value,
-            gva: allMetricsData.find((d) => d.metricId === "gva")?.value,
-            income: allMetricsData.find((d) => d.metricId === "income")?.value,
-            employment: allMetricsData.find((d) => d.metricId === "employment")?.value,
+          currentValues: {
+            population_total: allMetricsData.find((d) => d.metricId === "population_total")?.value,
+            nominal_gva_mn_gbp: allMetricsData.find((d) => d.metricId === "nominal_gva_mn_gbp")?.value,
+            gdhi_per_head_gbp: allMetricsData.find((d) => d.metricId === "gdhi_per_head_gbp")?.value,
+            emp_total_jobs: allMetricsData.find((d) => d.metricId === "emp_total_jobs")?.value,
           },
+          allMetricsSeriesData: allMetricsSeriesData || [],
           messages: newMessages,
+          isChatMode: true,
         }),
       })
 
@@ -183,7 +261,82 @@ export function NarrativeAnalysis({
         ) : !chatMode ? (
           // Default: single narrative block
           <div className="space-y-4">
-            <p className="text-sm leading-relaxed">{narrative}</p>
+            <div className="text-sm leading-relaxed prose prose-sm max-w-none dark:prose-invert bg-gradient-to-br from-muted/30 via-muted/20 to-transparent rounded-xl p-5 border border-border/50 shadow-sm">
+              <ReactMarkdown
+                components={{
+                  p: ({ children }) => {
+                    // ReactMarkdown passes children as an array of React nodes
+                    // We need to extract the text and then highlight numbers
+                    let textContent = ''
+                    if (Array.isArray(children)) {
+                      textContent = children
+                        .map((child) => {
+                          if (typeof child === 'string') return child
+                          if (typeof child === 'number') return String(child)
+                          if (child && typeof child === 'object' && 'props' in child) {
+                            // Handle nested elements like <strong>
+                            return extractText(child.props.children)
+                          }
+                          return ''
+                        })
+                        .join('')
+                    } else {
+                      textContent = extractText(children)
+                    }
+                    
+                    if (!textContent) {
+                      // Fallback: render children as-is if we can't extract text
+                      return (
+                        <p className="mb-4 last:mb-0 leading-relaxed text-foreground">
+                          {children}
+                        </p>
+                      )
+                    }
+                    
+                    const highlighted = highlightNumbers(textContent)
+                    return (
+                      <p className="mb-4 last:mb-0 leading-relaxed text-foreground">
+                        {highlighted}
+                      </p>
+                    )
+                  },
+                  strong: ({ children }) => (
+                    <strong className="font-bold text-foreground bg-accent/30 px-1 rounded">
+                      {children}
+                    </strong>
+                  ),
+                  em: ({ children }) => <em className="italic text-muted-foreground">{children}</em>,
+                  ul: ({ children }) => (
+                    <ul className="list-none mb-3 space-y-2 ml-0">
+                      {children}
+                    </ul>
+                  ),
+                  ol: ({ children }) => (
+                    <ol className="list-decimal list-inside mb-3 space-y-2 ml-2">
+                      {children}
+                    </ol>
+                  ),
+                  li: ({ children }) => (
+                    <li className="flex items-start gap-2 before:content-['▸'] before:text-primary before:font-bold before:mt-0.5">
+                      <span className="flex-1">{children}</span>
+                    </li>
+                  ),
+                  h3: ({ children }) => (
+                    <h3 className="text-base font-bold mt-4 mb-3 first:mt-0 flex items-center gap-2 pb-2 border-b border-border/50">
+                      <TrendingUp className="h-4 w-4 text-primary" />
+                      {children}
+                    </h3>
+                  ),
+                  h4: ({ children }) => (
+                    <h4 className="text-sm font-semibold mt-3 mb-2 first:mt-0 text-primary">
+                      {children}
+                    </h4>
+                  ),
+                }}
+              >
+                {narrative}
+              </ReactMarkdown>
+            </div>
             <div className="pt-3 border-t border-border/50 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Badge variant="secondary" className="text-xs">
@@ -214,29 +367,119 @@ export function NarrativeAnalysis({
             <div className="flex-1 overflow-y-auto space-y-4 text-sm pr-1">
               {messages.map((m, i) =>
                 m.role === "user" ? (
-                  <div key={i} className="font-medium text-gray-800">
-                    Q: {m.content}
+                  <div key={i} className="font-medium text-foreground bg-background/50 border border-border/50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Question</div>
+                    </div>
+                    <div className="text-sm">{m.content}</div>
                   </div>
                 ) : (
-                  <div key={i} className="bg-gray-50 border rounded p-3 text-gray-900">
-                    A: {m.content}
+                  <div key={i} className="bg-gradient-to-br from-muted/60 via-muted/40 to-muted/30 border rounded-xl p-5 text-foreground shadow-sm backdrop-blur-sm">
+                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border/50">
+                      <div className="p-1.5 rounded-lg bg-primary/10">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Analysis</div>
+                    </div>
+                    <div className="prose prose-sm max-w-none dark:prose-invert">
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => {
+                            // ReactMarkdown passes children as an array of React nodes
+                            // We need to extract the text and then highlight numbers
+                            let textContent = ''
+                            if (Array.isArray(children)) {
+                              textContent = children
+                                .map((child) => {
+                                  if (typeof child === 'string') return child
+                                  if (typeof child === 'number') return String(child)
+                                  if (child && typeof child === 'object' && 'props' in child) {
+                                    // Handle nested elements like <strong>
+                                    return extractText(child.props.children)
+                                  }
+                                  return ''
+                                })
+                                .join('')
+                            } else {
+                              textContent = extractText(children)
+                            }
+                            
+                            if (!textContent) {
+                              // Fallback: render children as-is if we can't extract text
+                              return (
+                                <p className="mb-4 last:mb-0 leading-relaxed text-foreground">
+                                  {children}
+                                </p>
+                              )
+                            }
+                            
+                            const highlighted = highlightNumbers(textContent)
+                            return (
+                              <p className="mb-4 last:mb-0 leading-relaxed text-foreground">
+                                {highlighted}
+                              </p>
+                            )
+                          },
+                          strong: ({ children }) => (
+                            <strong className="font-bold text-foreground bg-accent/30 px-1 rounded">
+                              {children}
+                            </strong>
+                          ),
+                          em: ({ children }) => <em className="italic text-muted-foreground">{children}</em>,
+                          ul: ({ children }) => (
+                            <ul className="list-none mb-3 space-y-2 ml-0">
+                              {children}
+                            </ul>
+                          ),
+                          ol: ({ children }) => (
+                            <ol className="list-decimal list-inside mb-3 space-y-2 ml-2">
+                              {children}
+                            </ol>
+                          ),
+                          li: ({ children }) => (
+                            <li className="flex items-start gap-2 before:content-['▸'] before:text-primary before:font-bold before:mt-0.5">
+                              <span className="flex-1">{children}</span>
+                            </li>
+                          ),
+                          h3: ({ children }) => (
+                            <h3 className="text-base font-bold mt-4 mb-3 first:mt-0 flex items-center gap-2 pb-2 border-b border-border/50">
+                              <TrendingUp className="h-4 w-4 text-primary" />
+                              {children}
+                            </h3>
+                          ),
+                          h4: ({ children }) => (
+                            <h4 className="text-sm font-semibold mt-3 mb-2 first:mt-0 text-primary">
+                              {children}
+                            </h4>
+                          ),
+                          code: ({ children }) => (
+                            <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono border border-border">
+                              {children}
+                            </code>
+                          ),
+                        }}
+                      >
+                        {m.content}
+                      </ReactMarkdown>
+                    </div>
                   </div>
                 )
               )}
               {isGenerating && (
-                <div className="bg-gray-50 border rounded p-3 text-gray-500 flex items-center gap-2">
-                  <RefreshCw className="h-3 w-3 animate-spin" />
-                  Generating answer…
+                <div className="bg-muted/50 border rounded-lg p-4 text-muted-foreground flex items-center gap-2">
+                  <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+                  <span className="text-sm">Generating analysis...</span>
                 </div>
               )}
             </div>
-            <div className="flex gap-2 mt-3">
+            <div className="flex gap-2 mt-3 pt-3 border-t">
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
                 placeholder="Ask about this region..."
-                className="flex-1 border rounded px-3 py-2 text-sm"
+                className="flex-1 border rounded-md px-3 py-2 text-sm bg-background"
                 disabled={isGenerating}
               />
               <Button onClick={handleSend} disabled={isGenerating || !input.trim()}>

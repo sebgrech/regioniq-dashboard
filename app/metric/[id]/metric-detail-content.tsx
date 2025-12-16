@@ -1,13 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   ArrowLeft,
-  Download,
-  Share,
-  Bookmark,
   TrendingUp,
   TrendingDown,
   Info,
@@ -24,12 +21,24 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ChartTimeseries } from "@/components/chart-timeseries"
-import { DataTable } from "@/components/data-table"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { ExportableTimeseries } from "@/components/exportable-timeseries"
 import { MapScaffold } from "@/components/map-scaffold"
 import { DashboardControls } from "@/components/dashboard-controls"
 import { MetricDataTab } from "@/components/data" // 👈 NEW
 import { METRICS, REGIONS, YEARS, type Scenario } from "@/lib/metrics.config"
+import { PoliticalSummary } from "@/components/political-summary"
+import { getAvailableYears } from "@/lib/elections"
+import { partyColor, formatSeatSentence, type ConstituencyResult } from "@/lib/politics"
+import { WestminsterHeadline } from "@/components/westminster-headline"
+import { getPoliticalContext, type PoliticalContext } from "@/lib/political-context"
 import {
   fetchSeries,
   formatValue,
@@ -43,6 +52,13 @@ import {
   updateSearchParams,
   cn,
 } from "@/lib/utils"
+import { RegionCategoryBadge } from "@/components/region-category-badge"
+import { getRegionCategory } from "@/lib/region-category"
+import type { RegionMetadata } from "@/components/region-search"
+import { RegionRanking } from "@/components/region-ranking"
+import { RegionalContextTab } from "@/components/regional-context-tab"
+
+type RegionLevel = "ITL1" | "ITL2" | "ITL3" | "LAD"
 
 interface MetricDetailData {
   currentData: DataPoint[]
@@ -66,7 +82,55 @@ export default function MetricDetailContent({ id }: { id: string }) {
 
   const region = getSearchParam(searchParams, "region", "UKI")
   const year = getSearchParamNumber(searchParams, "year", 2024)
+  // Scenario comes from URL (to preserve dashboard selection), but we omit `scenario=baseline` from the slug.
   const scenario = getSearchParam(searchParams, "scenario", "baseline") as Scenario
+
+  // Track active tab for conditional UI rendering
+  const [activeTab, setActiveTab] = useState("overview")
+
+  const regionConfig = REGIONS.find((r) => r.code === region)
+  const [mapLevel, setMapLevel] = useState<RegionLevel>((regionConfig?.level as RegionLevel) ?? "ITL1")
+  const [selectedRegionMetadata, setSelectedRegionMetadata] = useState<RegionMetadata | null>(null)
+  const [regionIndex, setRegionIndex] = useState<
+    Record<string, Omit<RegionMetadata, "code">> | null
+  >(null)
+
+  // Load region index on mount (used for bbox + canonical level so the map can auto-fit on initial load)
+  useEffect(() => {
+    fetch("/processed/region-index.json")
+      .then((res) => res.json())
+      .then((data) => setRegionIndex(data))
+      .catch((err) => {
+        console.error("Failed to load region index:", err)
+      })
+  }, [])
+
+  // If the URL region changes (via share link / browser nav), snap map level to that region’s level.
+  useEffect(() => {
+    const cfg = REGIONS.find((r) => r.code === region)
+    if (cfg?.level) {
+      setMapLevel(cfg.level as RegionLevel)
+    }
+    // Metadata might be stale after URL-driven change; we'll repopulate from regionIndex below.
+    setSelectedRegionMetadata(null)
+  }, [region])
+
+  // Keep selectedRegionMetadata in sync with the URL region so the map can auto-zoom like the dashboard.
+  useEffect(() => {
+    if (!regionIndex || !region) return
+    const metadata = regionIndex[region]
+    if (!metadata) return
+
+    setSelectedRegionMetadata((prev) => {
+      if (prev?.code === region) return prev
+      return {
+        code: region,
+        name: metadata.name,
+        level: metadata.level,
+        bbox: metadata.bbox,
+      }
+    })
+  }, [regionIndex, region])
 
   const metric = METRICS.find((m) => m.id === id)
   if (!metric) {
@@ -78,7 +142,11 @@ export default function MetricDetailContent({ id }: { id: string }) {
             The requested metric could not be found.
           </p>
           <Button asChild>
-            <Link href="/">Return to Dashboard</Link>
+            <Link
+              href={`/?region=${region}&year=${year}${scenario !== "baseline" ? `&scenario=${scenario}` : ""}`}
+            >
+              Return to Dashboard
+            </Link>
           </Button>
         </div>
       </div>
@@ -86,6 +154,11 @@ export default function MetricDetailContent({ id }: { id: string }) {
   }
 
   const selectedRegion = REGIONS.find((r) => r.code === region)
+  const isLad = selectedRegion?.level === "LAD"
+
+  // Political context (works for LAD, City, ITL2, ITL3, ITL1)
+  const [politicalContext, setPoliticalContext] = useState<PoliticalContext | null>(null)
+  const [politicalLoading, setPoliticalLoading] = useState(false)
 
   const [detailData, setDetailData] = useState<MetricDetailData>({
     currentData: [],
@@ -93,6 +166,18 @@ export default function MetricDetailContent({ id }: { id: string }) {
     allRegionsData: [],
     isLoading: true,
   })
+
+  // Store all metrics data for category calculation (independent of current metric)
+  const [allMetricsData, setAllMetricsData] = useState<{
+    metricId: string
+    data: DataPoint[]
+  }[]>([])
+
+  // Store related metrics data (for employment: employment rate, unemployment rate)
+  const [relatedMetricsData, setRelatedMetricsData] = useState<{
+    metricId: string
+    data: DataPoint[]
+  }[]>([])
 
   useEffect(() => {
     const loadDetailData = async () => {
@@ -133,23 +218,141 @@ export default function MetricDetailContent({ id }: { id: string }) {
     loadDetailData()
   }, [metric.id, region, scenario])
 
+  // Load only the metrics needed for region category calculation (keeps region switching responsive).
+  useEffect(() => {
+    const loadAllMetrics = async () => {
+      try {
+        const categoryMetricIds = [
+          "population_total",
+          "nominal_gva_mn_gbp",
+          "gdhi_per_head_gbp",
+          "emp_total_jobs",
+        ] as const
+
+        const categoryMetrics = await Promise.all(
+          categoryMetricIds.map(async (metricId) => ({
+            metricId,
+            data: await fetchSeries({ metricId, region, scenario }),
+          }))
+        )
+
+        setAllMetricsData(categoryMetrics)
+      } catch (error) {
+        console.error("Failed to load category metrics:", error)
+      }
+    }
+    loadAllMetrics()
+  }, [region, scenario])
+
+  // Load related metrics if this metric has them (e.g., employment -> employment rate, unemployment rate)
+  useEffect(() => {
+    const loadRelatedMetrics = async () => {
+      if (!metric.relatedMetrics || metric.relatedMetrics.length === 0) {
+        setRelatedMetricsData([])
+        return
+      }
+
+      try {
+        const relatedPromises = metric.relatedMetrics.map(async (relatedMetricId) => {
+          const relatedMetric = METRICS.find((m) => m.id === relatedMetricId)
+          if (!relatedMetric) return null
+
+          const data = await fetchSeries({
+            metricId: relatedMetricId,
+            region,
+            scenario,
+          })
+          return {
+            metricId: relatedMetricId,
+            data,
+          }
+        })
+
+        const related = (await Promise.all(relatedPromises)).filter(
+          (r): r is { metricId: string; data: DataPoint[] } => r !== null
+        )
+        setRelatedMetricsData(related)
+      } catch (error) {
+        console.error("Failed to load related metrics:", error)
+        setRelatedMetricsData([])
+      }
+    }
+
+    loadRelatedMetrics()
+  }, [metric.relatedMetrics, region, scenario])
+
+  // Load political context (works for all region types)
+  useEffect(() => {
+    if (!region) {
+      setPoliticalContext(null)
+      return
+    }
+
+    let mounted = true
+    setPoliticalLoading(true)
+
+    console.log(`[Political Context] Loading data for region: ${region} (${selectedRegion?.name})`)
+
+    getPoliticalContext(region)
+      .then((context) => {
+        if (!mounted) return
+        console.log(`[Political Context] Loaded context for ${region}:`, context?.type, context?.westminsterSeats.length, "seats")
+        setPoliticalContext(context)
+      })
+      .catch((error) => {
+        console.error("[Political Context] Failed to load political context:", error)
+        if (mounted) {
+          setPoliticalContext(null)
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setPoliticalLoading(false)
+        }
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [region, selectedRegion])
+
   const updateURL = (updates: Record<string, string | number | null>) => {
     const newParams = updateSearchParams(searchParams, updates)
     router.push(`/metric/${id}?${newParams}`, { scroll: false })
   }
 
-  const handleRegionChange = (newRegion: string) => updateURL({ region: newRegion })
+  const handleRegionChange = (metadata: RegionMetadata) => {
+    setSelectedRegionMetadata(metadata)
+    setMapLevel(metadata.level as RegionLevel)
+    updateURL({ region: metadata.code })
+  }
   const handleYearChange = (newYear: number) => updateURL({ year: newYear })
   const handleScenarioChange = (newScenario: Scenario) =>
-    updateURL({ scenario: newScenario })
+    updateURL({ scenario: newScenario === "baseline" ? null : newScenario })
 
-  const currentYearData = detailData.currentData.find((d) => d.year === year)
-  const previousYearData = detailData.currentData.find((d) => d.year === year - 1)
+  // Headline stats should use the latest available *historical* year (not forecast),
+  // falling back to the latest year present if types are missing.
+  const asOf = useMemo(() => {
+    const histYears = detailData.currentData
+      .filter((d) => d.type === "historical")
+      .map((d) => d.year)
+    if (histYears.length) return { year: Math.max(...histYears), source: "historical" as const }
+
+    const allYears = detailData.currentData.map((d) => d.year)
+    if (allYears.length) return { year: Math.max(...allYears), source: "latest" as const }
+
+    // Fallback to URL year if we have no data yet (loading / empty series)
+    return { year, source: "latest" as const }
+  }, [detailData.currentData, year])
+
+  const asOfYear = asOf.year
+  const currentYearData = detailData.currentData.find((d) => d.year === asOfYear)
+  const previousYearData = detailData.currentData.find((d) => d.year === asOfYear - 1)
   const currentValue = currentYearData?.value || 0
   const previousValue = previousYearData?.value || 0
   const yearOverYearChange = calculateChange(currentValue, previousValue)
 
-  const fiveYearAgoData = detailData.currentData.find((d) => d.year === year - 5)
+  const fiveYearAgoData = detailData.currentData.find((d) => d.year === asOfYear - 5)
   const fiveYearChange = fiveYearAgoData
     ? calculateChange(currentValue, fiveYearAgoData.value)
     : 0
@@ -158,6 +361,124 @@ export default function MetricDetailContent({ id }: { id: string }) {
 
   // Map UI metric id to Supabase metric_id for the Data tab
   const dbMetricId: DbMetricId = METRIC_ID_MAP[metric.id] ?? (metric.id as DbMetricId)
+
+  const scenarioMilestones = useMemo(() => {
+    const desired = [2025, 2030, 2035, 2040]
+    return desired.filter((y) => y >= YEARS.min && y <= YEARS.max)
+  }, [])
+
+  const scenarioComparisonRows = useMemo(() => {
+    const baselineSeries =
+      detailData.allScenariosData.find((s) => s.scenario === "baseline")?.data ?? []
+    const upsideSeries =
+      detailData.allScenariosData.find((s) => s.scenario === "upside")?.data ?? []
+    const downsideSeries =
+      detailData.allScenariosData.find((s) => s.scenario === "downside")?.data ?? []
+
+    const getValue = (series: DataPoint[], y: number) =>
+      series.find((d) => d.year === y)?.value
+
+    return scenarioMilestones.map((y) => {
+      const baseline = getValue(baselineSeries, y)
+      const upside = getValue(upsideSeries, y)
+      const downside = getValue(downsideSeries, y)
+
+      const upsideDelta = baseline != null && upside != null ? upside - baseline : null
+      const downsideDelta = baseline != null && downside != null ? downside - baseline : null
+
+      const upsidePct = baseline != null && upside != null ? calculateChange(upside, baseline) : null
+      const downsidePct =
+        baseline != null && downside != null ? calculateChange(downside, baseline) : null
+
+      const spread = upside != null && downside != null ? upside - downside : null
+      const spreadPct =
+        baseline != null && spread != null ? calculateChange(baseline + spread, baseline) : null
+
+      return {
+        year: y,
+        baseline,
+        upside,
+        downside,
+        upsideDelta,
+        downsideDelta,
+        upsidePct,
+        downsidePct,
+        spread,
+        spreadPct,
+      }
+    })
+  }, [detailData.allScenariosData, scenarioMilestones])
+
+  const scenarioComparisonScale = useMemo(() => {
+    const values: number[] = []
+    for (const r of scenarioComparisonRows) {
+      if (r.downside != null) values.push(r.downside)
+      if (r.baseline != null) values.push(r.baseline)
+      if (r.upside != null) values.push(r.upside)
+    }
+    if (!values.length) return { min: 0, max: 1 }
+    const min = Math.min(...values)
+    const max = Math.max(...values)
+    // Prevent divide-by-zero
+    if (min === max) return { min: min - 1, max: max + 1 }
+    return { min, max }
+  }, [scenarioComparisonRows])
+
+  const posPct = (value: number) => {
+    const { min, max } = scenarioComparisonScale
+    return ((value - min) / (max - min)) * 100
+  }
+
+  // Calculate region category based on ALL metrics (same logic as dashboard)
+  const regionCategory = useMemo(() => {
+    if (!allMetricsData || allMetricsData.length === 0) return null
+
+    // Extract growth rates from all metrics
+    const populationData = allMetricsData.find((d) => d.metricId === "population_total")
+    const gvaData = allMetricsData.find((d) => d.metricId === "nominal_gva_mn_gbp")
+    const incomeData = allMetricsData.find((d) => d.metricId === "gdhi_per_head_gbp")
+    const employmentData = allMetricsData.find((d) => d.metricId === "emp_total_jobs")
+
+    if (!populationData || !gvaData || !incomeData || !employmentData) return null
+
+    // Calculate YoY changes for each metric
+    const currentYearPop = populationData.data.find((d) => d.year === year)
+    const previousYearPop = populationData.data.find((d) => d.year === year - 1)
+    const populationGrowth = currentYearPop && previousYearPop
+      ? calculateChange(currentYearPop.value, previousYearPop.value)
+      : 0
+
+    const currentYearGva = gvaData.data.find((d) => d.year === year)
+    const previousYearGva = gvaData.data.find((d) => d.year === year - 1)
+    const gvaGrowth = currentYearGva && previousYearGva
+      ? calculateChange(currentYearGva.value, previousYearGva.value)
+      : 0
+
+    const currentYearIncome = incomeData.data.find((d) => d.year === year)
+    const previousYearIncome = incomeData.data.find((d) => d.year === year - 1)
+    const incomeGrowth = currentYearIncome && previousYearIncome
+      ? calculateChange(currentYearIncome.value, previousYearIncome.value)
+      : 0
+
+    const currentYearEmp = employmentData.data.find((d) => d.year === year)
+    const previousYearEmp = employmentData.data.find((d) => d.year === year - 1)
+    const employmentGrowth = currentYearEmp && previousYearEmp
+      ? calculateChange(currentYearEmp.value, previousYearEmp.value)
+      : 0
+
+    // Calculate GVA per capita
+    const gvaValue = currentYearGva?.value || 0
+    const populationValue = currentYearPop?.value || 0
+    const gvaPerCapita = populationValue > 0 ? (gvaValue * 1000000) / populationValue : undefined
+
+    return getRegionCategory({
+      populationGrowth,
+      gvaGrowth,
+      incomeGrowth,
+      employmentGrowth,
+      gvaPerCapita,
+    })
+  }, [allMetricsData, year])
 
   return (
     <div className="min-h-screen bg-background">
@@ -168,16 +489,17 @@ export default function MetricDetailContent({ id }: { id: string }) {
         onRegionChange={handleRegionChange}
         onYearChange={handleYearChange}
         onScenarioChange={handleScenarioChange}
+        activeTab={activeTab}
       />
 
       {/* Header */}
       <div className="border-b bg-card/95 backdrop-blur">
         <div className="container mx-auto px-4 py-6">
           <div className="flex items-start justify-between">
-            <div className="space-y-4">
+            <div className="flex-1 space-y-4">
               <div className="flex items-center gap-4">
                 <Button variant="ghost" size="sm" asChild>
-                  <Link href="/">
+                  <Link href={`/?region=${region}&year=${year}${scenario !== "baseline" ? `&scenario=${scenario}` : ""}`}>
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Dashboard
                   </Link>
@@ -190,13 +512,24 @@ export default function MetricDetailContent({ id }: { id: string }) {
                   <div>
                     <h1 className="text-3xl font-bold">{metric.title}</h1>
                     <p className="text-muted-foreground">
-                      {selectedRegion?.name} • {year} • {scenario} scenario
+                      {selectedRegion?.name}
+                      {activeTab !== "overview" && activeTab !== "scenarios" && ` • ${year}`}
+                      {activeTab === "scenarios" 
+                        ? " • all scenarios"
+                        : ` • ${scenario} scenario`}
                     </p>
                   </div>
                 </div>
               </div>
 
               {/* Key Stats */}
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">
+                  {asOf.source === "historical"
+                    ? `Latest actual data (${asOfYear})`
+                    : `Latest available data (${asOfYear})`}
+                </div>
+
               <div className="flex items-center gap-6">
                 <div>
                   <div className="text-2xl font-bold">
@@ -241,24 +574,13 @@ export default function MetricDetailContent({ id }: { id: string }) {
                     {formatPercentage(fiveYearChange)}
                   </div>
                   <div className="text-sm text-muted-foreground">5-Year Change</div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm">
-                <Bookmark className="h-4 w-4 mr-2" />
-                Save
-              </Button>
-              <Button variant="outline" size="sm">
-                <Share className="h-4 w-4 mr-2" />
-                Share
-              </Button>
-              <Button variant="outline" size="sm">
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </Button>
+            <div className="flex items-center gap-3 ml-4">
+              {regionCategory && <RegionCategoryBadge category={regionCategory} />}
             </div>
           </div>
         </div>
@@ -266,7 +588,7 @@ export default function MetricDetailContent({ id }: { id: string }) {
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
-        <Tabs defaultValue="overview" className="space-y-8">
+        <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="space-y-8">
           {/* 👇 now 5 tabs */}
           <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -280,14 +602,74 @@ export default function MetricDetailContent({ id }: { id: string }) {
           <TabsContent value="overview" className="space-y-8">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2 space-y-8">
-                <ChartTimeseries
+                {/* Main metric chart */}
+                <ExportableTimeseries
+                  filenameBase={`regioniq_${metric.id}_${region}_${scenario}_trend`}
+                  exportMeta={{
+                    Metric: metric.title,
+                    Region: selectedRegion?.name ?? region,
+                    "Region Code": region,
+                  }}
                   title={`${metric.title} Trend`}
                   description={`Historical and forecast data for ${selectedRegion?.name}`}
                   data={detailData.currentData}
+                  primaryScenario={scenario}
                   unit={metric.unit}
                   metricId={metric.id}
                   isLoading={detailData.isLoading}
+                  disableZoom={true}
                 />
+
+                {/* Related metrics (e.g., Employment Rate, Unemployment Rate for Employment) */}
+                {relatedMetricsData.length > 0 && (
+                  <div className="space-y-6">
+                    <div className="border-t border-border/40 pt-6">
+                      <h3 className="text-lg font-semibold mb-4">
+                        {id === "emp_total_jobs" 
+                          ? "Related Labour Market Indicators"
+                          : id === "population_total"
+                          ? "Related Population Indicators"
+                          : "Related Indicators"}
+                      </h3>
+                      <div className="space-y-6">
+                        {relatedMetricsData.map((relatedMetric) => {
+                          const relatedMetricConfig = METRICS.find((m) => m.id === relatedMetric.metricId)
+                          if (!relatedMetricConfig) return null
+
+                          return (
+                            <ExportableTimeseries
+                              key={relatedMetric.metricId}
+                              filenameBase={`regioniq_${relatedMetric.metricId}_${region}_${scenario}_trend`}
+                              exportMeta={{
+                                Metric: relatedMetricConfig.title,
+                                Region: selectedRegion?.name ?? region,
+                                "Region Code": region,
+                              }}
+                              title={relatedMetricConfig.title}
+                              description={`${relatedMetricConfig.title} for ${selectedRegion?.name}`}
+                              data={relatedMetric.data}
+                              primaryScenario={scenario}
+                              unit={relatedMetricConfig.unit}
+                              metricId={relatedMetric.metricId}
+                              isLoading={detailData.isLoading}
+                              disableZoom={true}
+                            />
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Regional Ranking Component - only show for metrics without related charts (GDHI, GVA) */}
+                {(!metric.relatedMetrics || metric.relatedMetrics.length === 0) && (
+                  <RegionRanking
+                    metricId={metric.id}
+                    region={region}
+                    year={year}
+                    scenario={scenario}
+                  />
+                )}
 
                 <Card>
                   <CardHeader>
@@ -300,21 +682,43 @@ export default function MetricDetailContent({ id }: { id: string }) {
                     <div>
                       <h4 className="font-medium mb-2">Data Sources</h4>
                       <p className="text-muted-foreground">
-                        Official statistics from ONS, regional agencies, and government departments.
-                        Historical data spans {YEARS.min}–{YEARS.forecastStart - 1}, with forecasts to {YEARS.max}.
+                        {(() => {
+                          // Calculate the last historical year from actual data
+                          const historicalData = detailData.currentData.filter(d => d.type === "historical")
+                          const lastHistoricalYear = historicalData.length > 0 
+                            ? Math.max(...historicalData.map(d => d.year))
+                            : YEARS.forecastStart - 1
+                          const firstHistoricalYear = historicalData.length > 0
+                            ? Math.min(...historicalData.map(d => d.year))
+                            : YEARS.min
+                          
+                          if (metric.id === "population_total") {
+                            return `ONS Mid-Year Population Estimates. Historical data spans ${firstHistoricalYear}–${lastHistoricalYear}, with forecasts to ${YEARS.max}.`
+                          }
+                          if (metric.id === "nominal_gva_mn_gbp") {
+                            return `ONS Regional Accounts. Historical data spans ${firstHistoricalYear}–${lastHistoricalYear}, with forecasts to ${YEARS.max}.`
+                          }
+                          if (metric.id === "gdhi_per_head_gbp") {
+                            return `ONS Regional Accounts. Historical data spans ${firstHistoricalYear}–${lastHistoricalYear}, with forecasts to ${YEARS.max}.`
+                          }
+                          if (metric.id === "emp_total_jobs") {
+                            return `ONS Business Register and Employment Survey (BRES). Historical data spans ${firstHistoricalYear}–${lastHistoricalYear}, with forecasts to ${YEARS.max}. Only available for Great Britain (excludes Northern Ireland).`
+                          }
+                          return `Official statistics from ONS, regional agencies, and government departments. Historical data spans ${firstHistoricalYear}–${lastHistoricalYear}, with forecasts to ${YEARS.max}.`
+                        })()}
                       </p>
                     </div>
                     <div>
                       <h4 className="font-medium mb-2">Calculation Method</h4>
                       <p className="text-muted-foreground">
-                        {metric.id === "population" &&
-                          "Mid-year population estimates with forecasts based on demographic trends and migration."}
-                        {metric.id === "gva" &&
-                          "Gross Value Added at current basic prices. Contribution of producers, industries, or sectors."}
-                        {metric.id === "income" &&
-                          "Gross Disposable Household Income per head after taxes and transfers."}
-                        {metric.id === "employment" &&
-                          "Total employment including employees, self-employed, and trainees (by workplace)."}
+                        {metric.id === "population_total" &&
+                          "Total number of people living in the area, regardless of age. Based on ONS Mid-Year Population Estimates, residence-based (where people live). Includes all residents from newborns to the oldest members of the population."}
+                        {metric.id === "nominal_gva_mn_gbp" &&
+                          "Gross Value Added (GVA) is the value generated by economic units producing goods and services, less the cost of inputs used. GVA measures economic output and activity in an area at current prices. GVA + taxes on products - subsidies = GDP."}
+                        {metric.id === "gdhi_per_head_gbp" &&
+                          "Gross Disposable Household Income (GDHI) is total income for all individuals in the household sector (traditional households, institutions, and sole trader enterprises) after taxes and transfers. GDHI per head divides total GDHI by total population to give GBP per person, not per household."}
+                        {metric.id === "emp_total_jobs" &&
+                          "Total number of employee and self-employed jobs located in the area. Based on Business Register and Employment Survey (BRES), workplace-based (where jobs are located, not where workers live). A person with multiple jobs counts as multiple jobs. Only available for Great Britain (excludes Northern Ireland)."}
                       </p>
                     </div>
                   </CardContent>
@@ -322,13 +726,160 @@ export default function MetricDetailContent({ id }: { id: string }) {
               </div>
 
               <div className="space-y-8">
+                <div className="h-[500px]">
                 <MapScaffold
                   selectedRegion={region}
+                  selectedRegionMetadata={selectedRegionMetadata}
                   metric={metric.id}
                   year={year}
                   scenario={scenario}
+                  level={mapLevel}
+                  onLevelChange={setMapLevel}
                   onRegionSelect={handleRegionChange}
-                />
+                  mapId="metric-map"
+                  headerSubtitle={
+                    selectedRegion?.name ? `${selectedRegion.name} (${region})` : region
+                  }
+                    showRegionInfo={false}
+                    // ⬆️ Hide region info bubble on detail page - single region context
+                  />
+                </div>
+
+                {/* Political Context - Show for all region types */}
+                {politicalContext && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-2xl">Political Context</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {politicalLoading ? (
+                        <div className="text-sm text-muted-foreground">Loading political context...</div>
+                      ) : politicalContext ? (
+                        <>
+                          {/* SECTION A — Westminster Representation (Parliamentary Layer) - PRIMARY */}
+                          <div className="space-y-4 pb-6 border-b border-border/60">
+                            <div className="text-sm font-bold uppercase tracking-wide text-foreground">
+                              WESTMINSTER REPRESENTATION
+                            </div>
+                            
+                            <WestminsterHeadline
+                              seats={Object.entries(politicalContext.seatCounts)
+                                .sort(([, a], [, b]) => b - a)
+                                .map(([party, count]) => ({
+                                  party,
+                                  count,
+                                  color: partyColor(party),
+                                }))}
+                              turnout={politicalContext.turnout}
+                              majority={politicalContext.majority}
+                              leadingParty={politicalContext.leadingParty}
+                              electionYear={2024}
+                              viewResultsUrl={`/westminster/${region}?return=${encodeURIComponent(
+                                `/metric/${id}?region=${region}&year=${year}${
+                                  scenario !== "baseline" ? `&scenario=${scenario}` : ""
+                                }`
+                              )}`}
+                              regionType={politicalContext.type}
+                            />
+                          </div>
+
+                          {/* SECTION B — Local Governance (Council Layer) - SECONDARY */}
+                          <div className="space-y-4 pt-6">
+                            <div className="text-sm font-bold uppercase tracking-wide text-foreground">
+                              LOCAL GOVERNANCE CONTEXT
+                            </div>
+                            
+                            {/* Local Authority Control Summary (for aggregated regions) */}
+                            {politicalContext.type !== "lad" && politicalContext.ladCount > 1 && (
+                              <div>
+                                <div className="text-xs text-muted-foreground mb-2">
+                                  Local authority control ({politicalContext.ladCount} LADs):
+                                </div>
+                              {(() => {
+                                const total = 
+                                  politicalContext.localControlSummary.LabourControlled +
+                                  politicalContext.localControlSummary.ConservativeControlled +
+                                  politicalContext.localControlSummary.NoOverallControl +
+                                  politicalContext.localControlSummary.LiberalDemocratControlled +
+                                  politicalContext.localControlSummary.GreenControlled +
+                                  politicalContext.localControlSummary.ReformUKControlled +
+                                  politicalContext.localControlSummary.OtherControlled
+                                
+                                if (total === 0) {
+                                  return (
+                                    <div className="text-sm text-muted-foreground">
+                                      No local elections in the past two years
+                                    </div>
+                                  )
+                                }
+                                
+                                return (
+                                  <div className="space-y-1 text-sm">
+                                    {politicalContext.localControlSummary.LabourControlled > 0 && (
+                                      <div>
+                                        {politicalContext.localControlSummary.LabourControlled} Labour-controlled LAD{politicalContext.localControlSummary.LabourControlled !== 1 ? "s" : ""}
+                                      </div>
+                                    )}
+                                    {politicalContext.localControlSummary.ConservativeControlled > 0 && (
+                                      <div>
+                                        {politicalContext.localControlSummary.ConservativeControlled} Conservative-controlled LAD{politicalContext.localControlSummary.ConservativeControlled !== 1 ? "s" : ""}
+                                      </div>
+                                    )}
+                                    {politicalContext.localControlSummary.NoOverallControl > 0 && (
+                                      <div>
+                                        {politicalContext.localControlSummary.NoOverallControl} No Overall Control
+                                      </div>
+                                    )}
+                                    {politicalContext.localControlSummary.LiberalDemocratControlled > 0 && (
+                                      <div>
+                                        {politicalContext.localControlSummary.LiberalDemocratControlled} Liberal Democrat-controlled LAD{politicalContext.localControlSummary.LiberalDemocratControlled !== 1 ? "s" : ""}
+                                      </div>
+                                    )}
+                                    {politicalContext.localControlSummary.GreenControlled > 0 && (
+                                      <div>
+                                        {politicalContext.localControlSummary.GreenControlled} Green-controlled LAD{politicalContext.localControlSummary.GreenControlled !== 1 ? "s" : ""}
+                                      </div>
+                                    )}
+                                    {politicalContext.localControlSummary.ReformUKControlled > 0 && (
+                                      <div>
+                                        {politicalContext.localControlSummary.ReformUKControlled} Reform UK-controlled LAD{politicalContext.localControlSummary.ReformUKControlled !== 1 ? "s" : ""}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })()}
+                              </div>
+                            )}
+
+                            {/* Local Authority Control (for single LAD) */}
+                            {politicalContext.type === "lad" && (
+                              <div>
+                                {(() => {
+                                  const availableYears = getAvailableYears(region)
+                                  const mostRecentYear = availableYears.length > 0 ? Math.max(...availableYears) : null
+                                  if (!mostRecentYear) {
+                                    return (
+                                      <div className="text-sm text-muted-foreground">
+                                        No local elections in the past two years
+                                      </div>
+                                    )
+                                  }
+                                  
+                                  return <PoliticalSummary ladCode={region} year={mostRecentYear} />
+                                })()}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">
+                          No political context data available for this area.
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
 
                 <Card>
                   <CardHeader>
@@ -383,76 +934,149 @@ export default function MetricDetailContent({ id }: { id: string }) {
 
           {/* Scenarios */}
           <TabsContent value="scenarios" className="space-y-8">
-            <ChartTimeseries
+            <ExportableTimeseries
+              filenameBase={`regioniq_${metric.id}_${region}_all-scenarios`}
+              exportMeta={{
+                Metric: metric.title,
+                Region: selectedRegion?.name ?? region,
+                "Region Code": region,
+              }}
               title={`${metric.title} - All Scenarios`}
               description={`Baseline, upside, and downside for ${selectedRegion?.name}`}
               data={detailData.allScenariosData.find((s) => s.scenario === "baseline")?.data || []}
-              additionalSeries={detailData.allScenariosData
+              additionalSeries={useMemo(() => 
+                detailData.allScenariosData
                 .filter((s) => s.scenario !== "baseline")
                 .map((s, i) => ({
                   scenario: s.scenario,
                   data: s.data,
                   color: `hsl(var(--chart-${i + 2}))`,
-                }))}
+                  })),
+                [detailData.allScenariosData]
+              )}
               unit={metric.unit}
               metricId={metric.id}
               isLoading={detailData.isLoading}
+              height={600}
             />
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {detailData.allScenariosData.map((sData) => {
-                const val = sData.data.find((d) => d.year === year)?.value || 0
-                const prev = sData.data.find((d) => d.year === year - 1)?.value || 0
-                const change = calculateChange(val, prev)
-
-                return (
-                  <Card
-                    key={sData.scenario}
-                    className={cn(scenario === sData.scenario && "ring-2 ring-primary")}
-                  >
+            <Card>
                     <CardHeader>
-                      <CardTitle className="capitalize">{sData.scenario} Scenario</CardTitle>
+                <CardTitle>Scenario comparison at key milestones</CardTitle>
                       <CardDescription>
-                        {sData.scenario === "baseline" && "Most likely projection"}
-                        {sData.scenario === "upside" && "Optimistic projection"}
-                        {sData.scenario === "downside" && "Conservative projection"}
+                  Risk band (downside→upside) with baseline marker, plus values and deltas vs baseline.
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-2">
-                        <div className="text-2xl font-bold">{formatValue(val, metric.unit)}</div>
-                        <div
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Year</TableHead>
+                      <TableHead>Risk band</TableHead>
+                      <TableHead>Spread</TableHead>
+                      <TableHead>Baseline</TableHead>
+                      <TableHead>Upside</TableHead>
+                      <TableHead>Δ vs baseline</TableHead>
+                      <TableHead>Downside</TableHead>
+                      <TableHead>Δ vs baseline</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {scenarioComparisonRows.map((row) => (
+                      <TableRow key={row.year}>
+                        <TableCell className="font-medium">{row.year}</TableCell>
+
+                        <TableCell className="w-[220px]">
+                          {row.downside == null || row.baseline == null || row.upside == null ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            <div className="relative h-3 w-[200px]">
+                              {/* Track */}
+                              <div className="absolute inset-0 rounded-full bg-muted" />
+
+                              {/* Range (downside -> upside) */}
+                              <div
+                                className="absolute top-0 h-3 rounded-full bg-primary/30"
+                                style={{
+                                  left: `${posPct(row.downside)}%`,
+                                  width: `${Math.max(0, posPct(row.upside) - posPct(row.downside))}%`,
+                                }}
+                              />
+
+                              {/* Baseline marker */}
+                              <div
+                                className="absolute top-[-2px] h-[16px] w-[2px] bg-primary"
+                                style={{ left: `${posPct(row.baseline)}%` }}
+                              />
+                            </div>
+                          )}
+                        </TableCell>
+
+                        <TableCell>
+                          {row.spread == null ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            <span className="font-medium">
+                              {formatValue(row.spread, metric.unit)}
+                            </span>
+                          )}
+                        </TableCell>
+
+                        <TableCell>
+                          {row.baseline == null ? "—" : formatValue(row.baseline, metric.unit)}
+                        </TableCell>
+
+                        <TableCell>
+                          {row.upside == null ? "—" : formatValue(row.upside, metric.unit)}
+                        </TableCell>
+
+                        <TableCell
                           className={cn(
-                            "text-sm font-medium",
-                            change >= 0
+                            row.upsideDelta == null
+                              ? "text-muted-foreground"
+                              : row.upsideDelta >= 0
                               ? "text-green-600 dark:text-green-400"
                               : "text-red-600 dark:text-red-400"
                           )}
                         >
-                          {formatPercentage(change)} vs previous year
-                        </div>
-                      </div>
+                          {row.upsideDelta == null || row.upsidePct == null
+                            ? "—"
+                            : `${formatValue(row.upsideDelta, metric.unit)} (${formatPercentage(row.upsidePct)})`}
+                        </TableCell>
+
+                        <TableCell>
+                          {row.downside == null ? "—" : formatValue(row.downside, metric.unit)}
+                        </TableCell>
+
+                        <TableCell
+                          className={cn(
+                            row.downsideDelta == null
+                              ? "text-muted-foreground"
+                              : row.downsideDelta >= 0
+                                ? "text-green-600 dark:text-green-400"
+                                : "text-red-600 dark:text-red-400"
+                          )}
+                        >
+                          {row.downsideDelta == null || row.downsidePct == null
+                            ? "—"
+                            : `${formatValue(row.downsideDelta, metric.unit)} (${formatPercentage(row.downsidePct)})`}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
                     </CardContent>
                   </Card>
-                )
-              })}
-            </div>
           </TabsContent>
 
           {/* Regional */}
           <TabsContent value="regional" className="space-y-8">
-            <DataTable
-              title={`${metric.title} - Regional Comparison`}
-              description={`Compare ${metric.title.toLowerCase()} across regions for ${year}`}
-              data={detailData.allRegionsData.map((r) => ({
-                region: r.region,
-                metricId: metric.id,
-                scenario,
-                data: r.data,
-              }))}
-              unit={metric.unit}
+            <RegionalContextTab
+              metric={metric}
+              region={region}
               year={year}
-              isLoading={detailData.isLoading}
+              scenario={scenario}
+              selectedRegionMetadata={selectedRegionMetadata}
             />
           </TabsContent>
 
@@ -512,7 +1136,9 @@ export default function MetricDetailContent({ id }: { id: string }) {
                       return (
                         <Link
                           key={rm.id}
-                          href={`/metric/${rm.id}?region=${region}&year=${year}&scenario=${scenario}`}
+                          href={`/metric/${rm.id}?region=${region}&year=${year}${
+                            scenario !== "baseline" ? `&scenario=${scenario}` : ""
+                          }`}
                           className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors"
                         >
                           <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center">
@@ -536,6 +1162,7 @@ export default function MetricDetailContent({ id }: { id: string }) {
             <MetricDataTab
               metricId={dbMetricId}
               region={region}
+              year={year}
               scenario={scenario}
               title={metric.title}
             />

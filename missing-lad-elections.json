@@ -1,0 +1,467 @@
+[
+  {
+    "code": "E06000051",
+    "name": "Shropshire",
+    "country": "England"
+  },
+  {
+    "code": "E06000057",
+    "name": "Northumberland",
+    "country": "England"
+  },
+  {
+    "code": "E06000060",
+    "name": "Buckinghamshire",
+    "country": "England"
+  },
+  {
+    "code": "E06000061",
+    "name": "North Northamptonshire",
+    "country": "England"
+  },
+  {
+    "code": "E06000062",
+    "name": "West Northamptonshire",
+    "country": "England"
+  },
+  {
+    "code": "E06000063",
+    "name": "Cumberland",
+    "country": "England"
+  },
+  {
+    "code": "E06000065",
+    "name": "North Yorkshire",
+    "country": "England"
+  },
+  {
+    "code": "E07000012",
+    "name": "South Cambridgeshire",
+    "country": "England"
+  },
+  {
+    "code": "E08000013",
+    "name": "St. Helens",
+    "country": "England"
+  },
+  {
+    "code": "E09000001",
+    "name": "City of London",
+    "country": "England"
+  },
+  {
+    "code": "E09000002",
+    "name": "Barking and Dagenham",
+    "country": "England"
+  },
+  {
+    "code": "E09000003",
+    "name": "Barnet",
+    "country": "England"
+  },
+  {
+    "code": "E09000004",
+    "name": "Bexley",
+    "country": "England"
+  },
+  {
+    "code": "E09000005",
+    "name": "Brent",
+    "country": "England"
+  },
+  {
+    "code": "E09000009",
+    "name": "Ealing",
+    "country": "England"
+  },
+  {
+    "code": "E09000010",
+    "name": "Enfield",
+    "country": "England"
+  },
+  {
+    "code": "E09000011",
+    "name": "Greenwich",
+    "country": "England"
+  },
+  {
+    "code": "E09000013",
+    "name": "Hammersmith and Fulham",
+    "country": "England"
+  },
+  {
+    "code": "E09000014",
+    "name": "Haringey",
+    "country": "England"
+  },
+  {
+    "code": "E09000015",
+    "name": "Harrow",
+    "country": "England"
+  },
+  {
+    "code": "E09000016",
+    "name": "Havering",
+    "country": "England"
+  },
+  {
+    "code": "E09000021",
+    "name": "Kingston upon Thames",
+    "country": "England"
+  },
+  {
+    "code": "E09000024",
+    "name": "Merton",
+    "country": "England"
+  },
+  {
+    "code": "E09000025",
+    "name": "Newham",
+    "country": "England"
+  },
+  {
+    "code": "E09000027",
+    "name": "Richmond upon Thames",
+    "country": "England"
+  },
+  {
+    "code": "E09000028",
+    "name": "Southwark",
+    "country": "England"
+  },
+  {
+    "code": "E09000030",
+    "name": "Tower Hamlets",
+    "country": "England"
+  },
+  {
+    "code": "E09000031",
+    "name": "Waltham Forest",
+    "country": "England"
+  },
+  {
+    "code": "E09000033",
+    "name": "Westminster",
+    "country": "England"
+  },
+  {
+    "code": "S12000005",
+    "name": "Clackmannanshire",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000006",
+    "name": "Dumfries and Galloway",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000008",
+    "name": "East Ayrshire",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000010",
+    "name": "East Lothian",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000011",
+    "name": "East Renfrewshire",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000013",
+    "name": "Na h-Eileanan Siar",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000014",
+    "name": "Falkirk",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000017",
+    "name": "Highland",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000018",
+    "name": "Inverclyde",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000019",
+    "name": "Midlothian",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000020",
+    "name": "Moray",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000021",
+    "name": "North Ayrshire",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000023",
+    "name": "Orkney Islands",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000026",
+    "name": "Scottish Borders",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000027",
+    "name": "Shetland Islands",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000028",
+    "name": "South Ayrshire",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000029",
+    "name": "South Lanarkshire",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000030",
+    "name": "Stirling",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000033",
+    "name": "Aberdeen City",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000034",
+    "name": "Aberdeenshire",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000035",
+    "name": "Argyll and Bute",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000036",
+    "name": "City of Edinburgh",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000038",
+    "name": "Renfrewshire",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000039",
+    "name": "West Dunbartonshire",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000040",
+    "name": "West Lothian",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000041",
+    "name": "Angus",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000042",
+    "name": "Dundee City",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000045",
+    "name": "East Dunbartonshire",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000047",
+    "name": "Fife",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000048",
+    "name": "Perth and Kinross",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000049",
+    "name": "Glasgow City",
+    "country": "Scotland"
+  },
+  {
+    "code": "S12000050",
+    "name": "North Lanarkshire",
+    "country": "Scotland"
+  },
+  {
+    "code": "W06000001",
+    "name": "Isle of Anglesey",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000002",
+    "name": "Gwynedd",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000003",
+    "name": "Conwy",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000004",
+    "name": "Denbighshire",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000005",
+    "name": "Flintshire",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000006",
+    "name": "Wrexham",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000008",
+    "name": "Ceredigion",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000009",
+    "name": "Pembrokeshire",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000010",
+    "name": "Carmarthenshire",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000011",
+    "name": "Swansea",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000012",
+    "name": "Neath Port Talbot",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000014",
+    "name": "Vale of Glamorgan",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000015",
+    "name": "Cardiff",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000016",
+    "name": "Rhondda Cynon Taf",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000018",
+    "name": "Caerphilly",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000019",
+    "name": "Blaenau Gwent",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000020",
+    "name": "Torfaen",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000021",
+    "name": "Monmouthshire",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000022",
+    "name": "Newport",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000023",
+    "name": "Powys",
+    "country": "Wales"
+  },
+  {
+    "code": "W06000024",
+    "name": "Merthyr Tydfil",
+    "country": "Wales"
+  },
+  {
+    "code": "N09000001",
+    "name": "Antrim and Newtownabbey",
+    "country": "Northern Ireland"
+  },
+  {
+    "code": "N09000002",
+    "name": "Armagh City, Banbridge and Craigavon",
+    "country": "Northern Ireland"
+  },
+  {
+    "code": "N09000003",
+    "name": "Belfast",
+    "country": "Northern Ireland"
+  },
+  {
+    "code": "N09000004",
+    "name": "Causeway Coast and Glens",
+    "country": "Northern Ireland"
+  },
+  {
+    "code": "N09000005",
+    "name": "Derry City and Strabane",
+    "country": "Northern Ireland"
+  },
+  {
+    "code": "N09000006",
+    "name": "Fermanagh and Omagh",
+    "country": "Northern Ireland"
+  },
+  {
+    "code": "N09000007",
+    "name": "Lisburn and Castlereagh",
+    "country": "Northern Ireland"
+  },
+  {
+    "code": "N09000008",
+    "name": "Mid and East Antrim",
+    "country": "Northern Ireland"
+  },
+  {
+    "code": "N09000009",
+    "name": "Mid Ulster",
+    "country": "Northern Ireland"
+  },
+  {
+    "code": "N09000010",
+    "name": "Newry, Mourne and Down",
+    "country": "Northern Ireland"
+  },
+  {
+    "code": "N09000011",
+    "name": "Ards and North Down",
+    "country": "Northern Ireland"
+  }
+]

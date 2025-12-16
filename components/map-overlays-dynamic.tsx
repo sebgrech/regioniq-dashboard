@@ -1,12 +1,19 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Source, Layer, useMap } from "@vis.gl/react-mapbox"
 import { createClient } from "@supabase/supabase-js"
 import bbox from "@turf/bbox"
-
-// Static ITL1 polygons from /public
-import rawItl1 from "@/public/ITL1_wgs84.geojson" assert { type: "json" }
+import { formatValue } from "@/lib/data-service"
+import { METRICS } from "@/lib/metrics.config"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { ArrowRight } from "lucide-react"
+import { SOURCE_ID } from "@/lib/map/region-layers"
+import { getCacheKey, getCached, getOrFetch } from "@/lib/cache/choropleth-cache"
+import type { ChoroplethStats } from "@/lib/map/choropleth-stats"
+import { buildMapboxColorRamp, getMapColorForValue, type MapType } from "@/lib/map-color-scale"
 
 // Supabase client (env must be set)
 const supabase = createClient(
@@ -14,15 +21,81 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+import type { RegionMetadata } from "@/components/region-search"
+
+type RegionLevel = "ITL1" | "ITL2" | "ITL3" | "LAD"
+type MapMode = "value" | "growth"
+
+type OutlineSpec = { level: RegionLevel; code: string }
+
+/** Calculate CAGR (Compound Annual Growth Rate) */
+function calculateCAGR(startValue: number, endValue: number, years: number): number {
+  if (startValue <= 0 || years === 0) return 0
+  return (Math.pow(endValue / startValue, 1 / years) - 1) * 100
+}
+
 interface MapOverlaysDynamicProps {
   show: boolean
   metric: string
   year: number
   scenario: string
-  onRegionSelect?: (regionSlug: string) => void
+  level?: RegionLevel
+  mapMode?: MapMode
+  growthPeriod?: number // Growth period in years (1=YoY, 2, 3, 5, 10, etc.)
+  selectedRegion?: RegionMetadata | null
+  /** Optional: fit the viewport to this region bbox (used for parent catchment views). */
+  focusRegion?: RegionMetadata | null
+  /** Optional: fade features not included in this code set (codes must match the active `level`'s geojson code property). */
+  maskRegionCodes?: string[]
+  /** Optional: draw an outline for a parent region boundary (e.g. ITL1 outline when viewing LADs). */
+  parentOutline?: OutlineSpec | null
+  hoverInfo?: {
+    x: number
+    y: number
+    name: string
+    value: number | null
+    code?: string
+    rank?: number | null
+    n?: number | null
+    percentile?: number | null
+    pinnedName?: string | null
+    deltaAbs?: number | null
+    deltaPct?: number | null
+    growthRate?: number | null // Growth rate for growth mode (YoY % or CAGR)
+  } | null
+  onChoroplethStats?: (stats: ChoroplethStats | null) => void
+  mapId: string
 }
 
-// ONS region_code -> ITL125CD (TL*)
+// GeoJSON file paths - Cloudflare R2 CDN (with fallback to local for development)
+const getGeoJsonPath = (level: RegionLevel): string => {
+  // Use CDN in production, local files in development (or if CDN fails)
+  const useCDN = process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_USE_CDN !== 'false'
+  
+  if (useCDN) {
+    return `https://pub-aad6b4b085f8487dbfe1151db5bb3751.r2.dev/boundaries/${level}.geojson`
+  }
+  
+  // Fallback to local files
+  return `/boundaries/${level}.geojson`
+}
+
+const GEO_PATHS: Record<RegionLevel, string> = {
+  ITL1: getGeoJsonPath('ITL1'),
+  ITL2: getGeoJsonPath('ITL2'),
+  ITL3: getGeoJsonPath('ITL3'),
+  LAD: getGeoJsonPath('LAD'),
+}
+
+// Property name mapping for each level
+const PROPERTY_MAP: Record<RegionLevel, { code: string; name: string }> = {
+  ITL1: { code: "ITL125CD", name: "ITL125NM" },
+  ITL2: { code: "ITL225CD", name: "ITL225NM" }, // Updated to 2025 codes
+  ITL3: { code: "ITL325CD", name: "ITL325NM" },
+  LAD: { code: "LAD24CD", name: "LAD24NM" },
+}
+
+// ONS region_code -> ITL125CD (TL*) - only for ITL1
 const REGION_TO_TL: Record<string, string> = {
   // England
   E12000001: "TLC", // NE
@@ -56,23 +129,68 @@ const TL_TO_UK: Record<string, string> = {
   TLN: "UKN", // Northern Ireland
 }
 
-/** Build a 5-stop linear color ramp */
-function buildColorRamp(min: number, max: number) {
-  if (!isFinite(min) || !isFinite(max) || min === max) {
-    return ["literal", "#9ca3af"] as const // fallback gray
+// UK slug -> ITL125CD (TL*)
+const UK_TO_TL: Record<string, string> = Object.entries(TL_TO_UK).reduce(
+  (acc, [tl, uk]) => {
+    acc[uk] = tl
+    return acc
+  },
+  {} as Record<string, string>
+)
+
+// ITL2 now uses 2025 boundaries (matching database codes directly)
+// No mapping needed - codes match 1:1
+
+// ITL3 old GeoJSON codes -> new database codes mapping
+// Some ITL3 regions had code changes between versions
+const ITL3_OLD_TO_NEW: Record<string, string> = {
+  "TLE32": "TLE36", // Sheffield (old code in GeoJSON -> new code in database)
+  // Add more mappings as needed when other regions are found to be grey
+}
+
+const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] }
+
+/**
+ * Determine map type based on mode and metric characteristics
+ * 
+ * Map types (semantic):
+ * - "level": Sequential blue scale for absolute values (Type A)
+ * - "growth": Diverging scale for growth/change (Type B) - only for metrics that can decline
+ * 
+ * Note: Always-positive growth metrics (GVA, GDHI) use "level" type (sequential blue)
+ * since they never have negative values, so diverging scale isn't needed.
+ */
+function getMapType(mapMode: MapMode, metricId: string): MapType {
+  if (mapMode === "value") {
+    return "level" // Absolute values → sequential blue
   }
-  const c = ["#f2f0f7", "#cbc9e2", "#9e9ac8", "#756bb1", "#54278f"]
-  const q1 = min + (max - min) * 0.25
-  const q2 = min + (max - min) * 0.5
-  const q3 = min + (max - min) * 0.75
-  return [
-    "interpolate", ["linear"], ["to-number", ["get", "value"]],
-    min, c[0],
-    q1,  c[1],
-    q2,  c[2],
-    q3,  c[3],
-    max, c[4],
-  ] as const
+  
+  // Growth mode: determine if metric can have negative values
+  const canDeclineMetrics = [
+    "population_total",
+    "population_16_64",
+    "emp_total_jobs",
+    "employment_rate_pct",
+    "unemployment_rate_pct",
+  ]
+  
+  if (canDeclineMetrics.includes(metricId)) {
+    return "growth" // Can decline → diverging scale (red-orange → grey → blue)
+  }
+  
+  // Always-positive growth metrics → sequential blue (same as level)
+  return "level"
+}
+
+function quantile(sorted: number[], p: number) {
+  if (sorted.length === 0) return NaN
+  const pp = Math.min(1, Math.max(0, p))
+  const idx = (sorted.length - 1) * pp
+  const lo = Math.floor(idx)
+  const hi = Math.ceil(idx)
+  if (lo === hi) return sorted[lo]
+  const w = idx - lo
+  return sorted[lo] * (1 - w) + sorted[hi] * w
 }
 
 export function MapOverlaysDynamic({
@@ -80,164 +198,1087 @@ export function MapOverlaysDynamic({
   metric,
   year,
   scenario,
-  onRegionSelect,
+  level = "ITL1",
+  mapMode = "value",
+  growthPeriod = 5,
+  selectedRegion,
+  focusRegion,
+  maskRegionCodes,
+  parentOutline,
+  hoverInfo,
+  onChoroplethStats,
+  mapId,
 }: MapOverlaysDynamicProps) {
-  const { current: map } = useMap("default")
-  const didFit = useRef(false)
+  const router = useRouter()
+  // Important: do NOT gate rendering of <Source>/<Layer> on a potentially-undefined map lookup.
+  // During style/layout churn, react-mapbox's registry can be temporarily empty for a given id,
+  // and toggling <Source> mount/unmount can cause Mapbox to throw during removeSource().
+  // We only use the Mapbox map for imperative camera actions (fitBounds).
+  const maps = (useMap as any)()
+  const mapRef = maps?.[mapId] ?? maps?.default ?? maps?.current
+  const mapbox = mapRef?.getMap?.() ?? mapRef
+  const didFitRef = useRef<Record<RegionLevel, boolean>>({
+    ITL1: false,
+    ITL2: false,
+    ITL3: false,
+    LAD: false,
+  })
 
-  const [metricRows, setMetricRows] = useState<Array<{ region_code: string; value: number | null }>>([])
-  const [hoverInfo, setHoverInfo] = useState<{ x: number; y: number; name: string; value: number | null } | null>(null)
+  const lastFocusKeyRef = useRef<string | null>(null)
 
-  // 1) Fetch Supabase slice
+  const maskSet = useMemo(() => {
+    if (!maskRegionCodes || maskRegionCodes.length === 0) return null
+    return new Set(maskRegionCodes)
+  }, [maskRegionCodes])
+
+  const [parentGeoData, setParentGeoData] = useState<GeoJSON.FeatureCollection | null>(null)
+
+  const [metricRows, setMetricRows] = useState<Array<{ 
+    region_code: string; 
+    value: number | null;
+    ci_lower?: number | null;
+    ci_upper?: number | null;
+    data_type?: string;
+  }>>([])
+  // Store past year data for growth rate calculation in growth mode
+  const [metricRowsPast, setMetricRowsPast] = useState<Array<{ 
+    region_code: string; 
+    value: number | null;
+  }>>([])
+  const [geoData, setGeoData] = useState<GeoJSON.FeatureCollection | null>(null)
+  const geoDataLevelRef = useRef<RegionLevel | null>(null)
+  // Cache GeoJSON per level (prevents refetch + prevents “wrong-level geoData” being processed).
+  const geoCacheRef = useRef<Partial<Record<RegionLevel, GeoJSON.FeatureCollection>>>({})
+  // Request guard to prevent out-of-order fetches from overwriting the current level’s geoData.
+  const geoReqIdRef = useRef(0)
+  // Keep last-good enriched data per level to avoid tearing down <Source> during fetch churn.
+  // This reduces the “renders fine but dead interactivity” class of bugs caused by source removal/re-add.
+  const enrichedCacheRef = useRef<Partial<Record<RegionLevel, GeoJSON.FeatureCollection>>>({})
+  
+  // Get metric info for formatting
+  const metricInfo = useMemo(() => {
+    return METRICS.find(m => m.id === metric)
+  }, [metric])
+
+  // Determine table name based on level
+  const tableName = level === "ITL1" ? "itl1_latest_all" :
+                    level === "ITL2" ? "itl2_latest_all" :
+                    level === "ITL3" ? "itl3_latest_all" :
+                    level === "LAD" ? "lad_latest_all" :
+                    "itl1_latest_all"
+
+  // Load GeoJSON for the active level.
+  // IMPORTANT: Must be race-safe. Rapid level switching can otherwise apply ITL1/ITL3/LAD geoData
+  // while `level === ITL2`, producing `codeValue: undefined` and breaking choropleth + interactivity.
   useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      const { data, error } = await supabase
-        .from("itl1_latest_all")
-        .select("region_code, value")
-        .eq("metric_id", metric)
-        .eq("period", year)
+    const cached = geoCacheRef.current[level]
+    if (cached) {
+      geoDataLevelRef.current = level
+      setGeoData(cached)
+      return
+    }
 
-      if (!cancelled) {
-        if (error) {
-          console.error("Supabase fetch error (overlay):", error.message)
-          setMetricRows([])
+    const reqId = ++geoReqIdRef.current
+    const ac = new AbortController()
+    // Clear geoData immediately to avoid enriching the previous level’s shapes under the new `level`.
+    geoDataLevelRef.current = null
+    setGeoData(null)
+
+    ;(async () => {
+      try {
+        const url = GEO_PATHS[level]
+        const response = await fetch(url, { signal: ac.signal })
+        
+        if (!response.ok) {
+          throw new Error(`Failed to load ${level} GeoJSON: ${response.status} ${response.statusText}`)
+        }
+        
+        const data = (await response.json()) as GeoJSON.FeatureCollection
+        if (geoReqIdRef.current !== reqId) return
+        geoCacheRef.current[level] = data
+        geoDataLevelRef.current = level
+        setGeoData(data)
+      } catch (error: any) {
+        if (error?.name === "AbortError") return
+        console.error(`Error loading ${level} GeoJSON from ${GEO_PATHS[level]}:`, error)
+        
+        // If CDN fails, try local fallback
+        if (GEO_PATHS[level].startsWith("http")) {
+          console.log(`Attempting fallback to local file for ${level}...`)
+          try {
+            const localUrl = `/boundaries/${level}.geojson`
+            const fallbackResponse = await fetch(localUrl, { signal: ac.signal })
+            if (!fallbackResponse.ok) throw new Error(`Fallback failed: ${fallbackResponse.status}`)
+            const data = (await fallbackResponse.json()) as GeoJSON.FeatureCollection
+            if (geoReqIdRef.current !== reqId) return
+            geoCacheRef.current[level] = data
+            geoDataLevelRef.current = level
+            setGeoData(data)
+              console.log(`Successfully loaded ${level} from local fallback`)
+          } catch (fallbackError: any) {
+            if (fallbackError?.name === "AbortError") return
+            console.error(`Fallback also failed for ${level}:`, fallbackError)
+            if (geoReqIdRef.current === reqId) {
+              geoDataLevelRef.current = null
+              setGeoData(null)
+            }
+          }
         } else {
-          setMetricRows(data ?? [])
+          if (geoReqIdRef.current === reqId) {
+            geoDataLevelRef.current = null
+          setGeoData(null)
+          }
         }
       }
     })()
-    return () => { cancelled = true }
-  }, [metric, year, scenario])
 
-  // 2) Index values by TL code
-  const valueIndex = useMemo(() => {
-    const idx = new Map<string, number>()
-    for (const row of metricRows) {
-      const tl = REGION_TO_TL[row.region_code]
-      if (tl && row.value != null && isFinite(row.value)) {
-        idx.set(tl, row.value)
+    return () => {
+      ac.abort()
+    }
+  }, [level])
+
+  // 1) Fetch Supabase slice with scenario-aware value selection
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const key = getCacheKey([level, metric, year, scenario])
+      const cached = getCached<typeof metricRows>(key)
+      if (cached) {
+        setMetricRows(cached)
+        return
+      }
+
+      console.log(`🗺️ [Choropleth] Fetching data for ${level}:`, { metric, year, scenario, tableName })
+      console.log(`🔍 [Choropleth] Query: metric_id="${metric}", period=${year}, table="${tableName}"`)
+        
+      try {
+        const processedRows = await getOrFetch<typeof metricRows>(key, async () => {
+        const { data, error } = await supabase
+        .from(tableName)
+        .select("region_code, value, ci_lower, ci_upper, data_type")
+        .eq("metric_id", metric)
+        .eq("period", year)
+
+        if (error) {
+            throw new Error(error.message)
+          }
+          
+          // Process rows to select correct value based on scenario
+          return (data ?? []).map((row) => {
+            let selectedValue: number | null = null
+            
+            // For historical data, always use value
+            if (row.data_type === "historical") {
+              selectedValue = row.value ?? null
+            } else {
+              // For forecast data, select based on scenario
+              switch (scenario) {
+                case "baseline":
+                  selectedValue = row.value ?? null
+                  break
+                case "downside":
+                  selectedValue = row.ci_lower ?? row.value ?? null
+                  break
+                case "upside":
+                  selectedValue = row.ci_upper ?? row.value ?? null
+                  break
+                default:
+                  selectedValue = row.value ?? null
+              }
+            }
+            
+            return {
+              region_code: row.region_code,
+              value: selectedValue,
+              ci_lower: row.ci_lower,
+              ci_upper: row.ci_upper,
+              data_type: row.data_type,
+            }
+          })
+        })
+
+        if (cancelled) return
+        console.log(`✅ [Choropleth] Rows: ${processedRows.length} (cache key: ${key})`)
+          setMetricRows(processedRows)
+      } catch (err: any) {
+        if (cancelled) return
+        console.error("❌ [Choropleth] Supabase fetch error:", err?.message ?? err)
+        setMetricRows([])
+      }
+    })()
+    return () => { cancelled = true }
+  }, [metric, year, scenario, tableName, level])
+
+  // 2) Fetch past year data (year - growthPeriod) for growth calculation in growth mode
+  useEffect(() => {
+    // Always fetch past data so it's ready when user switches to growth mode
+    let cancelled = false
+    const pastYear = year - growthPeriod
+    ;(async () => {
+      const key = getCacheKey([level, metric, pastYear, scenario, "past", growthPeriod])
+      const cached = getCached<typeof metricRowsPast>(key)
+      if (cached) {
+        setMetricRowsPast(cached)
+        return
+      }
+
+      console.log(`🗺️ [Choropleth] Fetching past data for ${level}:`, { metric, year: pastYear, period: growthPeriod, scenario, tableName })
+        
+      try {
+        const processedRows = await getOrFetch<typeof metricRowsPast>(key, async () => {
+          const { data, error } = await supabase
+            .from(tableName)
+            .select("region_code, value, ci_lower, ci_upper, data_type")
+            .eq("metric_id", metric)
+            .eq("period", pastYear)
+
+          if (error) {
+            throw new Error(error.message)
+          }
+          
+          // Process rows to select correct value based on scenario
+          return (data ?? []).map((row) => {
+            let selectedValue: number | null = null
+            
+            if (row.data_type === "historical") {
+              selectedValue = row.value ?? null
+            } else {
+              switch (scenario) {
+                case "baseline":
+                  selectedValue = row.value ?? null
+                  break
+                case "downside":
+                  selectedValue = row.ci_lower ?? row.value ?? null
+                  break
+                case "upside":
+                  selectedValue = row.ci_upper ?? row.value ?? null
+                  break
+                default:
+                  selectedValue = row.value ?? null
+              }
+            }
+            
+            return {
+              region_code: row.region_code,
+              value: selectedValue,
+            }
+          })
+        })
+
+        if (cancelled) return
+        console.log(`✅ [Choropleth] Past rows: ${processedRows.length} (cache key: ${key})`)
+        setMetricRowsPast(processedRows)
+      } catch (err: any) {
+        if (cancelled) return
+        console.error("❌ [Choropleth] Past data fetch error:", err?.message ?? err)
+        setMetricRowsPast([])
+      }
+    })()
+    return () => { cancelled = true }
+  }, [metric, year, scenario, tableName, level, growthPeriod])
+
+  // Warm GeoJSON caches in the background to make level switching instant after first load.
+  const didPrefetchGeoRef = useRef(false)
+  useEffect(() => {
+    if (didPrefetchGeoRef.current) return
+    didPrefetchGeoRef.current = true
+    if (!show) return
+
+    const levels: RegionLevel[] = ["ITL1", "ITL2", "ITL3", "LAD"]
+    const run = async () => {
+      for (const l of levels) {
+        if (geoCacheRef.current[l]) continue
+        try {
+          const res = await fetch(GEO_PATHS[l])
+          if (!res.ok) continue
+          const data = (await res.json()) as GeoJSON.FeatureCollection
+          geoCacheRef.current[l] = data
+        } catch {
+          // ignore
+        }
       }
     }
-    return idx
-  }, [metricRows])
 
-  // 3) Min/max for ramp
-  const [minVal, maxVal] = useMemo(() => {
-    let min = Infinity, max = -Infinity
-    for (const v of valueIndex.values()) {
-      if (v < min) min = v
-      if (v > max) max = v
+    // Prefer idle time; fallback to a short delay.
+    const ric = (globalThis as any).requestIdleCallback
+    if (typeof ric === "function") {
+      ric(() => run(), { timeout: 1500 })
+    } else {
+      setTimeout(() => run(), 250)
     }
-    if (min === Infinity || max === -Infinity) return [NaN, NaN]
-    return [min, max]
-  }, [valueIndex])
+  }, [show])
+
+  // Load GeoJSON for parent outline (if requested). Uses the same cache as the main choropleth.
+  useEffect(() => {
+    if (!show) return
+    if (!parentOutline) {
+      setParentGeoData(null)
+      return
+    }
+
+    const parentLevel = parentOutline.level
+    const cached = geoCacheRef.current[parentLevel]
+    if (cached) {
+      setParentGeoData(cached)
+      return
+    }
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(GEO_PATHS[parentLevel])
+        if (!res.ok) throw new Error(`Failed to load ${parentLevel} GeoJSON`)
+        const data = (await res.json()) as GeoJSON.FeatureCollection
+        if (cancelled) return
+        geoCacheRef.current[parentLevel] = data
+        setParentGeoData(data)
+      } catch {
+        // best-effort fallback to local
+        try {
+          const localUrl = `/boundaries/${parentLevel}.geojson`
+          const res = await fetch(localUrl)
+          if (!res.ok) return
+          const data = (await res.json()) as GeoJSON.FeatureCollection
+          if (cancelled) return
+          geoCacheRef.current[parentLevel] = data
+          setParentGeoData(data)
+        } catch {
+          if (!cancelled) setParentGeoData(null)
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [show, parentOutline])
+
+  // 2a) Index past values by region code (for growth rate calculation)
+  const pastValueIndex = useMemo(() => {
+    const idx = new Map<string, number>()
+    
+    for (const row of metricRowsPast) {
+      if (!row.region_code || row.value == null || !isFinite(row.value)) continue
+      
+      if (level === "ITL1") {
+        const tl = REGION_TO_TL[row.region_code]
+        if (tl) idx.set(tl, row.value)
+      } else {
+        idx.set(row.region_code, row.value)
+      }
+    }
+    
+    return idx
+  }, [metricRowsPast, level])
+
+  // 2b) Index current values OR growth rate values based on mapMode
+  const valueIndex = useMemo(() => {
+    const idx = new Map<string, number>()
+    let matchedCount = 0
+    let skippedCount = 0
+    
+    for (const row of metricRows) {
+      if (!row.region_code || row.value == null || !isFinite(row.value)) {
+        skippedCount++
+        continue
+      }
+      
+      // Resolve the key (TL code for ITL1, region_code otherwise)
+      let key: string | null = null
+      if (level === "ITL1") {
+        const tl = REGION_TO_TL[row.region_code]
+        if (tl) key = tl
+      } else {
+        key = row.region_code
+      }
+      
+      if (!key) {
+        skippedCount++
+        continue
+      }
+      
+      if (mapMode === "growth") {
+        // In growth mode, calculate growth rate (YoY = simple %, longer = CAGR)
+        const pastValue = pastValueIndex.get(key)
+        if (pastValue != null && pastValue > 0 && row.value != null) {
+          const growth = growthPeriod === 1
+            ? ((row.value - pastValue) / pastValue) * 100
+            : calculateCAGR(pastValue, row.value, growthPeriod)
+          idx.set(key, growth)
+          matchedCount++
+        } else {
+          skippedCount++
+        }
+      } else {
+        // In value mode, use absolute value
+        idx.set(key, row.value)
+        matchedCount++
+      }
+    }
+    
+    console.log(`🔑 [Choropleth] ${mapMode === "growth" ? `Growth Rate (${growthPeriod === 1 ? "YoY" : `${growthPeriod}yr`})` : "Value"} index created: ${matchedCount} matched, ${skippedCount} skipped (total: ${metricRows.length})`)
+    if (idx.size > 0) {
+      const sampleCodes = Array.from(idx.keys()).slice(0, 5)
+      const sampleValues = sampleCodes.map(c => ({ code: c, value: idx.get(c)?.toFixed(2) }))
+      console.log(`🔑 [Choropleth] Sample indexed:`, sampleValues)
+    }
+    
+    return idx
+  }, [metricRows, level, mapMode, pastValueIndex])
+
+  // 3) Outlier-robust scale for ramp (winsorize at p05–p95).
+  // This prevents a single extreme region (e.g. City of London) from making everything else look flat.
+  // For growth mode, use percentile-based scaling for always-positive metrics to show more variation.
+  const { minVal, maxVal, clampMin, clampMax, percentiles } = useMemo(() => {
+    const values = Array.from(valueIndex.values()).filter((v) => isFinite(v)).sort((a, b) => a - b)
+    if (values.length === 0) {
+      console.warn(`⚠️ [Choropleth] No valid values for color ramp`)
+      return { minVal: NaN, maxVal: NaN, clampMin: NaN, clampMax: NaN, percentiles: null }
+    }
+
+    const rawMin = values[0]
+    const rawMax = values[values.length - 1]
+    
+    if (mapMode === "growth") {
+      // For growth mode with always-positive metrics (GVA/GDHI), use percentile-based scaling
+      // This ensures better visual variation even when values are clustered in a narrow range
+      const mapType = getMapType(mapMode, metric)
+      const canDeclineMetrics = ["population_total", "population_16_64", "emp_total_jobs", "employment_rate_pct", "unemployment_rate_pct"]
+      const isAlwaysPositive = !canDeclineMetrics.includes(metric)
+      
+      if (isAlwaysPositive && mapType === "level") {
+        // AGGRESSIVE percentile-based scaling for maximum visual variation
+        // Use wider range (p1-p99) and more granular percentiles for finer color gradation
+        const p1 = quantile(values, 0.01)
+        const p5 = quantile(values, 0.05)
+        const p10 = quantile(values, 0.10)
+        const p15 = quantile(values, 0.15)
+        const p25 = quantile(values, 0.25)
+        const p35 = quantile(values, 0.35)
+        const p50 = quantile(values, 0.50)
+        const p65 = quantile(values, 0.65)
+        const p75 = quantile(values, 0.75)
+        const p85 = quantile(values, 0.85)
+        const p90 = quantile(values, 0.90)
+        const p95 = quantile(values, 0.95)
+        const p99 = quantile(values, 0.99)
+        
+        // Use very wide range (p1-p99) for maximum visual separation
+        // This aggressively stretches the color scale to show differences
+        const expandedMin = isFinite(p1) ? p1 : (isFinite(p5) ? p5 : rawMin)
+        const expandedMax = isFinite(p99) ? p99 : (isFinite(p95) ? p95 : rawMax)
+        
+        console.log(
+          `📈 [Choropleth] Growth range (always-positive, AGGRESSIVE): RAW=${rawMin.toFixed(2)}%–${rawMax.toFixed(2)}%, ` +
+          `Expanded=${expandedMin.toFixed(2)}%–${expandedMax.toFixed(2)}%, ` +
+          `Percentiles: p5=${p5.toFixed(2)}%, p15=${p15.toFixed(2)}%, p25=${p25.toFixed(2)}%, p35=${p35.toFixed(2)}%, p50=${p50.toFixed(2)}%, p65=${p65.toFixed(2)}%, p75=${p75.toFixed(2)}%, p85=${p85.toFixed(2)}%, p95=${p95.toFixed(2)}% (n=${values.length})`
+        )
+        
+        return { 
+          minVal: expandedMin, 
+          maxVal: expandedMax, 
+          clampMin: expandedMin, 
+          clampMax: expandedMax,
+          percentiles: { p5, p15, p25, p35, p50, p65, p75, p85, p95 }
+        }
+      } else {
+        // For diverging growth metrics, use RAW min/max (no winsorization)
+        console.log(
+          `📈 [Choropleth] Growth range (diverging): RAW=${rawMin.toFixed(2)}%–${rawMax.toFixed(2)}% (n=${values.length}, no winsorization)`
+        )
+        
+        return { minVal: rawMin, maxVal: rawMax, clampMin: rawMin, clampMax: rawMax, percentiles: null }
+      }
+    } else {
+      // For value mode, use standard winsorization (p05–p95)
+    const q05 = quantile(values, 0.05)
+    const q95 = quantile(values, 0.95)
+
+    const lo = isFinite(q05) ? q05 : rawMin
+    const hi = isFinite(q95) ? q95 : rawMax
+    const useLo = lo < hi ? lo : rawMin
+    const useHi = lo < hi ? hi : rawMax
+
+    console.log(
+      `📈 [Choropleth] Value range raw=${rawMin.toLocaleString()}–${rawMax.toLocaleString()} winsor(p05–p95)=${useLo.toLocaleString()}–${useHi.toLocaleString()} (n=${values.length})`
+    )
+
+    return { minVal: useLo, maxVal: useHi, clampMin: useLo, clampMax: useHi, percentiles: null }
+    }
+  }, [valueIndex, mapMode, metric])
 
   // 4) Enrich features with values
   const enriched = useMemo(() => {
-    const fc = rawItl1 as GeoJSON.FeatureCollection
-    const features = fc.features.map((f) => {
-      const code = (f.properties as any)?.ITL125CD as string | undefined
+    // Guard: never enrich with mismatched level data.
+    if (!geoData || geoDataLevelRef.current !== level) return null
+    
+    const propMap = PROPERTY_MAP[level]
+    
+    // Debug: Check property structure of first feature
+    if (geoData.features.length > 0) {
+      const firstFeature = geoData.features[0]
+      const allProps = Object.keys(firstFeature.properties as any || {})
+      console.log(`🔍 [Choropleth] GeoJSON property structure (first feature):`, {
+        expectedCodeProperty: propMap.code,
+        expectedNameProperty: propMap.name,
+        allProperties: allProps,
+        codeValue: (firstFeature.properties as any)?.[propMap.code],
+        nameValue: (firstFeature.properties as any)?.[propMap.name]
+      })
+    }
+    
+    let matchedFeatures = 0
+    let unmatchedFeatures = 0
+    
+    const features = geoData.features.map((f) => {
+      let code = (f.properties as any)?.[propMap.code] as string | undefined
+      
+      // For ITL3, map old GeoJSON codes to new database codes
+      if (level === "ITL3" && code && ITL3_OLD_TO_NEW[code]) {
+        const newCode = ITL3_OLD_TO_NEW[code]
+        console.log(`🔄 [Choropleth] Mapping ITL3 code ${code} -> ${newCode}`)
+        code = newCode
+      }
+      
       const v = code ? valueIndex.get(code) ?? null : null
+      
+      // Mark selected region
+      const isSelected = selectedRegion && code === selectedRegion.code
+      const isInParent = maskSet ? (code ? maskSet.has(code) : false) : true
+      
+      if (v !== null) {
+        matchedFeatures++
+      } else if (code) {
+        unmatchedFeatures++
+      }
+      
       return {
         ...f,
-        properties: { ...(f.properties as any), value: v },
+        properties: { 
+          ...(f.properties as any), 
+          value: v,
+          __selected: isSelected || false,
+          __inParent: isInParent,
+        },
       } as GeoJSON.Feature
     })
-    return { ...fc, features } as GeoJSON.FeatureCollection
-  }, [valueIndex])
+    
+    // Compare all GeoJSON codes with valueIndex keys
+    const allGeoJsonCodes = features.map(f => (f.properties as any)?.[propMap.code]).filter(Boolean)
+    const allValueIndexKeys = Array.from(valueIndex.keys())
+    const missingFromGeoJson = allValueIndexKeys.filter(k => !allGeoJsonCodes.includes(k))
+    const missingFromValueIndex = allGeoJsonCodes.filter(k => !allValueIndexKeys.includes(k))
+    
+    if (missingFromValueIndex.length > 0) {
+      console.log(`⚠️ [Choropleth] Codes in GeoJSON but NOT in valueIndex (${missingFromValueIndex.length}):`, missingFromValueIndex.slice(0, 15))
+    }
+    if (missingFromGeoJson.length > 0) {
+      console.log(`⚠️ [Choropleth] Codes in valueIndex but NOT in GeoJSON (${missingFromGeoJson.length}):`, missingFromGeoJson.slice(0, 15))
+    }
+    
+    console.log(`🎨 [Choropleth] Enriched ${geoData.features.length} features: ${matchedFeatures} with values, ${unmatchedFeatures} without data`)
+    
+    // Check for specific problematic regions in GeoJSON
+    const problemRegions = ['TLH5', 'TLK5', 'TLK6', 'TLL3', 'TLL4', 'TLL5', 'TLE56']
+    const problemFeatures = features.filter(f => {
+      const code = (f.properties as any)?.[propMap.code]
+      return code && problemRegions.includes(code)
+    })
+    
+    // Also check ALL features to see which ones don't have values
+    const allUnmatchedFeatures = features.filter(f => {
+      const code = (f.properties as any)?.[propMap.code]
+      const value = (f.properties as any)?.value
+      return code && value === null
+    })
+    
+    if (problemFeatures.length > 0) {
+      console.log(`🔍 [Choropleth] Problem regions in GeoJSON:`, problemFeatures.map(f => {
+        const code = (f.properties as any)?.[propMap.code]
+        const value = (f.properties as any)?.value
+        const name = (f.properties as any)?.[propMap.name]
+        const hasInValueIndex = code ? valueIndex.has(code) : false
+        const valueFromIndex = code ? valueIndex.get(code) : undefined
+        return { 
+          code, 
+          name, 
+          value, 
+          hasValue: value !== null,
+          hasInValueIndex,
+          valueFromIndex,
+          codeType: typeof code,
+          codeLength: code?.length
+        }
+      }))
+    }
+    
+    // Show all unmatched features to identify the pattern
+    if (allUnmatchedFeatures.length > 0) {
+      console.log(`⚠️ [Choropleth] All unmatched features (${allUnmatchedFeatures.length}):`, 
+        allUnmatchedFeatures.map(f => {
+          const code = (f.properties as any)?.[propMap.code]
+          const name = (f.properties as any)?.[propMap.name]
+          const hasInValueIndex = code ? valueIndex.has(code) : false
+          return { code, name, hasInValueIndex }
+        }).slice(0, 15) // Show first 15
+      )
+    }
+    
+    if (unmatchedFeatures > 0) {
+      // Show unmatched features for problem regions
+      const unmatchedProblemFeatures = features.filter(f => {
+        const code = (f.properties as any)?.[propMap.code]
+        const value = (f.properties as any)?.value
+        return code && problemRegions.includes(code) && value === null
+      })
+      
+      if (unmatchedProblemFeatures.length > 0) {
+        console.warn(`⚠️ [Choropleth] Unmatched problem regions:`, unmatchedProblemFeatures.map(f => {
+          const code = (f.properties as any)?.[propMap.code]
+          const name = (f.properties as any)?.[propMap.name]
+          const inValueIndex = valueIndex.has(code)
+          const similarKeys = Array.from(valueIndex.keys()).filter(k => {
+            // Check for similar codes (same prefix, different suffix)
+            const codePrefix = code?.slice(0, 3)
+            const keyPrefix = k.slice(0, 3)
+            return codePrefix === keyPrefix || code?.includes(k) || k.includes(code || '')
+          })
+          return { 
+            code, 
+            name, 
+            inValueIndex, 
+            expectedProperty: propMap.code,
+            actualPropertyValue: code,
+            similarKeysInIndex: similarKeys,
+            allValueIndexKeys: Array.from(valueIndex.keys())
+          }
+        }))
+      }
+      
+      if (matchedFeatures === 0) {
+        console.warn(`⚠️ [Choropleth] No features matched! Sample GeoJSON codes:`, 
+          features.slice(0, 10).map(f => (f.properties as any)?.[propMap.code]).filter(Boolean))
+        console.warn(`⚠️ [Choropleth] Sample valueIndex codes:`, Array.from(valueIndex.keys()).slice(0, 10))
+      }
+    }
+    
+    // Inject stable IDs into features (using code as ID)
+    const featuresWithIds = features.map((f) => {
+      const code = (f.properties as any)?.[propMap.code] as string | undefined
+      return {
+        ...f,
+        id: code, // Use code as stable, unique ID for Mapbox feature-state
+      } as GeoJSON.Feature
+    })
+    
+    return { ...geoData, features: featuresWithIds } as GeoJSON.FeatureCollection
+  }, [geoData, valueIndex, level, selectedRegion, maskSet])
 
-  // 5) Fit to UK once
+  // Rank/percentile stats (within current level) for “wow” tooltip comparisons.
+  // Keys are raw GeoJSON codes (same codes Mapbox hit-testing returns).
+  const choroplethStats = useMemo<ChoroplethStats | null>(() => {
+    if (!enriched) return null
+    const propMap = PROPERTY_MAP[level]
+    const entries: Array<{ code: string; value: number }> = []
+
+    for (const f of enriched.features) {
+      const code = (f.properties as any)?.[propMap.code] as string | undefined
+      const value = (f.properties as any)?.value as number | null | undefined
+      if (!code) continue
+      if (value == null || !isFinite(value)) continue
+      entries.push({ code, value })
+    }
+
+    const total = enriched.features.length
+    if (entries.length === 0) {
+      return { level, n: 0, total, median: null, rankByCode: {}, valueByCode: {} }
+    }
+
+    const valueByCode: Record<string, number> = {}
+    for (const e of entries) valueByCode[e.code] = e.value
+
+    // Rank: 1 = highest value
+    const desc = [...entries].sort((a, b) => b.value - a.value)
+    const rankByCode: Record<string, number> = {}
+    for (let i = 0; i < desc.length; i++) {
+      rankByCode[desc[i].code] = i + 1
+    }
+
+    const ascValues = [...entries].map((e) => e.value).sort((a, b) => a - b)
+    const median = isFinite(ascValues[0]) ? quantile(ascValues, 0.5) : null
+
+    return { level, n: entries.length, total, median, rankByCode, valueByCode }
+  }, [enriched, level])
+
   useEffect(() => {
-    if (!map || didFit.current) return
-    const b = bbox(rawItl1 as GeoJSON.FeatureCollection) as [number, number, number, number]
-    map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 40, duration: 750 })
-    didFit.current = true
-  }, [map])
+    onChoroplethStats?.(choroplethStats)
+  }, [choroplethStats, onChoroplethStats])
 
-  // 6) Hover + click
+  // Update cache when we have a good enriched dataset.
   useEffect(() => {
-    if (!map) return
+    if (enriched && geoDataLevelRef.current === level) enrichedCacheRef.current[level] = enriched
+  }, [enriched, level])
 
-    const handleMove = (e: mapboxgl.MapLayerMouseEvent) => {
-      const feature = e.features?.[0]
-      if (feature) {
-        setHoverInfo({
-          x: e.point.x,
-          y: e.point.y,
-          name: feature.properties?.ITL125NM,
-          value: feature.properties?.value ?? null,
-        })
+  // Reset fit bounds flag when level changes
+  useEffect(() => {
+    didFitRef.current[level] = false
+  }, [level])
+
+  // Track the last selected region to detect when switching between regions
+  const lastSelectedRegionRef = useRef<string | null>(null)
+  
+  // 5) Auto-zoom to selected region (priority) or fit bounds to all regions (initial load only)
+  useEffect(() => {
+    if (!mapbox || !enriched) return
+    
+    // If selectedRegion is provided and matches current level, ALWAYS center and zoom to it
+    if (selectedRegion && selectedRegion.level === level) {
+      const regionBbox = selectedRegion.bbox
+      
+      // Validate bbox exists and is in WGS84 range
+      if (regionBbox && Array.isArray(regionBbox) && regionBbox.length === 4 &&
+          regionBbox[0] >= -180 && regionBbox[0] <= 180 && regionBbox[1] >= -90 && regionBbox[1] <= 90 &&
+          regionBbox[2] >= -180 && regionBbox[2] <= 180 && regionBbox[3] >= -90 && regionBbox[3] <= 90) {
+        
+        // Check if this is a different region than the last one
+        const isNewRegion = lastSelectedRegionRef.current !== selectedRegion.code
+        const wasAlreadyFitted = didFitRef.current[level]
+        lastSelectedRegionRef.current = selectedRegion.code
+        
+        // If switching between regions at the same level, use smooth transition
+        // Otherwise, use standard fitBounds
+        const isRegionSwitch = isNewRegion && wasAlreadyFitted
+        
+        // ALWAYS center and zoom to the selected region
+        // fitBounds automatically centers the view on the bounding box
+        // This ensures the map re-centers every time a new region is clicked
+        mapbox.fitBounds(
+          [[regionBbox[0], regionBbox[1]], [regionBbox[2], regionBbox[3]]],
+          { 
+            padding: 40, 
+            duration: isRegionSwitch ? 600 : 800, // Faster transition when switching
+            pitch: 0, 
+            bearing: 0,
+            maxZoom: 15, // Allow zooming in for detailed regions
+            essential: true // Ensure this animation is not interrupted
+          }
+        )
+        didFitRef.current[level] = true // Mark as fitted so we don't fit to all regions
+        return
       } else {
-        setHoverInfo(null)
+        console.warn(`⚠️ [Map] Invalid bbox for region ${selectedRegion.code}:`, regionBbox)
       }
     }
 
-    const handleLeave = () => setHoverInfo(null)
-
-    const handleClick = (e: mapboxgl.MapLayerMouseEvent) => {
-      const feature = e.features?.[0]
-      if (feature) {
-        const tlCode = feature.properties?.ITL125CD
-        const ukSlug = tlCode ? TL_TO_UK[tlCode] ?? tlCode : null
-        if (ukSlug && onRegionSelect) onRegionSelect(ukSlug)
-
-        const b = bbox(feature) as [number, number, number, number]
-        map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 40, duration: 600 })
+    // If a focusRegion is provided (e.g. parent catchment) and selectedRegion isn't driving the camera,
+    // fit to the focus bbox (once per focus key).
+    if (focusRegion?.bbox) {
+      const focusKey = `${level}:${focusRegion.code}`
+      if (lastFocusKeyRef.current !== focusKey) {
+        const b = focusRegion.bbox
+        if (
+          Array.isArray(b) &&
+          b.length === 4 &&
+          b[0] >= -180 &&
+          b[0] <= 180 &&
+          b[1] >= -90 &&
+          b[1] <= 90 &&
+          b[2] >= -180 &&
+          b[2] <= 180 &&
+          b[3] >= -90 &&
+          b[3] <= 90
+        ) {
+          mapbox.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 40, duration: 750 })
+          lastFocusKeyRef.current = focusKey
+          didFitRef.current[level] = true
+          return
+        }
       }
     }
-
-    map.on("mousemove", "itl1-fill", handleMove)
-    map.on("mouseleave", "itl1-fill", handleLeave)
-    map.on("click", "itl1-fill", handleClick)
-
-    map.on("mouseenter", "itl1-fill", () => { map.getCanvas().style.cursor = "pointer" })
-    map.on("mouseleave", "itl1-fill", () => { map.getCanvas().style.cursor = "" })
-
-    return () => {
-      map.off("mousemove", "itl1-fill", handleMove)
-      map.off("mouseleave", "itl1-fill", handleLeave)
-      map.off("click", "itl1-fill", handleClick)
+    
+    // Otherwise, fit to all regions (only once per level on initial load)
+    // Don't refit if user has already interacted with the map (zoomed/panned) or if we've already fitted to a region
+    if (didFitRef.current[level]) return
+    
+    const b = bbox(enriched) as [number, number, number, number]
+    // Validate bbox coordinates are in WGS84 range
+    if (b[0] >= -180 && b[0] <= 180 && b[1] >= -90 && b[1] <= 90 &&
+        b[2] >= -180 && b[2] <= 180 && b[3] >= -90 && b[3] <= 90) {
+      mapbox.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 40, duration: 750 })
+      didFitRef.current[level] = true
+    } else {
+      // Fallback to default UK bounds if coordinates are invalid
+      mapbox.fitBounds([[-8, 49.5], [2, 61]], { padding: 40, duration: 750 })
+      didFitRef.current[level] = true
     }
-  }, [map, onRegionSelect])
+  }, [mapbox, enriched, level, selectedRegion, focusRegion])
 
-  if (!map || !show) return null
+  // Interactivity (hover/click/tooltip) is handled at the <Map /> level via `interactiveLayerIds`
+  // in `components/map-scaffold.tsx`. This avoids react-mapbox interactivity gating bugs when
+  // switching between ITL1/ITL2/ITL3/LAD.
 
-  const colorRampExpr = useMemo(() => buildColorRamp(minVal, maxVal), [minVal, maxVal])
+  // All hooks must be called before any conditional returns
+  // Use canonical map color system - semantic separation from UI and chart colors
+  const colorRampExpr = useMemo(() => {
+    const mapType = getMapType(mapMode, metric)
+    const midpoint = mapType === "growth" ? 0 : undefined
+    
+    // Apply winsorization/clamping if provided
+    const effectiveMin = isFinite(clampMin as any) ? clampMin as number : minVal
+    const effectiveMax = isFinite(clampMax as any) ? clampMax as number : maxVal
+    
+    // Pass percentiles for always-positive growth metrics to improve proportionality
+    const expr = buildMapboxColorRamp(mapType, [effectiveMin, effectiveMax], midpoint, percentiles)
+    console.log(`🎨 [Choropleth] Map color ramp built:`, { 
+      mapType, 
+      minVal: effectiveMin, 
+      maxVal: effectiveMax, 
+      metric,
+      midpoint,
+      usesPercentiles: percentiles !== null
+    })
+    return expr
+  }, [minVal, maxVal, clampMin, clampMax, mapMode, metric, percentiles])
+  // Use stable source ID - Mapbox doesn't allow changing source ID after mount
+  const sourceId = SOURCE_ID
+  const fillLayerId = `${level.toLowerCase()}-fill`
+  const lineLayerId = `${level.toLowerCase()}-line`
+
+  // Note: We don't manually remove layers - React's Source/Layer components handle lifecycle
+  // Removing layers manually causes conflicts with Source component cleanup
+
+  // Note: Source component handles data updates automatically via data={enriched} prop
+  // No need to manually call source.setData() - this causes conflicts with React component lifecycle
+
+  // Conditional rendering (not early return) after all hooks
+  if (!show) return null
+
+  // Always render <Source> even while data is loading; use cached data or an empty FC.
+  const dataForRender = enriched ?? enrichedCacheRef.current[level] ?? EMPTY_FC
+
+  const parentOutlineFilterCode = useMemo(() => {
+    if (!parentOutline) return null
+    if (parentOutline.level === "ITL1") {
+      return UK_TO_TL[parentOutline.code] ?? null
+    }
+    return parentOutline.code
+  }, [parentOutline])
 
   return (
     <>
-      <Source id="itl1-dynamic" type="geojson" data={enriched}>
+      <Source id={sourceId} type="geojson" data={dataForRender}>
         <Layer
-          id="itl1-fill"
+          key={fillLayerId}
+          id={fillLayerId}
           type="fill"
           paint={{
             "fill-color": [
               "case",
-              ["==", ["get", "value"], null], "#94a3b8",
-              colorRampExpr as any,
+              // Phase 5: Feature-state hover highlighting (GPU-side, instant)
+              ["boolean", ["feature-state", "hover"], false],
+              "#FFD700", // Highlight color on hover
+              [
+                "case",
+                ["==", ["get", "value"], null], "#94a3b8",
+                colorRampExpr as any,
+              ],
             ],
-            "fill-opacity": 0.72,
+            "fill-opacity": maskSet
+              ? ([
+                  "case",
+                  ["==", ["get", "__inParent"], true],
+                  0.72,
+                  0.08,
+                ] as any)
+              : 0.72,
           }}
         />
         <Layer
-          id="itl1-outline"
+          key={lineLayerId}
+          id={lineLayerId}
           type="line"
           paint={{
             "line-color": "#111",
-            "line-width": 1.25,
+            "line-width": maskSet
+              ? ([
+                  "case",
+                  ["==", ["get", "__inParent"], true],
+                  1.25,
+                  0.5,
+                ] as any)
+              : 1.25,
+            "line-opacity": maskSet
+              ? ([
+                  "case",
+                  ["==", ["get", "__inParent"], true],
+                  1,
+                  0.35,
+                ] as any)
+              : 1,
+          }}
+        />
+        {/* Highlight layer for selected region */}
+        <Layer
+          key={`${level}-highlight`}
+          id={`${level.toLowerCase()}-highlight`}
+          type="line"
+          paint={{
+            "line-color": "#ff0066",
+            "line-width": [
+              "case",
+              ["==", ["get", "__selected"], true],
+              3,
+              0
+            ],
+            "line-opacity": 0.8,
           }}
         />
       </Source>
 
-      {/* Hover tooltip */}
+      {/* Parent boundary outline (e.g. ITL1 outline while viewing LADs) */}
+      {parentOutline && parentGeoData && parentOutlineFilterCode && (
+        <Source
+          id={`${SOURCE_ID}-parent-${mapId}-${parentOutline.level}`}
+          type="geojson"
+          data={parentGeoData}
+        >
+          <Layer
+            id={`${mapId}-${parentOutline.level.toLowerCase()}-parent-outline`}
+            type="line"
+            filter={[
+              "==",
+              ["get", PROPERTY_MAP[parentOutline.level].code],
+              parentOutlineFilterCode,
+            ] as any}
+            paint={{
+              "line-color": "#2563eb",
+              "line-width": 3,
+              "line-opacity": 0.85,
+            }}
+          />
+        </Source>
+      )}
+
+      {/* Hover tooltip - Recharts style (rendered via React state, updated via requestAnimationFrame) */}
       {hoverInfo && (
         <div
-          className="absolute bg-card/95 text-xs p-2 rounded border shadow"
-          style={{ left: hoverInfo.x + 10, top: hoverInfo.y + 10 }}
+          className="font-sans bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 min-w-[200px] z-50 pointer-events-auto"
+          style={{ 
+            position: "absolute",
+            left: hoverInfo.x + 10, 
+            top: hoverInfo.y + 10,
+            transform: "translate(0, -50%)", // Center vertically on cursor
+          }}
         >
-          <div className="font-medium">{hoverInfo.name}</div>
-          <div>{hoverInfo.value !== null ? hoverInfo.value.toLocaleString() : "No data"}</div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="font-medium text-gray-900 dark:text-gray-100">
+              {hoverInfo.name}
+            </span>
+            {hoverInfo.code && (
+              <Badge variant="secondary" className="text-xs">
+                {hoverInfo.code}
+              </Badge>
+            )}
+            {mapMode === "growth" && (
+              <Badge variant="outline" className="text-xs">
+                {growthPeriod === 1 
+                  ? "YoY"
+                  : `${year - growthPeriod}–${year}`}
+              </Badge>
+            )}
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                {(() => {
+                  // Calculate color from value using the appropriate ramp
+                  let indicatorColor = "#94a3b8" // Gray for no data
+                  if (
+                    hoverInfo.value !== null &&
+                    isFinite(minVal) &&
+                    isFinite(maxVal)
+                  ) {
+                    // Use canonical map color system for tooltip indicator
+                    const mapType = getMapType(mapMode, metric)
+                    const midpoint = mapType === "growth" ? 0 : undefined
+                    indicatorColor = getMapColorForValue({
+                      mapType,
+                      value: hoverInfo.value,
+                      domain: [minVal, maxVal],
+                      midpoint,
+                    })
+                  }
+                  return (
+                    <div 
+                      className="w-3 h-3 rounded-full" 
+                      style={{ backgroundColor: indicatorColor }} 
+                    />
+                  )
+                })()}
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  {mapMode === "growth" 
+                    ? `${metricInfo?.title || metric} Growth Rate${growthPeriod === 1 ? " (YoY)" : ` (${growthPeriod}yr)`}`
+                    : metricInfo?.title || metric}
+                </span>
+              </div>
+              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                {hoverInfo.value !== null 
+                  ? mapMode === "growth"
+                    ? `${hoverInfo.value >= 0 ? "+" : ""}${hoverInfo.value.toFixed(1)}%`
+                    : formatValue(
+                      hoverInfo.value, 
+                      metricInfo?.unit || "", 
+                      metricInfo?.decimals || 0
+                    )
+                  : `No data for ${year}`}
+              </span>
+            </div>
+            {(hoverInfo.rank != null && hoverInfo.n != null && hoverInfo.n > 0) ? (
+              <div className="text-xs text-gray-600 dark:text-gray-300 flex items-center justify-between">
+                <span>{mapMode === "growth" ? "Growth Rank" : "Rank"}</span>
+                <span className="font-medium">
+                  {hoverInfo.rank}/{hoverInfo.n}
+                  {hoverInfo.percentile != null ? ` • ${Math.round(hoverInfo.percentile)}th pct` : ""}
+                </span>
+              </div>
+            ) : null}
+            {(hoverInfo.pinnedName && (hoverInfo.deltaAbs != null || hoverInfo.deltaPct != null)) ? (
+              <div className="text-xs text-gray-600 dark:text-gray-300 flex items-center justify-between">
+                <span>Δ vs {hoverInfo.pinnedName}</span>
+                <span className="font-medium">
+                  {hoverInfo.deltaAbs != null
+                    ? mapMode === "growth"
+                      ? `${hoverInfo.deltaAbs >= 0 ? "+" : ""}${hoverInfo.deltaAbs.toFixed(1)}pp`
+                      : `${hoverInfo.deltaAbs >= 0 ? "+" : ""}${formatValue(
+                        hoverInfo.deltaAbs,
+                        metricInfo?.unit || "",
+                        metricInfo?.decimals || 0
+                      )}`
+                    : "—"}
+                  {hoverInfo.deltaPct != null && mapMode !== "growth"
+                    ? ` (${hoverInfo.deltaPct >= 0 ? "+" : ""}${hoverInfo.deltaPct.toFixed(1)}%)`
+                    : ""}
+                </span>
+              </div>
+            ) : null}
+          </div>
+          {/* Navigation button to metric detail page */}
+          {hoverInfo.code && (
+            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  router.push(`/metric/${metric}?region=${hoverInfo.code}&year=${year}&scenario=${scenario}`)
+                }}
+              >
+                View Details
+                <ArrowRight className="h-3 w-3 ml-1.5" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </>

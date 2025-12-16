@@ -2,8 +2,9 @@
 
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
+import { useTheme } from "next-themes"
 import Link from "next/link"
-import { ArrowLeft, Loader2, X } from "lucide-react"
+import { ArrowLeft, Loader2, X, ZoomIn, ZoomOut, RotateCcw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,11 +12,14 @@ import { Badge } from "@/components/ui/badge"
 import { RegionPicker } from "@/components/region-picker"
 import { DataTable } from "@/components/data-table"
 import { ExportMenu } from "@/components/export-menu"
+import { ExportableChartCard } from "@/components/exportable-chart-card"
+import { dataTypeLabel, scenarioLabel, sourceLabel } from "@/lib/export/canonical"
 import { ErrorBoundaryWrapper } from "@/components/error-boundary"
+import { CompareCopilot, type CompareSuggestedAction } from "@/components/compare-copilot"
 
 import { METRICS, REGIONS, type Scenario } from "@/lib/metrics.config"
 import { fetchSeries, type DataPoint } from "@/lib/data-service"
-import { getSearchParam, updateSearchParams } from "@/lib/utils"
+import { getSearchParam, getSearchParamNumber, updateSearchParams } from "@/lib/utils"
 import { withDataToast } from "@/lib/with-toast"
 
 // Inline ChartTimeseriesCompare component - keeping it in the page to avoid import issues
@@ -29,11 +33,24 @@ import {
   ResponsiveContainer,
   ReferenceLine,
   Legend,
+  Brush,
 } from "recharts"
 import { formatValue } from "@/lib/data-service"
 import { YEARS } from "@/lib/metrics.config"
 
 const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, isLoading, className }: any) => {
+  const { theme } = useTheme()
+  const isDarkMode = theme === "dark"
+  const gridStroke = isDarkMode ? "#333333" : "#E5E7EB"
+  
+  // Y-axis domain padding constants
+  const PAD = 0.15 // 15% extra above max to prevent top tick overlap
+  const PAD_BOTTOM = 0.05 // 5% extra below min
+  
+  // Zoom state
+  const [xDomain, setXDomain] = useState<[number, number] | null>(null)
+  const [yDomain, setYDomain] = useState<[number, number] | null>(null)
+  
   // Palette
   const colors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"]
 
@@ -97,14 +114,14 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
 
     // To connect the lines without gap, duplicate the last historical value into the forecast key for each region
     if (lastHistoricalYear != null) {
-      regions.forEach((_, idx: number) => {
+      for (let idx = 0; idx < regions.length; idx++) {
         const kHist = `region${idx}_hist`
         const kFcst = `region${idx}_fcst`
         const row = yearMap.get(lastHistoricalYear)
         if (row && row[kHist] != null && row[kFcst] == null) {
           row[kFcst] = row[kHist]
         }
-      })
+      }
     }
 
     // Tag the row type by the year threshold so tooltip stays consistent across regions
@@ -114,6 +131,113 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
 
     return Array.from(yearMap.values()).sort((a, b) => a.year - b.year)
   }, [regions, lastHistoricalYear])
+
+  // Calculate data ranges for zoom
+  const xRange = useMemo(() => {
+    if (!chartData.length) return [0, 0]
+    const years = chartData.map(d => d.year)
+    return [Math.min(...years), Math.max(...years)]
+  }, [chartData])
+
+  const yRange = useMemo(() => {
+    let min = Number.POSITIVE_INFINITY
+    let max = Number.NEGATIVE_INFINITY
+    for (const row of chartData as any[]) {
+      for (const [k, v] of Object.entries(row)) {
+        if (k === "year" || k === "type") continue
+        if (typeof v !== "number" || !Number.isFinite(v)) continue
+        if (v < min) min = v
+        if (v > max) max = v
+      }
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return [0, 0] as [number, number]
+    // Avoid negative lower bounds when the whole series is non-negative
+    if (min >= 0) min = Math.max(0, min)
+    return [min, max] as [number, number]
+  }, [chartData])
+  
+  // Zoom handlers
+  const handleZoomIn = useCallback(() => {
+    if (!xDomain) {
+      const range = xRange[1] - xRange[0]
+      const center = (xRange[0] + xRange[1]) / 2
+      setXDomain([center - range * 0.25, center + range * 0.25])
+    } else {
+      const range = xDomain[1] - xDomain[0]
+      const center = (xDomain[0] + xDomain[1]) / 2
+      const newRange = range * 0.5
+      setXDomain([center - newRange / 2, center + newRange / 2])
+    }
+  }, [xDomain, xRange])
+  
+  const handleZoomOut = useCallback(() => {
+    if (!xDomain) return
+    const range = xDomain[1] - xDomain[0]
+    const center = (xDomain[0] + xDomain[1]) / 2
+    const newRange = Math.min(range * 2, xRange[1] - xRange[0])
+    const newDomain: [number, number] = [
+      Math.max(xRange[0], center - newRange / 2),
+      Math.min(xRange[1], center + newRange / 2),
+    ]
+    if (newDomain[1] - newDomain[0] >= xRange[1] - xRange[0]) {
+      setXDomain(null)
+    } else {
+      setXDomain(newDomain)
+    }
+  }, [xDomain, xRange])
+  
+  const handleResetZoom = useCallback(() => {
+    setXDomain(null)
+    setYDomain(null)
+  }, [])
+
+  const handleYZoomIn = useCallback(() => {
+    const fullRange = yRange[1] - yRange[0]
+    if (fullRange <= 0) return
+
+    if (!yDomain) {
+      const center = (yRange[0] + yRange[1]) / 2
+      setYDomain([center - fullRange * 0.25, center + fullRange * 0.25])
+    } else {
+      const range = yDomain[1] - yDomain[0]
+      const center = (yDomain[0] + yDomain[1]) / 2
+      const newRange = range * 0.5
+      setYDomain([center - newRange / 2, center + newRange / 2])
+    }
+  }, [yDomain, yRange])
+
+  const handleYZoomOut = useCallback(() => {
+    if (!yDomain) return
+    const fullRange = yRange[1] - yRange[0]
+    if (fullRange <= 0) return
+
+    const range = yDomain[1] - yDomain[0]
+    const center = (yDomain[0] + yDomain[1]) / 2
+    const newRange = Math.min(range * 2, fullRange)
+    const newDomain: [number, number] = [
+      Math.max(yRange[0], center - newRange / 2),
+      Math.min(yRange[1], center + newRange / 2),
+    ]
+    if (newDomain[1] - newDomain[0] >= fullRange) {
+      setYDomain(null)
+    } else {
+      setYDomain(newDomain)
+    }
+  }, [yDomain, yRange])
+
+  const handleResetYZoom = useCallback(() => {
+    setYDomain(null)
+  }, [])
+  
+  const handleBrushChange = useCallback((data: { startIndex?: number; endIndex?: number }) => {
+    if (data.startIndex != null && data.endIndex != null) {
+      const startYear = chartData[data.startIndex]?.year
+      const endYear = chartData[data.endIndex]?.year
+      if (startYear != null && endYear != null) {
+        setXDomain([startYear, endYear])
+      }
+    }
+  }, [chartData])
 
   // 3) Custom tooltip (deduces region name from key "region{idx}_hist|_fcst")
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -204,19 +328,43 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
       </CardHeader>
 
       <CardContent>
-        <div className="h-[400px] w-full">
+        <div className="h-[640px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
+            <LineChart data={chartData} margin={{ top: 50, right: 30, left: 20, bottom: 5 }}>
+              <CartesianGrid
+                stroke={gridStroke}
+                strokeOpacity={0.4}
+                strokeDasharray="3 3"
+              />
               <XAxis
                 dataKey="year"
                 type="number"
-                domain={["dataMin", "dataMax"]}
+                domain={xDomain ? [xDomain[0], xDomain[1]] : ["dataMin", "dataMax"]}
+                allowDataOverflow={false}
                 tick={{ fontSize: 12, fill: "#6b7280" }}
                 tickLine={{ stroke: "#e5e7eb" }}
                 axisLine={{ stroke: "#e5e7eb" }}
               />
               <YAxis
+                domain={
+                  yDomain
+                    ? [
+                        (minValue: number) => {
+                          const isNonNegative = yRange[0] >= 0
+                          const hardMin = isNonNegative ? 0 : Number.NEGATIVE_INFINITY
+                          return Math.max(hardMin, yDomain[0], minValue)
+                        },
+                        (maxValue: number) => Math.min(yDomain[1], maxValue),
+                      ]
+                    : [
+                        (min) => {
+                          const padded = min * (1 - PAD_BOTTOM)
+                          return min >= 0 ? Math.max(0, padded) : padded // ensure non-negative values stay non-negative
+                        },
+                        (max) => max * (1 + PAD), // adds top padding
+                      ]
+                }
+                allowDataOverflow={false}
                 tick={{ fontSize: 12, fill: "#6b7280" }}
                 tickLine={{ stroke: "#e5e7eb" }}
                 axisLine={{ stroke: "#e5e7eb" }}
@@ -236,7 +384,7 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
                     return (
                       <text 
                         x={x + 5} 
-                        y={30} 
+                        y={40} 
                         fill="#6b7280" 
                         fontSize={12}
                         textAnchor="start"
@@ -301,8 +449,62 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
                   }
                 }}
               />
+              
+              {/* Brush for zooming */}
+              <Brush
+                dataKey="year"
+                height={30}
+                stroke={isDarkMode ? "#4b5563" : "#9ca3af"}
+                fill={isDarkMode ? "#1f2937" : "#f3f4f6"}
+                onChange={handleBrushChange}
+                startIndex={xDomain ? chartData.findIndex(d => d.year >= xDomain[0]) : undefined}
+                endIndex={xDomain ? chartData.findIndex(d => d.year >= xDomain[1]) : undefined}
+              />
             </LineChart>
           </ResponsiveContainer>
+        </div>
+
+        {/* Zoom Controls */}
+        <div className="mt-4 pt-4 border-t flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">X</span>
+              <Button variant="outline" size="sm" onClick={handleZoomIn} className="h-8">
+                <ZoomIn className="h-4 w-4 mr-1" />
+                Zoom In
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleZoomOut} className="h-8" disabled={!xDomain}>
+                <ZoomOut className="h-4 w-4 mr-1" />
+                Zoom Out
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleResetZoom} className="h-8" disabled={!xDomain}>
+                <RotateCcw className="h-4 w-4 mr-1" />
+                Reset
+              </Button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Y</span>
+              <Button variant="outline" size="sm" onClick={handleYZoomIn} className="h-8" disabled={yRange[1] - yRange[0] <= 0}>
+                <ZoomIn className="h-4 w-4 mr-1" />
+                Zoom In
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleYZoomOut} className="h-8" disabled={!yDomain}>
+                <ZoomOut className="h-4 w-4 mr-1" />
+                Zoom Out
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleResetYZoom} className="h-8" disabled={!yDomain}>
+                <RotateCcw className="h-4 w-4 mr-1" />
+                Reset
+              </Button>
+            </div>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {xDomain ? `X: ${Math.round(xDomain[0])}-${Math.round(xDomain[1])}` : "X: all"}{" "}
+            •{" "}
+            {yDomain ? `Y: ${formatValue(yDomain[0], unit)}–${formatValue(yDomain[1], unit)}` : "Y: all"}{" "}
+            • Drag brush to zoom X
+          </div>
         </div>
 
         <div className="flex items-center justify-between mt-4 pt-4 border-t text-sm text-muted-foreground">
@@ -337,25 +539,53 @@ interface RegionChip {
   pinned?: boolean
 }
 
+const MAX_COMPARE_REGIONS = 12
+
 function CompareContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
 
   // -------- URL state --------
-  const regionsParam = getSearchParam(searchParams, "regions", "UKI")
-  const metric = getSearchParam(searchParams, "metric", "population")
+  // Support both:
+  // - canonical: ?regions=A,B,C
+  // - legacy/dashboard links: ?region=A
+  const regionsParam = getSearchParam(searchParams, "regions", "")
+  const legacyRegion = getSearchParam(searchParams, "region", "")
+  const defaultMetric = METRICS.find((m) => m.id === "population_total")?.id ?? METRICS[0]?.id ?? "population_total"
+  const metric = getSearchParam(searchParams, "metric", defaultMetric)
   const scenario = getSearchParam(searchParams, "scenario", "baseline") as Scenario
+  const year = getSearchParamNumber(searchParams, "year", 2024)
+
+  // Normalize URL on entry so the page is never “blank”:
+  // If coming from dashboard with ?region=UKI, rewrite to ?regions=UKI and ensure a valid metric id.
+  useEffect(() => {
+    const hasRegions = Boolean(regionsParam.split(",").filter(Boolean).length)
+    const validMetric = Boolean(METRICS.find((m) => m.id === metric))
+    if (hasRegions && validMetric) return
+
+    const updates: Record<string, string | null> = {}
+    if (!hasRegions && legacyRegion) updates.regions = legacyRegion
+    if (!validMetric) updates.metric = defaultMetric
+    if (Object.keys(updates).length === 0) return
+
+    const newParams = updateSearchParams(searchParams, updates)
+    router.replace(`/compare?${newParams}`, { scroll: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultMetric, legacyRegion, metric, regionsParam])
 
   const selectedRegions = useMemo(
-    () => regionsParam.split(",").filter(Boolean),
-    [regionsParam],
+    () => {
+      const fromRegions = regionsParam.split(",").filter(Boolean)
+      if (fromRegions.length) return fromRegions
+      if (legacyRegion) return [legacyRegion]
+      return []
+    },
+    [legacyRegion, regionsParam],
   )
 
-  const pinnedRegion = "UKI" // always show London
-
-  // All regions to display (pinned first, then unique selection)
+  // All regions to display (no pinned region - all are selectable)
   const allDisplayRegions = useMemo(
-    () => Array.from(new Set([pinnedRegion, ...selectedRegions])),
+    () => Array.from(new Set(selectedRegions)),
     [selectedRegions],
   )
 
@@ -430,9 +660,7 @@ function CompareContent() {
   const handleRegionsChange = useCallback(
     (regions: string | string[]) => {
       const regionsArray = Array.isArray(regions) ? regions : [regions]
-      // do not include pinned in the URL
-      const filtered = regionsArray.filter((r) => r !== pinnedRegion)
-      updateURL({ regions: filtered.join(",") })
+      updateURL({ regions: regionsArray.join(",") })
     },
     [updateURL],
   )
@@ -444,7 +672,7 @@ function CompareContent() {
 
   const addRegion = useCallback(
     (regionCode: string) => {
-      if (!selectedRegions.includes(regionCode) && regionCode !== pinnedRegion && selectedRegions.length < 5) {
+      if (!selectedRegions.includes(regionCode) && selectedRegions.length < MAX_COMPARE_REGIONS) {
         handleRegionsChange([...selectedRegions, regionCode])
       }
     },
@@ -453,10 +681,8 @@ function CompareContent() {
 
   const removeRegion = useCallback(
     (regionToRemove: string) => {
-      if (regionToRemove !== pinnedRegion) {
         const newRegions = selectedRegions.filter((r) => r !== regionToRemove)
         handleRegionsChange(newRegions)
-      }
     },
     [handleRegionsChange, selectedRegions],
   )
@@ -465,20 +691,39 @@ function CompareContent() {
   const selectedMetric = useMemo(() => METRICS.find((m) => m.id === metric), [metric])
 
   const regionChips: RegionChip[] = useMemo(
-    () => [
-      {
-        code: pinnedRegion,
-        name: REGIONS.find((r) => r.code === pinnedRegion)?.name || pinnedRegion,
-        pinned: true,
-      },
-      ...selectedRegions
-        .filter((code) => code !== pinnedRegion)
-        .map((code) => ({
+    () =>
+      selectedRegions.map((code) => ({
           code,
           name: REGIONS.find((r) => r.code === code)?.name || code,
         })),
-    ],
     [selectedRegions],
+  )
+
+  const selectedRegionsMeta = useMemo(
+    () =>
+      selectedRegions.map((code) => {
+        const r = REGIONS.find((x) => x.code === code)
+        return { code, name: r?.name || code, level: r?.level }
+      }),
+    [selectedRegions],
+  )
+
+  const applyCopilotAction = useCallback(
+    (action: CompareSuggestedAction) => {
+      const uniq = (arr: string[]) => Array.from(new Set(arr))
+      let next: string[] = selectedRegions
+
+      if (action.type === "addRegions") {
+        next = uniq([...selectedRegions, ...action.regionCodes]).slice(0, MAX_COMPARE_REGIONS)
+      } else if (action.type === "removeRegions") {
+        next = selectedRegions.filter((c) => !action.regionCodes.includes(c))
+      } else if (action.type === "replaceRegions") {
+        next = uniq(action.regionCodes).slice(0, MAX_COMPARE_REGIONS)
+      }
+
+      handleRegionsChange(next)
+    },
+    [handleRegionsChange, selectedRegions],
   )
 
   // Prepare data for the new ChartTimeseriesCompare component
@@ -488,12 +733,39 @@ function CompareContent() {
         const region = REGIONS.find((r) => r.code === regionCode)
         const data = comparisonData[regionCode]?.[metric] || []
         return {
+          regionCode,
           regionName: region?.name || regionCode,
           data,
           color: `hsl(var(--chart-${(index % 5) + 1}))`,
         }
       }),
     [allDisplayRegions, comparisonData, metric],
+  )
+
+  const chartExportRows = useMemo(() => {
+    const unit = selectedMetric?.unit || ""
+    return chartRegions.flatMap((r) =>
+      (r.data ?? []).map((pt: any) => ({
+        Metric: selectedMetric?.title || metric,
+        Region: r.regionName,
+        "Region Code": r.regionCode,
+        Year: pt?.year ?? pt?.period,
+        Scenario: scenarioLabel(scenario),
+        Value: pt?.value ?? pt?.val ?? pt?.y,
+        Units: unit,
+        "Data Type": dataTypeLabel(pt?.type ?? pt?.data_type),
+        Source: sourceLabel({ dataType: pt?.type ?? pt?.data_type, dataQuality: pt?.data_quality }),
+      })),
+    )
+  }, [chartRegions, metric, scenario, selectedMetric?.title, selectedMetric?.unit])
+
+  const chartExportCsvRows = useMemo(
+    () =>
+      chartExportRows.map((r) => ({
+        ...r,
+        Value: typeof (r as any).Value === "number" ? Math.round((r as any).Value) : (r as any).Value,
+      })),
+    [chartExportRows],
   )
 
   const exportData = useMemo(
@@ -522,7 +794,7 @@ function CompareContent() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Button variant="ghost" size="sm" asChild>
-                <Link href="/">
+                <Link href={`/?region=${selectedRegions[0] || ""}&year=${year}&scenario=${scenario}`}>
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back to Dashboard
                 </Link>
@@ -547,7 +819,7 @@ function CompareContent() {
             <CardHeader>
               <CardTitle>Comparison Settings</CardTitle>
               <CardDescription>
-                Select regions and metrics to compare (max 5 regions + London reference)
+                Select regions and metrics to compare (max {MAX_COMPARE_REGIONS} regions)
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -558,13 +830,10 @@ function CompareContent() {
                   {regionChips.map((chip) => (
                     <Badge
                       key={`chip-${chip.code}`}
-                      variant={chip.pinned ? "default" : "secondary"}
+                      variant="secondary"
                       className="gap-2 px-3 py-1"
                     >
                       <span>{chip.name}</span>
-                      {chip.pinned ? (
-                        <span className="text-xs opacity-75">(pinned)</span>
-                      ) : (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -573,22 +842,26 @@ function CompareContent() {
                         >
                           <X className="h-3 w-3" />
                         </Button>
-                      )}
                     </Badge>
                   ))}
 
-                  {selectedRegions.length < 5 && (
+                  {selectedRegions.length < MAX_COMPARE_REGIONS && (
                     <RegionPicker
                       value=""
-                      onValueChange={(value) => addRegion(value as string)}
+                      onValueChange={(value) => {
+                        if (typeof value === "string" && value) {
+                          addRegion(value)
+                        }
+                      }}
                       placeholder="Add region..."
+                      exclude={selectedRegions}
                     />
                   )}
                 </div>
 
-                {selectedRegions.length === 5 && (
+                {selectedRegions.length === MAX_COMPARE_REGIONS && (
                   <p className="text-xs text-muted-foreground">
-                    Maximum regions reached (5 + London reference)
+                    Maximum regions reached ({MAX_COMPARE_REGIONS} regions)
                   </p>
                 )}
               </div>
@@ -616,17 +889,45 @@ function CompareContent() {
 
         {/* Comparison Results */}
         <div className="space-y-8">
-          {/* Chart - Using inline component */}
-          <ErrorBoundaryWrapper name="comparison chart">
-            <ChartTimeseriesCompare
-              title={`${selectedMetric?.title ?? "Metric"} Comparison`}
-              description="Compare trends across selected regions (London shown as reference)"
-              regions={chartRegions}
-              unit={selectedMetric?.unit || ""}
-              metricId={metric}
-              isLoading={!hasAllData && isLoading}
-            />
-          </ErrorBoundaryWrapper>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Chart - Using inline component */}
+            <ErrorBoundaryWrapper name="comparison chart">
+              <div className="lg:col-span-2">
+                <ExportableChartCard
+                  rows={chartExportRows}
+                  csvRows={chartExportCsvRows}
+                  filenameBase={`regioniq_${metric}_comparison_${scenario}`}
+                  isLoading={!hasAllData && isLoading}
+                  serverXlsxRequest={{
+                    metricId: metric,
+                    regionCodes: allDisplayRegions,
+                    scenario,
+                  }}
+                >
+                  <ChartTimeseriesCompare
+                    title={`${selectedMetric?.title ?? "Metric"} Comparison`}
+                    description="Compare trends across selected regions"
+                    regions={chartRegions}
+                    unit={selectedMetric?.unit || ""}
+                    metricId={metric}
+                    isLoading={!hasAllData && isLoading}
+                  />
+                </ExportableChartCard>
+              </div>
+            </ErrorBoundaryWrapper>
+
+            <ErrorBoundaryWrapper name="compare copilot">
+              <CompareCopilot
+                metricId={metric}
+                metricTitle={selectedMetric?.title ?? metric}
+                scenario={scenario}
+                year={year}
+                selectedRegions={selectedRegionsMeta}
+                maxRegions={MAX_COMPARE_REGIONS}
+                onApplyAction={applyCopilotAction}
+              />
+            </ErrorBoundaryWrapper>
+          </div>
 
           {/* Table */}
           <ErrorBoundaryWrapper name="comparison table">

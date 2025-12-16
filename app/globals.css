@@ -10,19 +10,21 @@
   --card-foreground: oklch(0.22 0.01 258); /* #1f2937 - Card text */
   --popover: oklch(1 0 0); /* #ffffff - Popover background */
   --popover-foreground: oklch(0.22 0.01 258); /* #1f2937 - Popover text */
-  --primary: oklch(0.65 0.18 35); /* Orange primary */
+  --primary: oklch(0.40 0.30 290); /* Deep purple - rich, authoritative, slightly warmer tone */
   --primary-foreground: oklch(1 0 0); /* White text */
-  --secondary: oklch(0.65 0.15 264); /* Blue secondary */
-  --secondary-foreground: oklch(1 0 0); /* White text */
+  /* Secondary: Soft lavender / light purple-gray */
+  --secondary: oklch(0.85 0.10 258); /* Light lavender - soft, complementary */
+  --secondary-foreground: oklch(0.22 0.01 258); /* Dark text on secondary */
   --muted: oklch(0.95 0 0); /* Light muted bg */
-  --muted-foreground: oklch(0.35 0.01 258); /* Gray muted text */
-  --accent: oklch(0.65 0.15 264); /* Blue accent */
-  --accent-foreground: oklch(1 0 0); /* White text */
+  --muted-foreground: oklch(0.40 0.01 258); /* Purple-grey muted text */
+  /* Accent: Light muted purple for hover states */
+  --accent: oklch(0.75 0.15 258); /* Light purple for accents - harmonious hover states */
+  --accent-foreground: oklch(0.22 0.01 258); /* Dark text on accent */
   --destructive: oklch(0.55 0.22 25); /* Red destructive */
   --destructive-foreground: oklch(1 0 0); /* White text */
-  --border: oklch(0.85 0.01 258); /* Light border */
+  --border: oklch(0.85 0.05 258); /* Light purple-grey border */
   --input: oklch(1 0 0); /* White input */
-  --ring: oklch(0.65 0.18 35 / 0.5);
+  --ring: oklch(0.40 0.30 290 / 0.3); /* Deep purple ring - subtle for focus */
   --chart-1: oklch(0.65 0.18 35);
   --chart-2: oklch(0.65 0.15 264);
   --chart-3: oklch(0.68 0.2 45);
@@ -31,12 +33,12 @@
   --radius: 0.5rem;
   --sidebar: oklch(0.98 0 0); /* Light sidebar */
   --sidebar-foreground: oklch(0.22 0.01 258); /* Dark text */
-  --sidebar-primary: oklch(0.65 0.18 35); /* Orange */
+  --sidebar-primary: oklch(0.40 0.30 290); /* Deep purple */
   --sidebar-primary-foreground: oklch(1 0 0); /* White text */
-  --sidebar-accent: oklch(0.65 0.15 264); /* Blue */
-  --sidebar-accent-foreground: oklch(1 0 0);
-  --sidebar-border: oklch(0.85 0.01 258);
-  --sidebar-ring: oklch(0.65 0.18 35 / 0.5);
+  --sidebar-accent: oklch(0.75 0.15 258); /* Light purple for sidebar hover */
+  --sidebar-accent-foreground: oklch(0.22 0.01 258);
+  --sidebar-border: oklch(0.85 0.05 258);
+  --sidebar-ring: oklch(0.40 0.30 290 / 0.3);
 }
 
 .dark {
@@ -47,19 +49,21 @@
   --card-foreground: oklch(1 0 0); /* #ffffff - White card text */
   --popover: oklch(0.12 0.01 258); /* #151922 - Dark popover */
   --popover-foreground: oklch(1 0 0); /* #ffffff - White popover text */
-  --primary: oklch(0.65 0.18 35); /* #ea580c - Orange primary */
+  --primary: oklch(0.35 0.28 290); /* Deep purple - slightly muted for dark mode */
   --primary-foreground: oklch(1 0 0); /* #ffffff - White primary text */
-  --secondary: oklch(0.65 0.15 264); /* #6366f1 - Blue secondary */
-  --secondary-foreground: oklch(1 0 0); /* #ffffff - White secondary text */
+  /* Secondary: Dark lavender for structure in dark mode */
+  --secondary: oklch(0.20 0.10 258); /* Dark lavender - soft, complementary */
+  --secondary-foreground: oklch(0.95 0 0); /* Light text on secondary */
   --muted: oklch(0.12 0.01 258); /* #151922 - Dark muted */
-  --muted-foreground: oklch(0.65 0.01 258); /* #9CA3AF - Gray muted text */
-  --accent: oklch(0.65 0.15 264); /* #6366f1 - Blue accent */
-  --accent-foreground: oklch(1 0 0); /* #ffffff - White accent text */
+  --muted-foreground: oklch(0.65 0.05 258); /* #9CA3AF - Purple-grey muted text */
+  /* Accent: Muted accent purple for hover states in dark mode */
+  --accent: oklch(0.35 0.20 258); /* Muted accent purple for hover states */
+  --accent-foreground: oklch(0.95 0 0); /* Light text on accent */
   --destructive: oklch(0.55 0.22 25); /* #dc2626 - Red destructive */
   --destructive-foreground: oklch(1 0 0); /* #ffffff - White destructive text */
-  --border: oklch(0.25 0.01 258); /* #374151 - Gray border */
+  --border: oklch(0.25 0.05 258); /* #374151 - Purple-grey border */
   --input: oklch(0.12 0.01 258); /* #151922 - Dark input */
-  --ring: oklch(0.65 0.18 35 / 0.5); /* Orange ring */
+  --ring: oklch(0.35 0.28 290 / 0.3); /* Deep purple ring - subtle for focus */
   --chart-1: oklch(0.65 0.18 35); /* #FF7849 - Orange */
   --chart-2: oklch(0.65 0.15 264); /* #3AA3FF - Blue */
   --chart-3: oklch(0.68 0.2 45); /* Light orange */
@@ -67,12 +71,85 @@
   --chart-5: oklch(0.55 0.22 25); /* Red */
   --sidebar: oklch(0.09 0.005 258); /* Dark sidebar */
   --sidebar-foreground: oklch(1 0 0); /* White sidebar text */
-  --sidebar-primary: oklch(0.65 0.18 35); /* Orange sidebar primary */
+  --sidebar-primary: oklch(0.35 0.28 290); /* Deep purple sidebar primary */
   --sidebar-primary-foreground: oklch(1 0 0); /* White sidebar primary text */
-  --sidebar-accent: oklch(0.12 0.01 258); /* Dark sidebar accent */
-  --sidebar-accent-foreground: oklch(1 0 0); /* White sidebar accent text */
-  --sidebar-border: oklch(0.25 0.01 258); /* Gray sidebar border */
-  --sidebar-ring: oklch(0.65 0.18 35 / 0.5); /* Orange sidebar ring */
+  --sidebar-accent: oklch(0.35 0.20 258); /* Muted accent purple for sidebar hover */
+  --sidebar-accent-foreground: oklch(0.95 0 0); /* Light text on sidebar accent */
+  --sidebar-border: oklch(0.25 0.05 258); /* Purple-grey sidebar border */
+  --sidebar-ring: oklch(0.35 0.28 290 / 0.3); /* Deep purple sidebar ring - subtle */
+  
+  /* --- Map semantic colours (DO NOT reuse UI or chart tokens) --- */
+  /* Maps are analytical surfaces, not UI chrome. These colours encode state, not action. */
+  /* Grey = no data / absence of signal */
+  --map-nodata: oklch(0.85 0 0); /* Light grey - aligns with muted/disabled greys */
+  /* Very light grey = neutral / near-zero (midpoint in diverging scales) */
+  --map-neutral: oklch(0.92 0 0); /* Very light grey - visually recedes */
+  /* Blue = stronger / higher / outperforming (calm, analytical, non-moralising) */
+  /* Must not be the same blue as any --chart-* token, must not resemble UI purples */
+  --map-positive: oklch(0.55 0.12 240); /* Deep analytical blue - distinct from chart-2 and UI purples */
+  --map-positive-light: oklch(0.75 0.08 240); /* Light blue for low positive values */
+  --map-positive-mid: oklch(0.65 0.10 240); /* Mid blue */
+  --map-positive-dark: oklch(0.45 0.14 240); /* Dark blue for high positive values */
+  /* Muted red/orange = weaker / lower / underperforming (desaturated, never alarmist) */
+  /* Must not be confused with destructive UI red */
+  --map-negative: oklch(0.60 0.12 35); /* Muted red-orange - desaturated, analytical */
+  --map-negative-light: oklch(0.75 0.08 35); /* Light red-orange for mild negative */
+  --map-negative-mid: oklch(0.65 0.10 35); /* Mid red-orange */
+  --map-negative-dark: oklch(0.50 0.14 35); /* Dark red-orange for strong negative */
+}
+
+.dark {
+  /* Updated dark theme to match dashboard design */
+  --background: oklch(0.09 0.005 258); /* #0E1117 - Darker background */
+  --foreground: oklch(1 0 0); /* #ffffff - White text */
+  --card: oklch(0.12 0.01 258); /* #151922 - Dark card background */
+  --card-foreground: oklch(1 0 0); /* #ffffff - White card text */
+  --popover: oklch(0.12 0.01 258); /* #151922 - Dark popover */
+  --popover-foreground: oklch(1 0 0); /* #ffffff - White popover text */
+  --primary: oklch(0.35 0.28 290); /* Deep purple - slightly muted for dark mode */
+  --primary-foreground: oklch(1 0 0); /* #ffffff - White primary text */
+  /* Secondary: Dark lavender for structure in dark mode */
+  --secondary: oklch(0.20 0.10 258); /* Dark lavender - soft, complementary */
+  --secondary-foreground: oklch(0.95 0 0); /* Light text on secondary */
+  --muted: oklch(0.12 0.01 258); /* #151922 - Dark muted */
+  --muted-foreground: oklch(0.65 0.05 258); /* #9CA3AF - Purple-grey muted text */
+  /* Accent: Muted accent purple for hover states in dark mode */
+  --accent: oklch(0.35 0.20 258); /* Muted accent purple for hover states */
+  --accent-foreground: oklch(0.95 0 0); /* Light text on accent */
+  --destructive: oklch(0.55 0.22 25); /* #dc2626 - Red destructive */
+  --destructive-foreground: oklch(1 0 0); /* #ffffff - White destructive text */
+  --border: oklch(0.25 0.05 258); /* #374151 - Purple-grey border */
+  --input: oklch(0.12 0.01 258); /* #151922 - Dark input */
+  --ring: oklch(0.35 0.28 290 / 0.3); /* Deep purple ring - subtle for focus */
+  --chart-1: oklch(0.65 0.18 35); /* #FF7849 - Orange */
+  --chart-2: oklch(0.65 0.15 264); /* #3AA3FF - Blue */
+  --chart-3: oklch(0.68 0.2 45); /* Light orange */
+  --chart-4: oklch(0.72 0.18 65); /* Amber */
+  --chart-5: oklch(0.55 0.22 25); /* Red */
+  --sidebar: oklch(0.09 0.005 258); /* Dark sidebar */
+  --sidebar-foreground: oklch(1 0 0); /* White sidebar text */
+  --sidebar-primary: oklch(0.35 0.28 290); /* Deep purple sidebar primary */
+  --sidebar-primary-foreground: oklch(1 0 0); /* White sidebar primary text */
+  --sidebar-accent: oklch(0.35 0.20 258); /* Muted accent purple for sidebar hover */
+  --sidebar-accent-foreground: oklch(0.95 0 0); /* Light text on sidebar accent */
+  --sidebar-border: oklch(0.25 0.05 258); /* Purple-grey sidebar border */
+  --sidebar-ring: oklch(0.35 0.28 290 / 0.3); /* Deep purple sidebar ring - subtle */
+  
+  /* --- Map semantic colours (dark mode) --- */
+  /* Grey = no data / absence of signal */
+  --map-nodata: oklch(0.25 0 0); /* Dark grey - aligns with muted/disabled greys */
+  /* Very light grey = neutral / near-zero (midpoint in diverging scales) */
+  --map-neutral: oklch(0.30 0 0); /* Dark grey - visually recedes in dark mode */
+  /* Blue = stronger / higher / outperforming */
+  --map-positive: oklch(0.60 0.12 240); /* Lighter blue for dark mode visibility */
+  --map-positive-light: oklch(0.50 0.08 240); /* Light blue for low positive values */
+  --map-positive-mid: oklch(0.55 0.10 240); /* Mid blue */
+  --map-positive-dark: oklch(0.65 0.14 240); /* Bright blue for high positive values */
+  /* Muted red/orange = weaker / lower / underperforming */
+  --map-negative: oklch(0.55 0.12 35); /* Muted red-orange - desaturated, analytical */
+  --map-negative-light: oklch(0.45 0.08 35); /* Light red-orange for mild negative */
+  --map-negative-mid: oklch(0.50 0.10 35); /* Mid red-orange */
+  --map-negative-dark: oklch(0.60 0.14 35); /* Bright red-orange for strong negative */
 }
 
 @theme inline {
@@ -115,6 +192,16 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-map-nodata: var(--map-nodata);
+  --color-map-neutral: var(--map-neutral);
+  --color-map-positive: var(--map-positive);
+  --color-map-positive-light: var(--map-positive-light);
+  --color-map-positive-mid: var(--map-positive-mid);
+  --color-map-positive-dark: var(--map-positive-dark);
+  --color-map-negative: var(--map-negative);
+  --color-map-negative-light: var(--map-negative-light);
+  --color-map-negative-mid: var(--map-negative-mid);
+  --color-map-negative-dark: var(--map-negative-dark);
 }
 
 @layer base {
@@ -124,4 +211,53 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* -------- Export capture guardrails (PNG) -------- */
+/* When a node is being captured to PNG, suppress transient UI and export controls. */
+[data-riq-exporting="true"] .recharts-tooltip-wrapper,
+[data-riq-exporting="true"] .recharts-tooltip-cursor {
+  display: none !important;
+}
+
+[data-riq-exporting="true"] [data-riq-hide-on-export="true"] {
+  visibility: hidden !important;
+}
+
+@layer utilities {
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  /* Hide scrollbar for IE, Edge and Firefox */
+  .scrollbar-hide {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+}
+
+/* Hero Landing Page Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Dashboard Controls Animations */
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.slide-in-from-right {
+  animation: slideInFromRight 0.5s ease-in-out;
 }

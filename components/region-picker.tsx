@@ -45,24 +45,15 @@ export function RegionPicker({
   exclude = [],
 }: RegionPickerProps) {
   const [open, setOpen] = useState(false)
-  const [search, setSearch] = useState("")
 
   // Recent selections (mock data - could be from localStorage later)
   const recentSelections = ["UKI", "UKC", "UKD"]
 
-  // Filter regions based on search + exclude list
-  const filteredRegions = REGIONS.filter((region) => {
-    if (exclude.includes(region.code)) return false
-    const searchLower = search.toLowerCase()
-    return (
-      region.name.toLowerCase().includes(searchLower) ||
-      region.code.toLowerCase().includes(searchLower) ||
-      region.country.toLowerCase().includes(searchLower)
-    )
-  })
+  // Filter regions based on exclude list (cmdk will handle search filtering)
+  const availableRegions = REGIONS.filter((region) => !exclude.includes(region.code))
 
   // Group regions by country
-  const groupedRegions = filteredRegions.reduce(
+  const groupedRegions = availableRegions.reduce(
     (acc, region) => {
       if (!acc[region.country]) {
         acc[region.country] = []
@@ -135,16 +126,12 @@ export function RegionPicker({
       </PopoverTrigger>
       <PopoverContent className="w-[400px] p-0" align="start">
         <Command>
-          <CommandInput
-            placeholder="Search regions..."
-            value={search}
-            onValueChange={setSearch}
-          />
+          <CommandInput placeholder="Search regions..." />
           <CommandList>
             <CommandEmpty>No regions found.</CommandEmpty>
 
-            {/* Recent selections */}
-            {search === "" && recentSelections.length > 0 && (
+            {/* Recent selections - cmdk will filter these based on search */}
+            {recentSelections.length > 0 && (
               <CommandGroup heading="Recent">
                 {recentSelections
                   .filter((code) => !exclude.includes(code))
@@ -155,7 +142,7 @@ export function RegionPicker({
                     return (
                       <CommandItem
                         key={region.code}
-                        value={region.code}
+                        value={`${region.code} ${region.name} ${region.country}`}
                         onSelect={() => handleSelect(region.code)}
                       >
                         <div className="flex items-center gap-2 flex-1">
@@ -185,7 +172,7 @@ export function RegionPicker({
                 {regions.map((region) => (
                   <CommandItem
                     key={region.code}
-                    value={region.code}
+                    value={`${region.code} ${region.name} ${region.country}`}
                     onSelect={() => handleSelect(region.code)}
                   >
                     <div className="flex items-center gap-2 flex-1">
