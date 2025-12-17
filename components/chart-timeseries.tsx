@@ -319,6 +319,9 @@ export const ChartTimeseries = memo(function ChartTimeseries({
     if (dataQuality === 'interpolated') {
       qualityLabel = 'Estimated (Interpolated)'
       qualityColor = '#f59e0b' // amber
+    } else if (dataQuality === 'NISRA') {
+      qualityLabel = 'NISRA'
+      qualityColor = '#8b5cf6' // violet
     } else if (dataQuality === 'ONS') {
       qualityLabel = 'ONS'
       qualityColor = '#10b981' // green

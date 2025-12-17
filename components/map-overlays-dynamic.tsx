@@ -353,16 +353,52 @@ export function MapOverlaysDynamic({
         
       try {
         const processedRows = await getOrFetch<typeof metricRows>(key, async () => {
-        const { data, error } = await supabase
-        .from(tableName)
-        .select("region_code, value, ci_lower, ci_upper, data_type")
-        .eq("metric_id", metric)
-        .eq("period", year)
+        // NI jobs uses a different metric_id (`emp_total_jobs_ni`) and ITL1 NI jobs live in ITL2 (TLN0).
+        // For "jobs" maps, we merge emp_total_jobs + emp_total_jobs_ni so NI doesn't appear blank.
+        let data: any[] | null = null
 
-        if (error) {
+        if (metric === "emp_total_jobs") {
+          const { data: baseRows, error: baseErr } = await supabase
+            .from(tableName)
+            .select("region_code, value, ci_lower, ci_upper, data_type")
+            .eq("metric_id", "emp_total_jobs")
+            .eq("period", year)
+          if (baseErr) throw new Error(baseErr.message)
+
+          if (level === "ITL1") {
+            // Patch NI from TLN0 into N92000002 (so REGION_TO_TL maps it to UKN).
+            const { data: niRows, error: niErr } = await supabase
+              .from("itl2_latest_all")
+              .select("region_code, value, ci_lower, ci_upper, data_type")
+              .eq("metric_id", "emp_total_jobs_ni")
+              .eq("period", year)
+              .eq("region_code", "TLN0")
+              .limit(1)
+            if (niErr) throw new Error(niErr.message)
+
+            const patched = (niRows ?? []).map((r) => ({ ...r, region_code: "N92000002" }))
+            data = [...(baseRows ?? []), ...patched]
+          } else {
+            const { data: niRows, error: niErr } = await supabase
+              .from(tableName)
+              .select("region_code, value, ci_lower, ci_upper, data_type")
+              .eq("metric_id", "emp_total_jobs_ni")
+              .eq("period", year)
+            if (niErr) throw new Error(niErr.message)
+            data = [...(baseRows ?? []), ...(niRows ?? [])]
+          }
+        } else {
+          const { data: rows, error } = await supabase
+            .from(tableName)
+            .select("region_code, value, ci_lower, ci_upper, data_type")
+            .eq("metric_id", metric)
+            .eq("period", year)
+          if (error) {
             throw new Error(error.message)
           }
-          
+          data = rows ?? []
+        }
+
           // Process rows to select correct value based on scenario
           return (data ?? []).map((row) => {
             let selectedValue: number | null = null
@@ -426,14 +462,45 @@ export function MapOverlaysDynamic({
         
       try {
         const processedRows = await getOrFetch<typeof metricRowsPast>(key, async () => {
-          const { data, error } = await supabase
-            .from(tableName)
-            .select("region_code, value, ci_lower, ci_upper, data_type")
-            .eq("metric_id", metric)
-            .eq("period", pastYear)
+          let data: any[] | null = null
 
-          if (error) {
-            throw new Error(error.message)
+          if (metric === "emp_total_jobs") {
+            const { data: baseRows, error: baseErr } = await supabase
+              .from(tableName)
+              .select("region_code, value, ci_lower, ci_upper, data_type")
+              .eq("metric_id", "emp_total_jobs")
+              .eq("period", pastYear)
+            if (baseErr) throw new Error(baseErr.message)
+
+            if (level === "ITL1") {
+              const { data: niRows, error: niErr } = await supabase
+                .from("itl2_latest_all")
+                .select("region_code, value, ci_lower, ci_upper, data_type")
+                .eq("metric_id", "emp_total_jobs_ni")
+                .eq("period", pastYear)
+                .eq("region_code", "TLN0")
+                .limit(1)
+              if (niErr) throw new Error(niErr.message)
+
+              const patched = (niRows ?? []).map((r) => ({ ...r, region_code: "N92000002" }))
+              data = [...(baseRows ?? []), ...patched]
+            } else {
+              const { data: niRows, error: niErr } = await supabase
+                .from(tableName)
+                .select("region_code, value, ci_lower, ci_upper, data_type")
+                .eq("metric_id", "emp_total_jobs_ni")
+                .eq("period", pastYear)
+              if (niErr) throw new Error(niErr.message)
+              data = [...(baseRows ?? []), ...(niRows ?? [])]
+            }
+          } else {
+            const { data: rows, error } = await supabase
+              .from(tableName)
+              .select("region_code, value, ci_lower, ci_upper, data_type")
+              .eq("metric_id", metric)
+              .eq("period", pastYear)
+            if (error) throw new Error(error.message)
+            data = rows ?? []
           }
           
           // Process rows to select correct value based on scenario

@@ -137,7 +137,7 @@ def observations_query(req: QueryRequest, request: Request, user=Depends(get_cur
         )
 
     # Year range
-    year_from = 2010
+    year_from = 1991
     year_to = 2050
     if year_sel and len(year_sel) == 2 and year_sel[0].isdigit() and year_sel[1].isdigit():
         year_from = int(year_sel[0])
@@ -187,7 +187,7 @@ def observations_query(req: QueryRequest, request: Request, user=Depends(get_cur
 
     select_cols = (
         "region_code,region_name,region_level,metric_id,period,value,ci_lower,ci_upper,"
-        "unit,freq,data_type,vintage,forecast_run_date,forecast_version,is_calculated"
+        "unit,freq,data_type,data_quality,vintage,forecast_run_date,forecast_version,is_calculated"
     )
 
     for lvl, codes in by_level.items():
@@ -245,6 +245,7 @@ def observations_query(req: QueryRequest, request: Request, user=Depends(get_cur
                                     value=_pick_value(row, measure),
                                     unit=row.get("unit"),
                                     data_type=row.get("data_type"),
+                                    data_quality=row.get("data_quality"),
                                     confidence_lower=row.get("ci_lower"),
                                     confidence_upper=row.get("ci_upper"),
                                 )

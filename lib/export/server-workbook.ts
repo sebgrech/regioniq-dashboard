@@ -32,6 +32,11 @@ export async function buildTimeseriesWorkbook(params: {
   coverage: string
   sources: string
   generated: string
+  vintage?: string
+  status?: string
+  citation?: string
+  url?: string
+  accessedAt?: string
   canonicalRows: Record<string, any>[]
   matrixHeader: string[]
   matrixRows: Record<string, any>[]
@@ -45,6 +50,11 @@ export async function buildTimeseriesWorkbook(params: {
     coverage,
     sources,
     generated,
+    vintage,
+    status,
+    citation,
+    url,
+    accessedAt,
     canonicalRows,
     matrixHeader,
     matrixRows,
@@ -98,7 +108,12 @@ export async function buildTimeseriesWorkbook(params: {
     ["Scenarios", scenarios],
     ["Data coverage", coverage],
     ["Source(s)", sources],
+    ...(vintage ? [["Vintage", vintage]] : []),
+    ...(status ? [["Status", status]] : []),
     ["Generated", generated],
+    ...(accessedAt ? [["Accessed", accessedAt]] : []),
+    ...(citation ? [["Citation", citation]] : []),
+    ...(url ? [["URL", url]] : []),
   ]
 
   info.getRow(startRow).values = ["Item", "Value"]

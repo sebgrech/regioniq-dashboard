@@ -80,6 +80,7 @@ class ObservationRecord(BaseModel):
     value: Optional[float] = None
     unit: Optional[str] = None
     data_type: Optional[str] = None
+    data_quality: Optional[str] = None
     confidence_lower: Optional[float] = None
     confidence_upper: Optional[float] = None
     breakdown_type: Optional[str] = None

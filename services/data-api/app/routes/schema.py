@@ -75,7 +75,7 @@ def get_schema() -> SchemaResponse:
         scenarios=["baseline", "upside", "downside"],
         measures=["value", "ci_lower", "ci_upper", "growth_yoy"],
         breakdowns=[],
-        time_coverage={"min_year": 2010, "max_year": 2050},
+        time_coverage={"min_year": 1991, "max_year": 2050},
         compatibility={
             "rules": [
                 {

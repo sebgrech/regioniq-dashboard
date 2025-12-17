@@ -155,6 +155,7 @@ export default function MetricDetailContent({ id }: { id: string }) {
 
   const selectedRegion = REGIONS.find((r) => r.code === region)
   const isLad = selectedRegion?.level === "LAD"
+  const isNIEmployment = metric.id === "emp_total_jobs" && selectedRegion?.country === "Northern Ireland"
 
   // Political context (works for LAD, City, ITL2, ITL3, ITL1)
   const [politicalContext, setPoliticalContext] = useState<PoliticalContext | null>(null)
@@ -702,7 +703,16 @@ export default function MetricDetailContent({ id }: { id: string }) {
                             return `ONS Regional Accounts. Historical data spans ${firstHistoricalYear}–${lastHistoricalYear}, with forecasts to ${YEARS.max}.`
                           }
                           if (metric.id === "emp_total_jobs") {
-                            return `ONS Business Register and Employment Survey (BRES). Historical data spans ${firstHistoricalYear}–${lastHistoricalYear}, with forecasts to ${YEARS.max}. Only available for Great Britain (excludes Northern Ireland).`
+                            if (isNIEmployment) {
+                              return `NISRA. Source: Business Register and Employment Survey (BRES). Figures exclude agriculture (but include animal husbandry service activities and hunting, trapping and game propagation). Figures may not sum due to rounding. See the BRES quality and methodology report on the NISRA website. Historical data spans ${firstHistoricalYear}–${lastHistoricalYear}, with forecasts to ${YEARS.max}.`
+                            }
+                            return `ONS Business Register and Employment Survey (BRES). Historical data spans ${firstHistoricalYear}–${lastHistoricalYear}, with forecasts to ${YEARS.max}.`
+                          }
+                          if (metric.id === "employment_rate_pct") {
+                            return `NOMIS dataset NM_17_5 (Annual Population Survey - APS). Historical data spans ${firstHistoricalYear}–${lastHistoricalYear}, with forecasts to ${YEARS.max}. Employment rate is defined for ages 16–64.`
+                          }
+                          if (metric.id === "unemployment_rate_pct") {
+                            return `NOMIS dataset NM_17_5 (Annual Population Survey - APS). Historical data spans ${firstHistoricalYear}–${lastHistoricalYear}, with forecasts to ${YEARS.max}. Unemployment rate is defined for ages 16+ (economically active).`
                           }
                           return `Official statistics from ONS, regional agencies, and government departments. Historical data spans ${firstHistoricalYear}–${lastHistoricalYear}, with forecasts to ${YEARS.max}.`
                         })()}
@@ -718,7 +728,13 @@ export default function MetricDetailContent({ id }: { id: string }) {
                         {metric.id === "gdhi_per_head_gbp" &&
                           "Gross Disposable Household Income (GDHI) is total income for all individuals in the household sector (traditional households, institutions, and sole trader enterprises) after taxes and transfers. GDHI per head divides total GDHI by total population to give GBP per person, not per household."}
                         {metric.id === "emp_total_jobs" &&
-                          "Total number of employee and self-employed jobs located in the area. Based on Business Register and Employment Survey (BRES), workplace-based (where jobs are located, not where workers live). A person with multiple jobs counts as multiple jobs. Only available for Great Britain (excludes Northern Ireland)."}
+                          (isNIEmployment
+                            ? "Total number of employee and self-employed jobs located in the area (workplace-based). Source: Business Register and Employment Survey (BRES) as published by NISRA. Figures exclude agriculture (but include animal husbandry service activities and hunting, trapping and game propagation). Figures may not sum due to rounding."
+                            : "Total number of employee and self-employed jobs located in the area. Based on Business Register and Employment Survey (BRES), workplace-based (where jobs are located, not where workers live). A person with multiple jobs counts as multiple jobs.")}
+                        {metric.id === "employment_rate_pct" &&
+                          "Employment rate (%): the percentage of people aged 16–64 who are in employment (employees or self-employed). Source: NOMIS dataset NM_17_5 (Annual Population Survey - APS)."}
+                        {metric.id === "unemployment_rate_pct" &&
+                          "Unemployment rate (%): the percentage of economically active people aged 16 and over who are unemployed. Source: NOMIS dataset NM_17_5 (Annual Population Survey - APS)."}
                       </p>
                     </div>
                   </CardContent>

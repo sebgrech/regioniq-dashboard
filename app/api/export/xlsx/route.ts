@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createSupabaseServerClient } from "@/lib/supabase-server"
-import { METRICS, REGIONS, YEARS, type Scenario } from "@/lib/metrics.config"
-import {
-  fetchTimeseriesForExport,
-  buildCanonicalRows,
-  buildScenarioYearMatrix,
-  computeInfo,
-  normalizeUnits,
-} from "@/lib/export/server-timeseries"
+import { METRICS, REGIONS, type Scenario } from "@/lib/metrics.config"
+import { buildScenarioYearMatrix, computeInfo, normalizeUnits } from "@/lib/export/server-timeseries"
 import { buildTimeseriesWorkbook } from "@/lib/export/server-workbook"
+import { postObservationsQuery } from "@/lib/export/data-api-client"
+import { sourceLabel } from "@/lib/export/canonical"
+import { jobsMetricIdForRegion, jobsRegionCodeForQuery, remapJobsRegionCodeForOutput } from "@/lib/export/ni-jobs"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -38,22 +35,43 @@ export async function POST(req: NextRequest) {
     if (!metric) return NextResponse.json({ error: "Unknown metric" }, { status: 400 })
     if (!region) return NextResponse.json({ error: "Unknown region" }, { status: 400 })
 
-    const rows = await fetchTimeseriesForExport({
-      supabase,
-      metricId: body.metricId,
-      regionCode: body.regionCode,
-    })
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData.session?.access_token
+    if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const scenarioList = (body.scenarios?.length
       ? body.scenarios
       : (["baseline", "upside", "downside"] as const)) as Scenario[]
 
-    const canonicalRows = buildCanonicalRows({
-      metricId: body.metricId,
-      regionCode: body.regionCode,
-      rows,
-      scenarios: scenarioList,
-    })
+    const metricIdForQuery = jobsMetricIdForRegion(body.metricId, body.regionCode)
+    const regionCodeForQuery = jobsRegionCodeForQuery(body.metricId, body.regionCode)
+
+    // Canonical source-of-truth: Data API observations (includes meta.citation/url/accessed_at).
+    const requestBody = {
+      query: [
+        { code: "metric", selection: { filter: "item", values: [metricIdForQuery] } },
+        { code: "region", selection: { filter: "item", values: [regionCodeForQuery] } },
+        { code: "time_period", selection: { filter: "range", from: "1991", to: "2050" } },
+        { code: "scenario", selection: { filter: "item", values: scenarioList } },
+      ],
+      response: { format: "records" },
+      limit: 250000,
+    }
+
+    const api = await postObservationsQuery({ accessToken: token, requestBody })
+    const records = (api?.data ?? []) as any[]
+
+    const canonicalRows = records.map((r) => ({
+      Metric: metric.title,
+      Region: region.name,
+      "Region Code": remapJobsRegionCodeForOutput(body.metricId, String(r.region_code ?? body.regionCode)),
+      Year: r.time_period,
+      Scenario: r.scenario === "baseline" ? "Baseline" : r.scenario === "upside" ? "Upside" : "Downside",
+      Value: r.value ?? null,
+      Units: metric.unit,
+      "Data Type": String(r.data_type ?? "").toLowerCase() === "forecast" ? "Forecast" : "Historical",
+      Source: sourceLabel({ dataType: r.data_type, dataQuality: r.data_quality }),
+    }))
 
     const matrix = buildScenarioYearMatrix({
       canonicalRows,
@@ -68,6 +86,7 @@ export async function POST(req: NextRequest) {
       units: metric.unit,
     })
 
+    const meta = api?.meta ?? {}
     const wb = await buildTimeseriesWorkbook({
       metricLabel: metric.title,
       regionLabel: region.name,
@@ -76,7 +95,12 @@ export async function POST(req: NextRequest) {
       scenarios: info.scenarios,
       coverage: info.coverage,
       sources: info.sources,
-      generated: info.generated,
+      generated: meta.generated_at ?? info.generated,
+      vintage: meta.vintage,
+      status: meta.status,
+      citation: meta.citation,
+      url: meta.url,
+      accessedAt: meta.accessed_at,
       canonicalRows,
       matrixHeader: matrix.header,
       matrixRows: matrix.rows,

@@ -23,9 +23,12 @@ export function sourceLabel(params: {
 
   // Keep the Source column clean (no qualifiers); provenance text belongs in Info sheet.
   if (dt === "forecast") return "RegionIQ"
-  if (dq === "ons") return "ONS"
+  if (dq === "nisra") return "NISRA"
   if (dq === "interpolated") return "Estimated"
-  return ""
+  // Default historical provenance to ONS if we don't have a stronger signal.
+  if (dt === "historical") return "ONS"
+  if (dq === "ons") return "ONS"
+  return "ONS"
 }
 
 

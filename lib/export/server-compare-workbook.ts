@@ -30,12 +30,33 @@ export async function buildCompareWorkbook(params: {
   coverage: string
   sources: string
   generated: string
+  vintage?: string
+  status?: string
+  citation?: string
+  url?: string
+  accessedAt?: string
   canonicalRows: Record<string, any>[]
   matrixHeader: string[]
   matrixRows: Record<string, any>[]
 }) {
-  const { metricLabel, scenarioLabel, regionCodes, regionNames, units, coverage, sources, generated, canonicalRows, matrixHeader, matrixRows } =
-    params
+  const {
+    metricLabel,
+    scenarioLabel,
+    regionCodes,
+    regionNames,
+    units,
+    coverage,
+    sources,
+    generated,
+    vintage,
+    status,
+    citation,
+    url,
+    accessedAt,
+    canonicalRows,
+    matrixHeader,
+    matrixRows,
+  } = params
 
   const wb = new ExcelJS.Workbook()
   wb.creator = "RegionIQ"
@@ -83,7 +104,12 @@ export async function buildCompareWorkbook(params: {
     ["Scenario", scenarioLabel],
     ["Data coverage", coverage],
     ["Source(s)", sources],
+    ...(vintage ? [["Vintage", vintage]] : []),
+    ...(status ? [["Status", status]] : []),
     ["Generated", generated],
+    ...(accessedAt ? [["Accessed", accessedAt]] : []),
+    ...(citation ? [["Citation", citation]] : []),
+    ...(url ? [["URL", url]] : []),
   ]
 
   info.getRow(startRow).values = ["Item", "Value"]

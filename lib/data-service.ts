@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase"
 import { getCacheKey, getCached, getOrFetch } from "@/lib/cache/choropleth-cache"
-import { REGIONS, YEARS, type Scenario, getDbRegionCode, getUIRegionCode } from "./metrics.config"
+import { REGIONS, YEARS, type Scenario, getDbRegionCode, getUIRegionCode, getRegion } from "./metrics.config"
 import type { DataMetadata, DataResponse } from "./types"
 
 export interface DataPoint {
@@ -188,6 +188,35 @@ export async function debugSupabaseQuery() {
   }
 }
 
+/**
+ * NI has a distinct jobs metric_id (`emp_total_jobs_ni`) and, in this dataset,
+ * NI ITL1 jobs are not stored in `itl1_latest_all` at all (they exist at ITL2 `TLN0`).
+ *
+ * This helper normalizes the "UI metric" (`emp_total_jobs`) into the correct
+ * underlying metric/table/region for querying Supabase.
+ */
+function resolveMetricRegionOverrides(params: {
+  metricId: string
+  region: string
+}): { metricId: string; region: string; tableNameOverride?: string } {
+  const { metricId, region } = params
+
+  if (metricId !== "emp_total_jobs") return { metricId, region }
+
+  const r = getRegion(region)
+  if (!r) return { metricId, region }
+
+  if (r.country !== "Northern Ireland") return { metricId, region }
+
+  // NI uses a distinct metric id everywhere it exists.
+  // Additionally, NI ITL1 jobs are stored at ITL2 (TLN0) in this dataset.
+  if (r.level === "ITL1") {
+    return { metricId: "emp_total_jobs_ni", region: "TLN0", tableNameOverride: "itl2_latest_all" }
+  }
+
+  return { metricId: "emp_total_jobs_ni", region }
+}
+
 // -----------------------------------------------------------------------------
 // Data Fetching Functions
 // -----------------------------------------------------------------------------
@@ -205,7 +234,12 @@ export async function fetchSeries(params: {
   region: string  // ITL/LAD code from UI (e.g., "UKI" or "E06000001")
   scenario: Scenario
 }): Promise<DataPoint[]> {
-  const { metricId, region, scenario } = params
+  const { scenario } = params
+
+  // Handle NI-specific metric/table quirks (jobs metric_id + ITL1 storage)
+  const resolved = resolveMetricRegionOverrides({ metricId: params.metricId, region: params.region })
+  const metricId = resolved.metricId
+  const region = resolved.region
 
   const DEBUG_FETCH = process.env.NEXT_PUBLIC_RIQ_DEBUG === "1"
   
@@ -213,7 +247,7 @@ export async function fetchSeries(params: {
   const dbRegionCode = getDbRegionCode(region)
   
   // Determine which table to query based on region level
-  const tableName = getTableName(region)
+  const tableName = resolved.tableNameOverride ?? getTableName(region)
 
   try {
     if (DEBUG_FETCH) {
@@ -313,7 +347,8 @@ export async function fetchChoropleth(params: {
   year: number
   scenario: Scenario
 }): Promise<ChoroplethData> {
-  const { metricId, level, year, scenario } = params
+  const { level, year, scenario } = params
+  const metricId = params.metricId
 
   // Determine table name based on level (UPDATED TO INCLUDE LAD)
   const tableName = level === "ITL1" ? "itl1_latest_all" :
@@ -334,56 +369,117 @@ export async function fetchChoropleth(params: {
     console.log(`   Scenario: ${scenario}`)
     
     const result = await getOrFetch<ChoroplethData>(cacheKey, async () => {
-    // Fetch all regions for this metric and year
-    const { data, error } = await supabase
-      .from(tableName)
-      .select("region_code, value, ci_lower, ci_upper, data_type")
-      .eq("metric_id", metricId)
-      .eq("period", year)
+      const values: Record<string, number> = {}
+      let min = Number.POSITIVE_INFINITY
+      let max = Number.NEGATIVE_INFINITY
 
-    if (error) {
-      console.error("❌ Choropleth query failed:", error)
-      throw error
-    }
+      const ingestRows = (rows: any[] | null | undefined) => {
+        if (!rows || rows.length === 0) return
+        rows.forEach((row) => {
+          let value: number
 
-    const values: Record<string, number> = {}
-    let min = Number.POSITIVE_INFINITY
-    let max = Number.NEGATIVE_INFINITY
-
-    if (data && data.length > 0) {
-      // Process each region's data
-      data.forEach(row => {
-        let value: number
-        
-        // Select appropriate column based on scenario
-        if (row.data_type === "historical") {
-          value = row.value || 0
-        } else {
-          switch(scenario) {
-            case "baseline":
-              value = row.value || 0
-              break
-            case "downside":
-              value = row.ci_lower ?? row.value ?? 0
-              break
-            case "upside":
-              value = row.ci_upper ?? row.value ?? 0
-              break
-            default:
-              value = row.value || 0
+          // Select appropriate column based on scenario (historical always uses value)
+          if (row.data_type === "historical") {
+            value = row.value || 0
+          } else {
+            switch (scenario) {
+              case "baseline":
+                value = row.value || 0
+                break
+              case "downside":
+                value = row.ci_lower ?? row.value ?? 0
+                break
+              case "upside":
+                value = row.ci_upper ?? row.value ?? 0
+                break
+              default:
+                value = row.value || 0
+            }
           }
-        }
-        
-        // Convert E-code/DB code back to UI code
-        const uiCode = getUIRegionCode(row.region_code)
-        values[uiCode] = value
-        min = Math.min(min, value)
-        max = Math.max(max, value)
-      })
-    }
 
-    console.log(`🗺️ Choropleth data: ${Object.keys(values).length} regions (UI codes)`)
-    return { min, max, values }
+          const uiCode = getUIRegionCode(row.region_code)
+          values[uiCode] = value
+          min = Math.min(min, value)
+          max = Math.max(max, value)
+        })
+      }
+
+      // Special-case: NI jobs use `emp_total_jobs_ni`, and NI ITL1 jobs live in ITL2 (TLN0).
+      if (metricId === "emp_total_jobs") {
+        // 1) Pull the standard metric for all non-NI regions at the requested level.
+        const { data: baseRows, error: baseErr } = await supabase
+          .from(tableName)
+          .select("region_code, value, ci_lower, ci_upper, data_type")
+          .eq("metric_id", "emp_total_jobs")
+          .eq("period", year)
+
+        if (baseErr) {
+          console.error("❌ Choropleth query failed:", baseErr)
+          throw baseErr
+        }
+        ingestRows(baseRows)
+
+        if (level === "ITL1") {
+          // 2) Patch in UKN from TLN0 jobs (stored at ITL2 in this dataset)
+          const { data: niRows, error: niErr } = await supabase
+            .from("itl2_latest_all")
+            .select("region_code, value, ci_lower, ci_upper, data_type")
+            .eq("metric_id", "emp_total_jobs_ni")
+            .eq("period", year)
+            .eq("region_code", "TLN0")
+            .limit(1)
+
+          if (niErr) {
+            console.error("❌ NI jobs patch query failed:", niErr)
+            throw niErr
+          }
+
+          // Ingest as-is, then remap TLN0 -> UKN in the output map.
+          // (getUIRegionCode("TLN0") returns "TLN0", so we override explicitly.)
+          if (niRows && niRows.length > 0) {
+            const row = niRows[0]
+            // compute value with same logic used by ingestRows
+            let v: number
+            if (row.data_type === "historical") v = row.value || 0
+            else if (scenario === "downside") v = row.ci_lower ?? row.value ?? 0
+            else if (scenario === "upside") v = row.ci_upper ?? row.value ?? 0
+            else v = row.value || 0
+
+            values["UKN"] = v
+            min = Math.min(min, v)
+            max = Math.max(max, v)
+          }
+        } else {
+          // 2) Merge in NI rows stored under emp_total_jobs_ni at this level.
+          const { data: niRows, error: niErr } = await supabase
+            .from(tableName)
+            .select("region_code, value, ci_lower, ci_upper, data_type")
+            .eq("metric_id", "emp_total_jobs_ni")
+            .eq("period", year)
+
+          if (niErr) {
+            console.error("❌ Choropleth NI query failed:", niErr)
+            throw niErr
+          }
+          ingestRows(niRows)
+        }
+      } else {
+        // Default path: single metric_id query
+        const { data, error } = await supabase
+          .from(tableName)
+          .select("region_code, value, ci_lower, ci_upper, data_type")
+          .eq("metric_id", metricId)
+          .eq("period", year)
+
+        if (error) {
+          console.error("❌ Choropleth query failed:", error)
+          throw error
+        }
+        ingestRows(data)
+      }
+
+      console.log(`🗺️ Choropleth data: ${Object.keys(values).length} regions (UI codes)`)
+      return { min, max, values }
     })
 
     return result

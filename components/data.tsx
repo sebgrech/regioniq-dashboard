@@ -5,8 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { ExportMenu } from "@/components/export-menu"
 import {
-  Download,
   Copy,
   RefreshCw,
   Check,
@@ -18,6 +18,9 @@ import {
 import { YEARS, METRICS, type Scenario } from "@/lib/metrics.config"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
+import { exportCSV } from "@/lib/export"
+import { isoDateStamp, downloadBlob } from "@/lib/export/download"
+import { dataTypeLabel, scenarioLabel, sourceLabel } from "@/lib/export/canonical"
 import {
   Command,
   CommandEmpty,
@@ -47,19 +50,6 @@ interface DataTabProps {
   scenario: Scenario
   title?: string
   className?: string
-}
-
-function toCsv(rows: Array<Record<string, string | number>>): string {
-  if (!rows.length) return ""
-  const headers = Object.keys(rows[0])
-  const escape = (v: any) => {
-    const s = v ?? ""
-    const needsQuotes = /[",\n]/.test(String(s))
-    const cleaned = String(s).replace(/"/g, '""')
-    return needsQuotes ? `"${cleaned}"` : cleaned
-  }
-  const lines = [headers.join(","), ...rows.map((r) => headers.map((h) => escape(r[h])).join(","))]
-  return lines.join("\n")
 }
 
 function formatDisplay(raw: number | null, unit: string): string {
@@ -430,7 +420,6 @@ export function MetricDataTab({ metricId, region, year, scenario, title, classNa
   }, [metricId, region, scenario])
 
   const unit = useMemo(() => (result?.data?.[0]?.unit as string | undefined) ?? "", [result])
-  const previewRows = useMemo(() => ((result?.data ?? []) as any[]).slice(0, 30), [result])
   const metricLabel = useMemo(() => {
     const m = new Map(METRICS.map((x) => [x.id, x.title]))
     return (id: string) => m.get(id) ?? id
@@ -438,6 +427,105 @@ export function MetricDataTab({ metricId, region, year, scenario, title, classNa
   const regionLabel = useMemo(() => {
     return (code: string) => regionIndex?.[code]?.name ?? code
   }, [regionIndex])
+
+  const canonicalRows = useMemo(() => {
+    const rows = (result?.data ?? []) as any[]
+    return rows.map((r) => ({
+      Metric: metricLabel(r.metric_id),
+      Region: regionLabel(r.region_code),
+      "Region Code": r.region_code,
+      Year: r.time_period,
+      Scenario: scenarioLabel(r.scenario),
+      Value: typeof r.value === "number" ? r.value : r.value == null ? null : Number(r.value),
+      Units: r.unit ?? "",
+      "Data Type": dataTypeLabel(r.data_type),
+      Source: sourceLabel({ dataType: r.data_type, dataQuality: (r as any).data_quality }),
+    }))
+  }, [result, metricLabel, regionLabel])
+
+  // Match chart exports: CSV uses the canonical row shape, with clean 0dp values.
+  const canonicalCsvRows = useMemo(() => {
+    return canonicalRows.map((r: any) => ({
+      ...r,
+      Value: typeof r.Value === "number" ? Math.round(r.Value) : r.Value,
+    }))
+  }, [canonicalRows])
+
+  const infoRows = useMemo(() => {
+    const m = result?.meta ?? {}
+    const metricSummary = metrics.length === 1 ? metricLabel(metrics[0]) : `${metrics.length} metrics`
+    const regionSummary =
+      regions.length === 1 ? `${regionLabel(regions[0])} (${regions[0]})` : `${regions.length} regions`
+    const yearSummary =
+      selectedYears.length === 1
+        ? String(selectedYears[0])
+        : selectedYears.length > 1
+          ? `${Math.min(...selectedYears)}–${Math.max(...selectedYears)} (${selectedYears.length} selected)`
+          : ""
+    const scenarioSummary = scenarioLabel(localScenario)
+    return [
+      { Item: "Dataset", Value: "Regional observations" },
+      { Item: "Metric", Value: metricSummary },
+      { Item: "Region", Value: regionSummary },
+      { Item: "Time", Value: yearSummary },
+      { Item: "Scenario", Value: scenarioSummary },
+      { Item: "Vintage", Value: m?.vintage ?? "" },
+      { Item: "Status", Value: m?.status ?? "" },
+      { Item: "Source", Value: m?.source ?? "" },
+      { Item: "Citation", Value: m?.citation ?? "" },
+      { Item: "URL", Value: m?.url ?? "" },
+      { Item: "Accessed", Value: m?.accessed_at ?? "" },
+      { Item: "Generated", Value: m?.generated_at ?? "" },
+    ].filter((r) => String((r as any).Value ?? "").trim().length > 0)
+  }, [result, metrics, regions, selectedYears, localScenario, metricLabel, regionLabel])
+
+  const infoAoa = useMemo(() => {
+    const table: any[][] = infoRows.map((r: any) => [r.Item, r.Value])
+    return [
+      ["RegionIQ: Data Export", null, null, "RegionIQ"],
+      ["Regional observations", null, null, null],
+      [],
+      ["Item", "Value"],
+      ...table,
+    ]
+  }, [infoRows])
+
+  const filenameBase = useMemo(() => {
+    const safe = (s: string) => String(s).replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 120)
+    const m = metrics.length === 1 ? metrics[0] : `metrics-${metrics.length}`
+    const r = regions.length === 1 ? regions[0] : `regions-${regions.length}`
+    return safe(`regioniq_regional_observations_${m}_${r}_${localScenario}`)
+  }, [metrics, regions, localScenario])
+
+  const previewInfoRows = infoRows.slice(0, 20)
+  const previewDataRows = canonicalRows.slice(0, 30)
+  const previewTimeSeries = useMemo(() => {
+    // Preview-only (matches XLSX Time Series tab for single-metric+single-region).
+    const years = Array.from(new Set(canonicalRows.map((r: any) => r.Year).filter((y: any) => typeof y === "number"))).sort(
+      (a: any, b: any) => Number(a) - Number(b)
+    ) as number[]
+    const header = ["Scenario \\ Year", ...years.map(String)]
+    const rows: Record<string, any>[] = []
+    for (const scen of ["Baseline", "Upside", "Downside"]) {
+      const row: Record<string, any> = { "Scenario \\ Year": scen }
+      for (const y of years) row[String(y)] = null
+      for (const r of canonicalRows as any[]) {
+        if (r.Scenario !== scen) continue
+        if (typeof r.Year !== "number") continue
+        row[String(r.Year)] = r.Value ?? null
+      }
+      rows.push(row)
+    }
+    // Keep preview compact
+    const yearCols = header.slice(1, 10)
+    const previewHeader = [header[0], ...yearCols]
+    const previewRows = rows.map((r) => {
+      const out: Record<string, any> = { "Scenario \\ Year": r["Scenario \\ Year"] }
+      for (const y of yearCols) out[y] = r[y]
+      return out
+    })
+    return { header: previewHeader, rows: previewRows }
+  }, [canonicalRows])
 
   const regionTree = useMemo(() => {
     if (!itlToLad) return null
@@ -585,28 +673,6 @@ export function MetricDataTab({ metricId, region, year, scenario, title, classNa
     }
   }
 
-  const exportCsv = () => {
-    const rows = (result?.data ?? []) as any[]
-    const rowsForCsv = rows.map((r) => ({
-      metric_id: r.metric_id,
-      region_code: r.region_code,
-      level: r.level,
-      time_period: r.time_period,
-      scenario: r.scenario,
-      value: r.value ?? "",
-      data_type: r.data_type ?? "",
-      unit: r.unit ?? "",
-    }))
-    const csv = toCsv(rowsForCsv as any)
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `data_${metrics.join("-")}_${regions.join("-")}_${localScenario}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
   return (
     <Card className={cn(className)}>
       <CardHeader>
@@ -622,10 +688,37 @@ export function MetricDataTab({ metricId, region, year, scenario, title, classNa
               <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
               Show table
             </Button>
-            <Button variant="outline" size="sm" onClick={exportCsv} disabled={!result?.data?.length}>
-              <Download className="h-4 w-4 mr-2" />
-              Export CSV
-            </Button>
+            <ExportMenu
+              data={canonicalCsvRows}
+              filename={filenameBase}
+              disabled={!canonicalRows.length}
+              onExportXlsx={async () => {
+                const stamp = isoDateStamp()
+                const xlsxName = `${filenameBase}_${stamp}.xlsx`
+                const res = await fetch("/api/export/xlsx/data", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    requestBody,
+                    metrics,
+                    regions,
+                    scenario: localScenario,
+                    selectedYears,
+                  }),
+                })
+                if (!res.ok) {
+                  if (res.status === 401) {
+                    const here = window.location.pathname + window.location.search
+                    window.location.href = `/login?returnTo=${encodeURIComponent(here)}`
+                    return
+                  }
+                  const msg = await res.text()
+                  throw new Error(msg || "Server export failed")
+                }
+                const blob = await res.blob()
+                downloadBlob(blob, xlsxName)
+              }}
+            />
           </div>
         </div>
       </CardHeader>
@@ -1221,12 +1314,12 @@ export function MetricDataTab({ metricId, region, year, scenario, title, classNa
 
         {error && <div className="text-sm text-red-600">{error}</div>}
 
-        {/* Preview */}
+        {/* Preview (matches export sheets) */}
         <div className="rounded-lg border p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="text-sm font-medium">Preview</div>
             <Badge variant="outline" className="text-xs">
-              {previewRows.length} / {(result?.data ?? []).length} rows
+              {previewDataRows.length} / {canonicalRows.length} rows
             </Badge>
           </div>
           {loading ? (
@@ -1236,54 +1329,113 @@ export function MetricDataTab({ metricId, region, year, scenario, title, classNa
               <div className="h-10 w-full bg-muted/30 rounded-md animate-pulse" />
             </div>
           ) : (
-            <div className="overflow-auto border rounded-md">
-              <table className="min-w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="text-left p-2 whitespace-nowrap">Metric</th>
-                    <th className="text-left p-2 whitespace-nowrap">Region</th>
-                    <th className="text-left p-2 whitespace-nowrap">Level</th>
-                    <th className="text-right p-2 whitespace-nowrap">Year</th>
-                    <th className="text-left p-2 whitespace-nowrap">Scenario</th>
-                    <th className="text-right p-2 whitespace-nowrap">Value</th>
-                    <th className="text-left p-2 whitespace-nowrap">Type</th>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">XLSX tab 1: Info</div>
+                <div className="overflow-auto border rounded-md">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="text-left p-2 whitespace-nowrap">Item</th>
+                        <th className="text-left p-2 whitespace-nowrap">Value</th>
               </tr>
             </thead>
             <tbody>
-                  {previewRows.length ? (
-                    previewRows.map((r: any, i: number) => (
-                      <tr key={i} className="border-t">
-                        <td className="p-2 whitespace-nowrap">
-                          <div className="font-mono text-xs">{r.metric_id}</div>
-                          <div className="text-xs text-muted-foreground truncate max-w-[240px]">
-                            {metricLabel(r.metric_id)}
-                          </div>
+                      {previewInfoRows.length ? (
+                        previewInfoRows.map((r: any, i: number) => (
+                          <tr key={i} className="border-t">
+                            <td className="p-2 whitespace-nowrap">{r.Item}</td>
+                            <td className="p-2">
+                              <div className="truncate max-w-[780px]">{r.Value}</div>
                   </td>
-                        <td className="p-2 whitespace-nowrap">
-                          <div className="font-mono text-xs">{r.region_code}</div>
-                          <div className="text-xs text-muted-foreground truncate max-w-[240px]">
-                            {regionLabel(r.region_code)}
-                          </div>
-                  </td>
-                        <td className="p-2 whitespace-nowrap">{r.level}</td>
-                        <td className="p-2 whitespace-nowrap text-right font-mono">{r.time_period}</td>
-                        <td className="p-2 whitespace-nowrap font-mono text-xs">{r.scenario}</td>
-                        <td className="p-2 whitespace-nowrap text-right font-mono">
-                          {formatDisplay(r.value ?? null, unit)}
-                  </td>
-                        <td className="p-2 whitespace-nowrap">{r.data_type ?? "—"}</td>
                 </tr>
-                ))
+                        ))
+                      ) : (
+                <tr>
+                          <td className="p-2 text-muted-foreground" colSpan={2}>
+                            No info.
+                  </td>
+                </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">XLSX tab 2: Data (also matches CSV)</div>
+                <div className="overflow-auto border rounded-md">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-muted/50">
+                <tr>
+                        <th className="text-left p-2 whitespace-nowrap">Metric</th>
+                        <th className="text-left p-2 whitespace-nowrap">Region</th>
+                        <th className="text-left p-2 whitespace-nowrap">Region Code</th>
+                        <th className="text-right p-2 whitespace-nowrap">Year</th>
+                        <th className="text-left p-2 whitespace-nowrap">Scenario</th>
+                        <th className="text-right p-2 whitespace-nowrap">Value</th>
+                        <th className="text-left p-2 whitespace-nowrap">Units</th>
+                        <th className="text-left p-2 whitespace-nowrap">Data Type</th>
+                        <th className="text-left p-2 whitespace-nowrap">Source</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewDataRows.length ? (
+                        previewDataRows.map((r: any, i: number) => (
+                          <tr key={i} className="border-t">
+                            <td className="p-2 whitespace-nowrap">{r.Metric}</td>
+                            <td className="p-2 whitespace-nowrap">{r.Region}</td>
+                            <td className="p-2 whitespace-nowrap font-mono text-xs">{r["Region Code"]}</td>
+                            <td className="p-2 whitespace-nowrap text-right font-mono">{r.Year}</td>
+                            <td className="p-2 whitespace-nowrap">{r.Scenario}</td>
+                            <td className="p-2 whitespace-nowrap text-right font-mono">
+                              {formatDisplay(typeof r.Value === "number" ? r.Value : null, r.Units ?? unit)}
+                  </td>
+                            <td className="p-2 whitespace-nowrap">{r.Units ?? ""}</td>
+                            <td className="p-2 whitespace-nowrap">{r["Data Type"] ?? ""}</td>
+                            <td className="p-2 whitespace-nowrap">{r.Source ?? ""}</td>
+                </tr>
+                        ))
               ) : (
-                    <tr>
-                      <td className="p-2 text-muted-foreground" colSpan={7}>
-                        No data.
+                        <tr>
+                          <td className="p-2 text-muted-foreground" colSpan={9}>
+                            No data.
                     </td>
                   </tr>
               )}
             </tbody>
           </table>
         </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">XLSX tab 3: Time Series (single-metric + single-region)</div>
+                <div className="overflow-auto border rounded-md">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        {previewTimeSeries.header.map((h) => (
+                          <th key={h} className="text-left p-2 whitespace-nowrap">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewTimeSeries.rows.map((r: any, i: number) => (
+                        <tr key={i} className="border-t">
+                          {previewTimeSeries.header.map((h) => (
+                            <td key={h} className={cn("p-2 whitespace-nowrap", h !== "Scenario \\ Year" && "text-right font-mono")}>
+                              {h === "Scenario \\ Year" ? r[h] : r[h] == null ? "—" : formatDisplay(Number(r[h]), unit)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
