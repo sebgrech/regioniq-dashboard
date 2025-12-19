@@ -52,11 +52,13 @@ import {
   updateSearchParams,
   cn,
 } from "@/lib/utils"
-import { RegionCategoryBadge } from "@/components/region-category-badge"
-import { getRegionCategory } from "@/lib/region-category"
 import type { RegionMetadata } from "@/components/region-search"
 import { RegionRanking } from "@/components/region-ranking"
 import { RegionalContextTab } from "@/components/regional-context-tab"
+// Analysis tab components
+import { PlaceInsights } from "@/components/place-insights"
+import { NotableFlags } from "@/components/notable-flags"
+import { MetricInteractionInsights } from "@/components/metric-interaction-insights"
 
 type RegionLevel = "ITL1" | "ITL2" | "ITL3" | "LAD"
 
@@ -430,57 +432,6 @@ export default function MetricDetailContent({ id }: { id: string }) {
     return ((value - min) / (max - min)) * 100
   }
 
-  // Calculate region category based on ALL metrics (same logic as dashboard)
-  const regionCategory = useMemo(() => {
-    if (!allMetricsData || allMetricsData.length === 0) return null
-
-    // Extract growth rates from all metrics
-    const populationData = allMetricsData.find((d) => d.metricId === "population_total")
-    const gvaData = allMetricsData.find((d) => d.metricId === "nominal_gva_mn_gbp")
-    const incomeData = allMetricsData.find((d) => d.metricId === "gdhi_per_head_gbp")
-    const employmentData = allMetricsData.find((d) => d.metricId === "emp_total_jobs")
-
-    if (!populationData || !gvaData || !incomeData || !employmentData) return null
-
-    // Calculate YoY changes for each metric
-    const currentYearPop = populationData.data.find((d) => d.year === year)
-    const previousYearPop = populationData.data.find((d) => d.year === year - 1)
-    const populationGrowth = currentYearPop && previousYearPop
-      ? calculateChange(currentYearPop.value, previousYearPop.value)
-      : 0
-
-    const currentYearGva = gvaData.data.find((d) => d.year === year)
-    const previousYearGva = gvaData.data.find((d) => d.year === year - 1)
-    const gvaGrowth = currentYearGva && previousYearGva
-      ? calculateChange(currentYearGva.value, previousYearGva.value)
-      : 0
-
-    const currentYearIncome = incomeData.data.find((d) => d.year === year)
-    const previousYearIncome = incomeData.data.find((d) => d.year === year - 1)
-    const incomeGrowth = currentYearIncome && previousYearIncome
-      ? calculateChange(currentYearIncome.value, previousYearIncome.value)
-      : 0
-
-    const currentYearEmp = employmentData.data.find((d) => d.year === year)
-    const previousYearEmp = employmentData.data.find((d) => d.year === year - 1)
-    const employmentGrowth = currentYearEmp && previousYearEmp
-      ? calculateChange(currentYearEmp.value, previousYearEmp.value)
-      : 0
-
-    // Calculate GVA per capita
-    const gvaValue = currentYearGva?.value || 0
-    const populationValue = currentYearPop?.value || 0
-    const gvaPerCapita = populationValue > 0 ? (gvaValue * 1000000) / populationValue : undefined
-
-    return getRegionCategory({
-      populationGrowth,
-      gvaGrowth,
-      incomeGrowth,
-      employmentGrowth,
-      gvaPerCapita,
-    })
-  }, [allMetricsData, year])
-
   return (
     <div className="min-h-screen bg-background">
       <DashboardControls
@@ -512,12 +463,12 @@ export default function MetricDetailContent({ id }: { id: string }) {
                   </div>
                   <div>
                     <h1 className="text-3xl font-bold">{metric.title}</h1>
-                    <p className="text-muted-foreground">
+                    <p className="text-muted-foreground text-xl">
                       {selectedRegion?.name}
-                      {activeTab !== "overview" && activeTab !== "scenarios" && ` • ${year}`}
-                      {activeTab === "scenarios" 
+                      {activeTab !== "overview" && activeTab !== "scenarios" && activeTab !== "analysis" && ` • ${year}`}
+                      {activeTab === "scenarios"
                         ? " • all scenarios"
-                        : ` • ${scenario} scenario`}
+                        : activeTab !== "analysis" && ` • ${scenario} scenario`}
                     </p>
                   </div>
                 </div>
@@ -525,7 +476,7 @@ export default function MetricDetailContent({ id }: { id: string }) {
 
               {/* Key Stats */}
               <div className="space-y-2">
-                <div className="text-xs text-muted-foreground">
+                <div className="text-sm text-muted-foreground">
                   {asOf.source === "historical"
                     ? `Latest actual data (${asOfYear})`
                     : `Latest available data (${asOfYear})`}
@@ -580,9 +531,6 @@ export default function MetricDetailContent({ id }: { id: string }) {
               </div>
             </div>
 
-            <div className="flex items-center gap-3 ml-4">
-              {regionCategory && <RegionCategoryBadge category={regionCategory} />}
-            </div>
           </div>
         </div>
       </div>
@@ -973,7 +921,7 @@ export default function MetricDetailContent({ id }: { id: string }) {
               unit={metric.unit}
               metricId={metric.id}
               isLoading={detailData.isLoading}
-              height={600}
+              height={420}
             />
 
             <Card>
@@ -1096,81 +1044,67 @@ export default function MetricDetailContent({ id }: { id: string }) {
             />
           </TabsContent>
 
-          {/* Analysis */}
-          <TabsContent value="analysis" className="space-y-8">
-            {/* your analysis content unchanged */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Key Insights</CardTitle>
-                  <CardDescription>
-                    Analysis of {metric.title.toLowerCase()} trends
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-3 text-sm">
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <h4 className="font-medium mb-1">Trend Analysis</h4>
-                      <p className="text-muted-foreground">
-                        {yearOverYearChange >= 0 ? "Positive" : "Negative"} trajectory observed.{" "}
-                        {scenario} scenario projects{" "}
-                        {yearOverYearChange >= 0 ? "continued growth" : "potential recovery"} through {YEARS.max}.
-                      </p>
-                    </div>
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <h4 className="font-medium mb-1">Regional Context</h4>
-                      <p className="text-muted-foreground">
-                        {selectedRegion?.name} shows{" "}
-                        {region === "UKI" ? "above-average" : "mixed"} performance vs national averages.
-                      </p>
-                    </div>
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <h4 className="font-medium mb-1">Forecast Confidence</h4>
-                      <p className="text-muted-foreground">
-                        {year >= YEARS.forecastStart ? "Forecast" : "Historical"} data with{" "}
-                        {scenario === "baseline"
-                          ? "moderate"
-                          : scenario === "upside"
-                          ? "high optimism"
-                          : "conservative"}{" "}
-                        confidence.
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+          {/* Analysis - AI-powered interpretive analysis */}
+          <TabsContent value="analysis" className="space-y-6">
+            {/* PlaceInsights - PRIMARY: Place-level truth (3 canonical questions) */}
+            <PlaceInsights
+              regionCode={region}
+              regionName={selectedRegion?.name ?? region}
+              year={year}
+              scenario={scenario}
+            />
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Related Metrics</CardTitle>
-                  <CardDescription>Explore connected indicators</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {METRICS.filter((m) => m.id !== metric.id).map((rm) => {
-                      const RelatedIcon = rm.icon
-                      return (
-                        <Link
-                          key={rm.id}
-                          href={`/metric/${rm.id}?region=${region}&year=${year}${
-                            scenario !== "baseline" ? `&scenario=${scenario}` : ""
-                          }`}
-                          className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors"
-                        >
-                          <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center">
-                            <RelatedIcon className="h-4 w-4 text-primary" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="font-medium">{rm.title}</div>
-                            <div className="text-sm text-muted-foreground">View detailed analysis</div>
-                          </div>
-                        </Link>
-                      )
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Two-column layout: Notable Flags | Patterns */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Notable Flags - Place-specific exceptional observations */}
+              <NotableFlags
+                regionCode={region}
+                regionName={selectedRegion?.name ?? region}
+                year={year}
+                allMetricsData={allMetricsData}
+                isLoading={detailData.isLoading || allMetricsData.length === 0}
+              />
+
+              {/* Metric Interaction Insights - Cross-metric computed patterns */}
+              <MetricInteractionInsights
+                allMetricsData={allMetricsData}
+                year={year}
+                regionName={selectedRegion?.name ?? region}
+                currentMetricId={metric.id}
+                isLoading={detailData.isLoading || allMetricsData.length === 0}
+              />
             </div>
+
+            {/* Related Metrics - quick navigation */}
+            <Card className="bg-card/60 backdrop-blur-sm border border-border/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg">Related Metrics</CardTitle>
+                <CardDescription>Explore connected indicators for deeper analysis</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {METRICS.filter((m) => m.id !== metric.id && m.showInDashboard !== false).map((rm) => {
+                    const RelatedIcon = rm.icon
+                    return (
+                      <Link
+                        key={rm.id}
+                        href={`/metric/${rm.id}?region=${region}&year=${year}${
+                          scenario !== "baseline" ? `&scenario=${scenario}` : ""
+                        }`}
+                        className="flex items-center gap-3 p-3 rounded-lg border bg-background/50 hover:bg-accent transition-colors"
+                      >
+                        <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
+                          <RelatedIcon className="h-4 w-4 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate">{rm.shortTitle}</div>
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* ✅ Data (NEW) */}

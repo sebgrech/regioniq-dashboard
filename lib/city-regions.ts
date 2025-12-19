@@ -4,7 +4,7 @@
  * Maps major UK city names to their constituent LAD (Local Authority District) codes.
  * Generated from master_2025_geography_lookup.csv
  * 
- * Last generated: 2025-12-16T15:25:27.102Z
+ * Last generated: 2025-12-17T15:43:13.221Z
  */
 
 export const CITY_REGIONS: Record<string, string[]> = {

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ExportMenu } from "@/components/export-menu"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Copy,
   RefreshCw,
@@ -527,6 +528,8 @@ export function MetricDataTab({ metricId, region, year, scenario, title, classNa
     return { header: previewHeader, rows: previewRows }
   }, [canonicalRows])
 
+  const [previewTab, setPreviewTab] = useState<"info" | "data" | "timeseries">("data")
+
   const regionTree = useMemo(() => {
     if (!itlToLad) return null
     const itl2ToLads: Record<string, string[]> = itlToLad?.ITL2 ?? {}
@@ -678,10 +681,8 @@ export function MetricDataTab({ metricId, region, year, scenario, title, classNa
       <CardHeader>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <CardTitle>{title ?? "Data"}</CardTitle>
-        <CardDescription>
-              Statistical selector (PxWeb-style). Choose dimensions, then show table.
-        </CardDescription>
+            <CardTitle>Data selector</CardTitle>
+            <CardDescription>Choose dimensions, then show table.</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={run} disabled={loading}>
@@ -1318,9 +1319,11 @@ export function MetricDataTab({ metricId, region, year, scenario, title, classNa
         <div className="rounded-lg border p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="text-sm font-medium">Preview</div>
-            <Badge variant="outline" className="text-xs">
-              {previewDataRows.length} / {canonicalRows.length} rows
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs">
+                {previewTab === "data" ? `${previewDataRows.length} / ${canonicalRows.length} rows` : previewTab === "info" ? `${previewInfoRows.length} items` : "Time series"}
+              </Badge>
+            </div>
           </div>
           {loading ? (
             <div className="space-y-2">
@@ -1329,9 +1332,14 @@ export function MetricDataTab({ metricId, region, year, scenario, title, classNa
               <div className="h-10 w-full bg-muted/30 rounded-md animate-pulse" />
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <div className="text-xs text-muted-foreground">XLSX tab 1: Info</div>
+            <Tabs value={previewTab} onValueChange={(v) => setPreviewTab(v as any)}>
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="info">Info</TabsTrigger>
+                <TabsTrigger value="data">Data</TabsTrigger>
+                <TabsTrigger value="timeseries">Time Series</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="info" className="mt-4">
                 <div className="overflow-auto border rounded-md">
                   <table className="min-w-full text-sm">
                     <thead className="bg-muted/50">
@@ -1360,10 +1368,9 @@ export function MetricDataTab({ metricId, region, year, scenario, title, classNa
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </TabsContent>
 
-              <div className="space-y-2">
-                <div className="text-xs text-muted-foreground">XLSX tab 2: Data (also matches CSV)</div>
+              <TabsContent value="data" className="mt-4">
                 <div className="overflow-auto border rounded-md">
                   <table className="min-w-full text-sm">
                     <thead className="bg-muted/50">
@@ -1406,10 +1413,9 @@ export function MetricDataTab({ metricId, region, year, scenario, title, classNa
             </tbody>
           </table>
         </div>
-              </div>
+              </TabsContent>
 
-              <div className="space-y-2">
-                <div className="text-xs text-muted-foreground">XLSX tab 3: Time Series (single-metric + single-region)</div>
+              <TabsContent value="timeseries" className="mt-4">
                 <div className="overflow-auto border rounded-md">
                   <table className="min-w-full text-sm">
                     <thead className="bg-muted/50">
@@ -1434,8 +1440,8 @@ export function MetricDataTab({ metricId, region, year, scenario, title, classNa
                     </tbody>
                   </table>
                 </div>
-              </div>
-            </div>
+              </TabsContent>
+            </Tabs>
           )}
         </div>
 

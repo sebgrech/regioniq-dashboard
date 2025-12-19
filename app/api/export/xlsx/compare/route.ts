@@ -88,14 +88,14 @@ export async function POST(req: NextRequest) {
         }
 
         return {
-          Metric: metric.title,
+      Metric: metric.title,
           Region: regionNameByCode.get(originalRegion) ?? originalRegion,
           "Region Code": originalRegion,
-          Year: r.time_period,
-          Scenario: scenarioLabel,
-          Value: r.value ?? null,
-          Units: metric.unit,
-          "Data Type": String(r.data_type ?? "").toLowerCase() === "forecast" ? "Forecast" : "Historical",
+      Year: r.time_period,
+      Scenario: scenarioLabel,
+      Value: r.value ?? null,
+      Units: metric.unit,
+      "Data Type": String(r.data_type ?? "").toLowerCase() === "forecast" ? "Forecast" : "Historical",
           Source: sourceLabel({ dataType: r.data_type, dataQuality: r.data_quality }),
         }
       })

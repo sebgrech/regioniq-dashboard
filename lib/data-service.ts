@@ -369,40 +369,40 @@ export async function fetchChoropleth(params: {
     console.log(`   Scenario: ${scenario}`)
     
     const result = await getOrFetch<ChoroplethData>(cacheKey, async () => {
-      const values: Record<string, number> = {}
-      let min = Number.POSITIVE_INFINITY
-      let max = Number.NEGATIVE_INFINITY
+    const values: Record<string, number> = {}
+    let min = Number.POSITIVE_INFINITY
+    let max = Number.NEGATIVE_INFINITY
 
       const ingestRows = (rows: any[] | null | undefined) => {
         if (!rows || rows.length === 0) return
         rows.forEach((row) => {
-          let value: number
-
+        let value: number
+        
           // Select appropriate column based on scenario (historical always uses value)
-          if (row.data_type === "historical") {
-            value = row.value || 0
-          } else {
+        if (row.data_type === "historical") {
+          value = row.value || 0
+        } else {
             switch (scenario) {
-              case "baseline":
-                value = row.value || 0
-                break
-              case "downside":
-                value = row.ci_lower ?? row.value ?? 0
-                break
-              case "upside":
-                value = row.ci_upper ?? row.value ?? 0
-                break
-              default:
-                value = row.value || 0
-            }
+            case "baseline":
+              value = row.value || 0
+              break
+            case "downside":
+              value = row.ci_lower ?? row.value ?? 0
+              break
+            case "upside":
+              value = row.ci_upper ?? row.value ?? 0
+              break
+            default:
+              value = row.value || 0
           }
-
-          const uiCode = getUIRegionCode(row.region_code)
-          values[uiCode] = value
-          min = Math.min(min, value)
-          max = Math.max(max, value)
-        })
-      }
+        }
+        
+        const uiCode = getUIRegionCode(row.region_code)
+        values[uiCode] = value
+        min = Math.min(min, value)
+        max = Math.max(max, value)
+      })
+    }
 
       // Special-case: NI jobs use `emp_total_jobs_ni`, and NI ITL1 jobs live in ITL2 (TLN0).
       if (metricId === "emp_total_jobs") {
@@ -478,8 +478,8 @@ export async function fetchChoropleth(params: {
         ingestRows(data)
       }
 
-      console.log(`🗺️ Choropleth data: ${Object.keys(values).length} regions (UI codes)`)
-      return { min, max, values }
+    console.log(`🗺️ Choropleth data: ${Object.keys(values).length} regions (UI codes)`)
+    return { min, max, values }
     })
 
     return result

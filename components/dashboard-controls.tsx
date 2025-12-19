@@ -42,8 +42,12 @@ export function DashboardControls({
 
   // Determine visibility and positioning based on active tab
   const isMetricDetailPage = activeTab !== undefined
-  const hideYearSlider = isMetricDetailPage && (activeTab === "overview" || activeTab === "scenarios")
-  const hideScenarioToggles = isMetricDetailPage && activeTab === "scenarios"
+  // Hide year slider on overview, scenarios, analysis, AND data tabs
+  const hideYearSlider =
+    isMetricDetailPage &&
+    (activeTab === "overview" || activeTab === "scenarios" || activeTab === "analysis" || activeTab === "data")
+  // Hide scenario toggles on scenarios, analysis, AND data tabs
+  const hideScenarioToggles = isMetricDetailPage && (activeTab === "scenarios" || activeTab === "analysis" || activeTab === "data")
   const moveScenarioTogglesLeft = isMetricDetailPage && activeTab === "overview"
 
   // Snapshot year quick picks (kept lightweight + deterministic)
@@ -174,10 +178,11 @@ export function DashboardControls({
           {!moveScenarioTogglesLeft && (
             <div 
               className={cn(
-                "flex rounded-lg border p-1 transition-all duration-700 ease-in-out",
+                // Collapse width/height when hidden so it doesn't reserve space.
+                "flex rounded-lg border p-1 overflow-hidden transition-all duration-700 ease-in-out",
                 hideScenarioToggles
-                  ? "opacity-0 translate-x-full"
-                  : "opacity-100 translate-x-0"
+                  ? "opacity-0 translate-x-full max-w-0 max-h-0 p-0 border-0 pointer-events-none"
+                  : "opacity-100 translate-x-0 max-w-[360px] max-h-20"
               )}
             >
             {(["baseline", "upside", "downside"] as const).map((s) => (

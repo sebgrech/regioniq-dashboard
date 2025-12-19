@@ -87,7 +87,7 @@ export const ChartTimeseries = memo(function ChartTimeseries({
   const gridStroke = isDarkMode ? "#333333" : "#E5E7EB"
   
   // Y-axis domain padding constants
-  const PAD = 0.15 // 15% extra above max to prevent top tick overlap
+  const PAD = 0.25 // 25% extra above max to prevent top tick overlap
   const PAD_BOTTOM = 0.05 // 5% extra below min
   
   // Zoom state - only initialize if zoom is enabled

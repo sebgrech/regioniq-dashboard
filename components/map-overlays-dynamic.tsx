@@ -359,10 +359,10 @@ export function MapOverlaysDynamic({
 
         if (metric === "emp_total_jobs") {
           const { data: baseRows, error: baseErr } = await supabase
-            .from(tableName)
-            .select("region_code, value, ci_lower, ci_upper, data_type")
+        .from(tableName)
+        .select("region_code, value, ci_lower, ci_upper, data_type")
             .eq("metric_id", "emp_total_jobs")
-            .eq("period", year)
+        .eq("period", year)
           if (baseErr) throw new Error(baseErr.message)
 
           if (level === "ITL1") {
@@ -393,12 +393,12 @@ export function MapOverlaysDynamic({
             .select("region_code, value, ci_lower, ci_upper, data_type")
             .eq("metric_id", metric)
             .eq("period", year)
-          if (error) {
+        if (error) {
             throw new Error(error.message)
           }
           data = rows ?? []
-        }
-
+          }
+          
           // Process rows to select correct value based on scenario
           return (data ?? []).map((row) => {
             let selectedValue: number | null = null
@@ -466,10 +466,10 @@ export function MapOverlaysDynamic({
 
           if (metric === "emp_total_jobs") {
             const { data: baseRows, error: baseErr } = await supabase
-              .from(tableName)
-              .select("region_code, value, ci_lower, ci_upper, data_type")
+            .from(tableName)
+            .select("region_code, value, ci_lower, ci_upper, data_type")
               .eq("metric_id", "emp_total_jobs")
-              .eq("period", pastYear)
+            .eq("period", pastYear)
             if (baseErr) throw new Error(baseErr.message)
 
             if (level === "ITL1") {

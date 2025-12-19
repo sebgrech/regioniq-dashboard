@@ -219,7 +219,7 @@ const ChartTimeseriesCompare = ({
         {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
       <CardContent>
-        <div className="h-[640px] w-full">
+        <div className="h-[500px] w-full">
           <ResponsiveContainer>
             <LineChart data={chartData} margin={{ top: 50, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid

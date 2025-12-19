@@ -173,12 +173,12 @@ export async function POST(req: NextRequest) {
           Metric: metricTitle.get(displayMetricId) ?? displayMetricId,
           Region: regionIndex?.[originalRegion]?.name ?? originalRegion,
           "Region Code": originalRegion,
-          Year: r.time_period,
-          Scenario: scenarioLabel(r.scenario),
-          Value: typeof r.value === "number" ? r.value : r.value == null ? null : Number(r.value),
-          Units: r.unit ?? "",
-          "Data Type": dataTypeLabel(r.data_type),
-          Source: sourceLabel({ dataType: r.data_type, dataQuality: r.data_quality }),
+      Year: r.time_period,
+      Scenario: scenarioLabel(r.scenario),
+      Value: typeof r.value === "number" ? r.value : r.value == null ? null : Number(r.value),
+      Units: r.unit ?? "",
+      "Data Type": dataTypeLabel(r.data_type),
+      Source: sourceLabel({ dataType: r.data_type, dataQuality: r.data_quality }),
         }
       })
       .filter(Boolean) as any[]
