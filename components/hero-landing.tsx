@@ -1,327 +1,434 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react"
-import { useRouter } from "next/navigation"
-import Image from "next/image"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowRight } from "lucide-react"
-import { cn } from "@/lib/utils"
 
-interface Flowline {
-  id: string
-  startAnchor: { x: number; y: number }
-  endAnchor: { x: number; y: number }
-  progress: number
-  speed: number
-  opacity: number
+type Anchor = {
+  x: number // %
+  y: number // %
+  delay: number // seconds
+  size: number // px
 }
 
-// Predefined anchor coordinates relative to SVG (percentage-based)
-const ANCHORS = [
-  { x: 42, y: 28 }, // Glasgow
-  { x: 50, y: 42 }, // Newcastle
-  { x: 55, y: 54 }, // Leeds
-  { x: 58, y: 63 }, // Manchester
-  { x: 60, y: 70 }, // Birmingham
-  { x: 66, y: 82 }, // London
-  { x: 52, y: 75 }, // Nottingham
-  { x: 56, y: 78 }, // Leicester
-  { x: 62, y: 88 }, // Bristol
-  { x: 64, y: 90 }, // Cardiff
-  { x: 48, y: 50 }, // Sheffield
-  { x: 54, y: 58 }, // Liverpool
-  { x: 44, y: 32 }, // Edinburgh
-  { x: 46, y: 38 }, // Aberdeen
-  { x: 68, y: 85 }, // Brighton
-  { x: 50, y: 68 }, // Derby
-  { x: 58, y: 72 }, // Coventry
-  { x: 64, y: 80 }, // Oxford
-  { x: 60, y: 76 }, // Northampton
-  { x: 66, y: 84 }, // Reading
+// Fewer points reads more premium (less "busy") while still signaling coverage.
+const ANCHORS: Anchor[] = [
+  { x: 44, y: 28, delay: 0.0, size: 6 }, // Glasgow
+  { x: 48, y: 33, delay: 0.5, size: 5 }, // Edinburgh
+  { x: 58, y: 62, delay: 1.1, size: 6 }, // Manchester
+  { x: 60, y: 70, delay: 1.6, size: 6 }, // Birmingham
+  { x: 66, y: 82, delay: 2.2, size: 7 }, // London
+  { x: 64, y: 90, delay: 2.8, size: 5 }, // Cardiff
 ]
 
-export function HeroLanding() {
+function clamp01(n: number) {
+  return Math.max(0, Math.min(1, n))
+}
+
+/**
+ * Paste this file as:
+ *   app/page.tsx            (if this is your landing)
+ * or
+ *   app/login/page.tsx      (if this is your auth route)
+ *
+ * Assets expected in /public:
+ *   /gb1.svg
+ */
+export default function LandingPage() {
   const router = useRouter()
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const searchParams = useSearchParams()
   const containerRef = useRef<HTMLDivElement>(null)
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
-  const [isTransitioning, setIsTransitioning] = useState(false)
-  const flowlinesRef = useRef<Flowline[]>([])
-  const animationFrameRef = useRef<number | undefined>(undefined)
 
-  // Initialize flowlines between anchors
-  const initializeFlowlines = useCallback(() => {
-    const lines: Flowline[] = []
-    const numLines = 16
+  const [loaded, setLoaded] = useState(false)
+  const [reducedMotion, setReducedMotion] = useState(false)
+  const [hasAuthHashTokens] = useState(() => {
+    if (typeof window === "undefined") return false
+    const hash = window.location.hash
+    if (!hash || hash.length < 2) return false
+    const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash)
+    return Boolean(params.get("access_token") && params.get("refresh_token"))
+  })
 
-    for (let i = 0; i < numLines; i++) {
-      const startAnchor = ANCHORS[Math.floor(Math.random() * ANCHORS.length)]
-      let endAnchor = ANCHORS[Math.floor(Math.random() * ANCHORS.length)]
-      
-      // Ensure start and end are different
-      while (endAnchor === startAnchor) {
-        endAnchor = ANCHORS[Math.floor(Math.random() * ANCHORS.length)]
-      }
+  // Placeholder auth state (Supabase not wired yet)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [authLoading, setAuthLoading] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
 
-      lines.push({
-        id: `line-${i}`,
-        startAnchor,
-        endAnchor,
-        progress: Math.random(),
-        speed: 0.15 + Math.random() * 0.2,
-        opacity: 0.2 + Math.random() * 0.3,
-      })
-    }
+  const returnTo = useMemo(() => searchParams.get("returnTo") || "/dashboard", [searchParams])
 
-    flowlinesRef.current = lines
-  }, [])
-
-  // Draw flowlines animation
-  const drawFlowlines = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas || !containerRef.current) return
-
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
-
-    const rect = containerRef.current.getBoundingClientRect()
-    const { width, height } = rect
-    
-    // Set canvas size
-    canvas.width = width
-    canvas.height = height
-
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height)
-
-    // Parallax offset for flowlines
-    const parallaxX = (mousePos.x - 0.5) * 8
-    const parallaxY = (mousePos.y - 0.5) * 8
-
-    // Draw flowlines
-    flowlinesRef.current.forEach((line) => {
-      const startX = (line.startAnchor.x / 100) * width + parallaxX
-      const startY = (line.startAnchor.y / 100) * height + parallaxY
-      const endX = (line.endAnchor.x / 100) * width + parallaxX
-      const endY = (line.endAnchor.y / 100) * height + parallaxY
-
-      const currentX = startX + (endX - startX) * line.progress
-      const currentY = startY + (endY - startY) * line.progress
-
-      // Add slight noise jitter
-      const jitterX = (Math.random() - 0.5) * 2
-      const jitterY = (Math.random() - 0.5) * 2
-
-      // Draw line from start to current position
-      ctx.beginPath()
-      ctx.moveTo(startX, startY)
-      ctx.lineTo(currentX + jitterX, currentY + jitterY)
-      
-      // Gradient stroke
-      const gradient = ctx.createLinearGradient(startX, startY, currentX, currentY)
-      gradient.addColorStop(0, `rgba(255, 255, 255, ${line.opacity * 0.3})`)
-      gradient.addColorStop(0.5, `rgba(255, 255, 255, ${line.opacity})`)
-      gradient.addColorStop(1, `rgba(255, 255, 255, ${line.opacity * 0.3})`)
-
-      ctx.strokeStyle = gradient
-      ctx.lineWidth = 1 + Math.random() * 0.5 // 1px to 1.5px
-      ctx.stroke()
-
-      // Draw moving dot at current position
-      ctx.beginPath()
-      ctx.arc(currentX + jitterX, currentY + jitterY, 2, 0, Math.PI * 2)
-      ctx.fillStyle = `rgba(255, 255, 255, ${line.opacity * 1.2})`
-      ctx.fill()
-
-      // Update progress
-      line.progress += line.speed * 0.008
-      if (line.progress > 1) {
-        line.progress = 0
-        // Randomize new destination
-        const newEndAnchor = ANCHORS[Math.floor(Math.random() * ANCHORS.length)]
-        if (newEndAnchor !== line.startAnchor) {
-          line.endAnchor = newEndAnchor
-        }
-      }
-    })
-
-    animationFrameRef.current = requestAnimationFrame(drawFlowlines)
-  }, [mousePos])
-
-  // Handle mouse movement for parallax
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!containerRef.current) return
-    
-    const rect = containerRef.current.getBoundingClientRect()
-    const x = (e.clientX - rect.left) / rect.width
-    const y = (e.clientY - rect.top) / rect.height
-    
-    setMousePos({ x, y })
-  }, [])
-
-  // Handle canvas resize
-  const handleResize = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas || !containerRef.current) return
-
-    const rect = containerRef.current.getBoundingClientRect()
-    canvas.width = rect.width
-    canvas.height = rect.height
-  }, [])
-
-  // Initialize
+  // If Supabase redirects invite/magic links with tokens in the URL hash (/#access_token=...),
+  // catch it here (both "/" and "/login" render this component) and forward to /auth/fragment.
   useEffect(() => {
-    initializeFlowlines()
-    handleResize()
-    
-    window.addEventListener("resize", handleResize)
-    window.addEventListener("mousemove", handleMouseMove)
+    if (typeof window === "undefined") return
+    const hash = window.location.hash
+    if (!hash || hash.length < 2) return
 
-    // Start animation
-    drawFlowlines()
+    const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash)
+    const access_token = params.get("access_token")
+    const refresh_token = params.get("refresh_token")
+    if (!access_token || !refresh_token) return
 
-    return () => {
-      window.removeEventListener("resize", handleResize)
-      window.removeEventListener("mousemove", handleMouseMove)
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current)
-      }
-    }
-  }, [initializeFlowlines, handleResize, handleMouseMove, drawFlowlines])
+    const dest = `/auth/fragment?returnTo=${encodeURIComponent(returnTo)}${hash}`
+    window.location.replace(dest)
+  }, [returnTo])
 
-  const handleEnterDashboard = () => {
-    setIsTransitioning(true)
-    // Smooth fade transition (300ms)
-    setTimeout(() => {
-      router.push("/dashboard")
-    }, 300)
+  // If we landed here with Supabase tokens in the URL hash, don't flash the full sign-in UI.
+  // Show a minimal bridge screen while we redirect to /auth/fragment.
+  if (hasAuthHashTokens) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0B0F14] text-white">
+        <div className="text-sm text-white/60">Signing you in…</div>
+      </div>
+    )
   }
 
-  // Parallax for text content (very subtle)
-  const textOffset = {
-    x: (mousePos.x - 0.5) * 4,
-    y: (mousePos.y - 0.5) * 4,
+  useEffect(() => {
+    const t = window.setTimeout(() => setLoaded(true), 80)
+    return () => window.clearTimeout(t)
+  }, [])
+
+  // Reduced-motion support (Linear-level polish).
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)")
+    const apply = () => setReducedMotion(mq.matches)
+    apply()
+    mq.addEventListener?.("change", apply)
+    return () => mq.removeEventListener?.("change", apply)
+  }, [])
+
+  // Smooth pointer tracking (throttled via RAF) -> CSS variables (no React rerender per move).
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    // Seed defaults so initial paint is stable.
+    el.style.setProperty("--mx", "0.5")
+    el.style.setProperty("--my", "0.5")
+    el.style.setProperty("--mxp", "50%")
+    el.style.setProperty("--myp", "50%")
+
+    if (reducedMotion) return
+
+    let raf = 0
+    let pendingX = 0.5
+    let pendingY = 0.5
+
+    const commit = () => {
+      raf = 0
+      el.style.setProperty("--mx", String(pendingX))
+      el.style.setProperty("--my", String(pendingY))
+      el.style.setProperty("--mxp", `${Math.round(pendingX * 1000) / 10}%`)
+      el.style.setProperty("--myp", `${Math.round(pendingY * 1000) / 10}%`)
+    }
+
+    const onMove = (e: PointerEvent) => {
+      const r = el.getBoundingClientRect()
+      pendingX = clamp01((e.clientX - r.left) / r.width)
+      pendingY = clamp01((e.clientY - r.top) / r.height)
+      if (!raf) raf = requestAnimationFrame(commit)
+    }
+
+    // Desktop only: avoid weird parallax on touch.
+    const coarse = window.matchMedia?.("(pointer: coarse)")?.matches ?? false
+    if (coarse) return
+
+    window.addEventListener("pointermove", onMove, { passive: true })
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      window.removeEventListener("pointermove", onMove)
+    }
+  }, [reducedMotion])
+
+  const parallax = useMemo(
+    () => ({
+      // Left is stronger than right for depth.
+      left: `translate3d(calc((var(--mx, 0.5) - 0.5) * 10px), calc((var(--my, 0.5) - 0.5) * 10px), 0)`,
+      right: `translate3d(calc((var(--mx, 0.5) - 0.5) * 4px), calc((var(--my, 0.5) - 0.5) * 4px), 0)`,
+    }),
+    []
+  )
+
+  const onSubmitLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAuthError(null)
+    setAuthLoading(true)
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload?.error || "Login failed")
+      // Signal to the dashboard that this navigation came right after a successful login.
+      // The dashboard will decide whether to show the tour (e.g. only if not seen for this user).
+      try {
+        localStorage.setItem("riq:just-logged-in", "1")
+      } catch {}
+      router.replace(returnTo)
+      router.refresh()
+    } catch (err: any) {
+      setAuthError(err?.message || "Login failed")
+    } finally {
+      setAuthLoading(false)
+    }
   }
 
   return (
-    <div
-      ref={containerRef}
-      className={cn(
-        "relative min-h-screen flex items-center justify-end px-12 bg-[#0B0F14] overflow-hidden",
-        isTransitioning && "opacity-0 transition-opacity duration-300"
-      )}
-    >
-      {/* Film grain overlay */}
-      <div
-        className="absolute inset-0 opacity-[0.03] pointer-events-none z-[3]"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-          backgroundSize: "200px 200px",
-        }}
-      />
+    <div ref={containerRef} className="min-h-screen bg-[#0B0F14] text-white">
+      <div className="relative grid min-h-screen grid-cols-1 lg:grid-cols-2">
+        {/* LEFT PANEL (visual) */}
+        <div
+          className="relative overflow-hidden border-b border-white/5 lg:border-b-0 lg:border-r-0"
+        >
+          {/* Divider (Linear-style hairline + gentle glow) */}
+          <div className="hidden lg:block absolute right-0 top-0 h-full w-px pointer-events-none">
+            {/* Stripe-like: one crisp hairline, no glow */}
+            <div className="absolute inset-0 bg-gradient-to-b from-white/0 via-white/10 to-white/0" />
+          </div>
 
-      {/* UK Map Background - Layer 1 */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-[1]">
-        <img
-          src="/gb.svg"
-          alt="UK Map"
-          className="absolute left-[-10%] top-[-10%] h-[140vh] opacity-[0.08] blur-lg pointer-events-none"
-          style={{
-            animation: "fadeIn 0.6s ease-out 0.4s both",
-          }}
-        />
-      </div>
-
-      {/* Flowlines canvas - Layer 2 */}
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 z-[2] pointer-events-none"
-        style={{
-          animation: "fadeIn 0.6s ease-out 0.7s both",
-        }}
-      />
-
-      {/* Right column content - Layer 3 */}
-      <div
-        className="relative z-[3] max-w-[520px] text-left"
-        style={{
-          transform: `translate3d(${textOffset.x}px, ${textOffset.y}px, 0)`,
-          transition: "transform 0.1s ease-out",
-        }}
-      >
-        {/* Wordmark + tagline */}
-        <div className="relative z-[3]">
-          {/* Logo + wordmark row, matching nav style */}
+          {/* Ambient light (monochrome) */}
           <div
-            className="flex items-center gap-3 mb-4"
+            className="absolute inset-0 pointer-events-none"
             style={{
-              animation: "fadeIn 0.6s ease-out 0.9s both",
+              background:
+                "radial-gradient(900px 520px at var(--mxp, 50%) var(--myp, 50%), rgba(255,255,255,0.06) 0%, transparent 62%)",
+            }}
+          />
+
+          {/* UK outline + aligned points (single transformed layer so they always stay in sync) */}
+          <div
+            className="absolute inset-0 pointer-events-none z-10"
+            style={{
+              // The UK SVG is tall; slight scale-down keeps the full outline visible (prevents bottom cut-off).
+              transform: `${parallax.left} scale(0.78)`,
+              transformOrigin: "50% 50%",
+              transition: "transform 120ms ease-out",
             }}
           >
-            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-white/5">
-              {/* Logo icon */}
-              <div className="relative h-8 w-8">
-                {/* Light mode logo */}
-                <Image
-                  src="/x.png"
-                  alt="RegionIQ"
-                  fill
-                  className="object-contain dark:hidden"
-                  priority
-                />
-                {/* Dark mode logo */}
-                <Image
-                  src="/Frame 11.png"
-                  alt="RegionIQ"
-                  fill
-                  className="object-contain hidden dark:block"
-                  priority
-                />
+            {/* Render as SVG so the "dots" are literally inside the SVG layer */}
+            <svg
+              className="absolute left-[-16%] top-[-12%] h-[114vh] w-auto opacity-[0.34]"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="xMidYMid meet"
+              aria-label="UK Outline"
+              role="img"
+            >
+              <image
+                href="/gb1.svg"
+                x="0"
+                y="0"
+                width="100"
+                height="100"
+                preserveAspectRatio="xMidYMid meet"
+              style={{
+                  // Keep it visually as an outline: no blur/glow (those visually thicken strokes).
+                  filter: "brightness(0) invert(1) contrast(1.05)",
+                }}
+              />
+
+              {ANCHORS.map((a, idx) => {
+                // Pinpoint sizing: keep dots small and crisp.
+                const dotR = Math.max(0.65, a.size / 9) // scale px-ish -> viewBox-ish
+                const ringStart = dotR + 1.2
+                const ringEnd = ringStart + (6.5 + (idx % 3) * 1.25)
+                const dur = 3.4 + [0.0, 0.18, -0.12, 0.1, -0.05][idx % 5]
+                return (
+                  <g key={idx} transform={`translate(${a.x} ${a.y})`}>
+                    <circle r={dotR} fill="rgba(255,255,255,0.70)" stroke="rgba(255,255,255,0.14)" strokeWidth="0.22" />
+                    <circle r={ringStart} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="0.22">
+                      {!reducedMotion ? (
+                        <>
+                          <animate attributeName="r" values={`${ringStart};${ringEnd}`} dur={`${dur}s`} begin={`${a.delay}s`} repeatCount="indefinite" />
+                          <animate
+                            attributeName="opacity"
+                            values="0;0.28;0.08;0"
+                            keyTimes="0;0.12;0.72;1"
+                            dur={`${dur}s`}
+                            begin={`${a.delay}s`}
+                            repeatCount="indefinite"
+                          />
+                        </>
+                      ) : null}
+                    </circle>
+                  </g>
+                )
+              })}
+            </svg>
+          </div>
+
+          {/* Film grain */}
+          <div
+            className="absolute inset-0 opacity-[0.015] pointer-events-none"
+            style={{
+              backgroundImage:
+                "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+              backgroundSize: "220px 220px",
+            }}
+          />
+
+          {/* Vignette */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                "radial-gradient(ellipse at center, rgba(11,15,20,0) 0%, rgba(11,15,20,0.44) 72%, rgba(11,15,20,0.76) 100%)",
+            }}
+          />
+        </div>
+
+        {/* RIGHT PANEL (auth placeholder) */}
+        <div className="relative flex items-center justify-center px-8 py-14">
+          {/* Ultra-subtle structure (grid) so the right side feels equally "designed" */}
+          <div
+            className="absolute inset-0 pointer-events-none z-0 opacity-[0.022]"
+            style={{
+              backgroundImage:
+                "linear-gradient(to right, rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.028) 1px, transparent 1px)",
+              backgroundSize: "56px 56px, 56px 56px",
+              WebkitMaskImage:
+                "radial-gradient(closest-side at 55% 45%, rgba(0,0,0,1) 0%, rgba(0,0,0,0.75) 55%, rgba(0,0,0,0) 100%)",
+              maskImage:
+                "radial-gradient(closest-side at 55% 45%, rgba(0,0,0,1) 0%, rgba(0,0,0,0.75) 55%, rgba(0,0,0,0) 100%)",
+            }}
+          />
+
+          {/* Big monochrome logo watermark (behind content) */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+            {/* Soft mask so it feels "printed into" the background (Apple/Linear style). */}
+            <div
+              className="absolute inset-0"
+              style={{
+                WebkitMaskImage:
+                  "radial-gradient(closest-side at 65% 48%, rgba(0,0,0,1) 0%, rgba(0,0,0,0.82) 38%, rgba(0,0,0,0.35) 62%, rgba(0,0,0,0) 100%)",
+                maskImage:
+                  "radial-gradient(closest-side at 65% 48%, rgba(0,0,0,1) 0%, rgba(0,0,0,0.82) 38%, rgba(0,0,0,0.35) 62%, rgba(0,0,0,0) 100%)",
+              }}
+            >
+              <img
+                src="/Frame 11.png"
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+                className="absolute left-1/2 top-1/2 w-[860px] max-w-none opacity-[0.045] select-none"
+                style={{
+                  // Off-center placement reads more premium than a dead-centered watermark.
+                  // Parallax applies on top, but we keep a stable baseline composition.
+                  transform: `translate3d(-30%, -50%, 0) ${parallax.right}`,
+                  mixBlendMode: "soft-light",
+                  filter: "grayscale(1) brightness(1.12) contrast(1.03) blur(2px)",
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Edge fade into the form side */}
+          <div
+            className="absolute inset-y-0 left-0 w-24 pointer-events-none hidden lg:block"
+            style={{
+              background:
+                "linear-gradient(to right, rgba(11,15,20,0.92), rgba(11,15,20,0))",
+            }}
+          />
+
+          <div
+            className="relative z-10 w-full max-w-[420px]"
+            style={{
+              transform: parallax.right,
+              transition: "transform 120ms ease-out",
+            }}
+          >
+            {/* Context header (Linear-style) */}
+            <div
+              className={[
+                "mb-6 space-y-2",
+                "transition-all duration-700",
+                loaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2",
+              ].join(" ")}
+            >
+              <div className="text-[12px] tracking-[0.18em] uppercase text-white/50">RegionIQ</div>
+              <div
+                className="text-[32px] leading-[1.05] font-semibold tracking-tight text-white"
+                style={{ fontFamily: "var(--font-plus-jakarta-sans), system-ui, sans-serif" }}
+              >
+                Sign in
+              </div>
+              <div className="text-[13px] leading-relaxed text-white/45">
+                Access regional intelligence, faster.
               </div>
             </div>
-            <span
-              className="font-plus-jakarta text-[clamp(28px,3.4vw,40px)] font-bold tracking-tight leading-none bg-gradient-to-r from-white to-white/90 bg-clip-text text-transparent whitespace-nowrap"
-              style={{
-                fontFamily: "var(--font-plus-jakarta-sans), sans-serif",
-              }}
-            >
-              RegionIQ
-            </span>
-          </div>
 
-          {/* Tagline – keep light, but aligned left under the wordmark */}
-          <p
-            className="font-plus-jakarta text-[clamp(14px,1.4vw,18px)] font-normal text-white/70 leading-snug max-w-[360px]"
-            style={{
-              fontFamily: "var(--font-plus-jakarta-sans), sans-serif",
-              animation: "fadeIn 0.5s ease-out 1.1s both",
-            }}
-          >
-            See the Future. Region by Region.
-          </p>
-
-          {/* CTA button block */}
-          <div className="mt-8">
-            <button
-              onClick={handleEnterDashboard}
-              className={cn(
-                "group relative px-8 py-4 rounded-[18px] h-16",
-                "bg-white/5 backdrop-blur-xl border border-white/10",
-                "text-white font-light",
-                "transition-all duration-300",
-                "hover:bg-white/10",
-                "active:scale-95",
-                "focus:outline-none focus:ring-2 focus:ring-white/30 focus:ring-offset-2 focus:ring-offset-[#0B0F14]",
-                "flex items-center gap-3"
-              )}
-              style={{
-                animation: "fadeIn 0.5s ease-out 1.3s both",
-              }}
+            {/* Auth card */}
+            <div
+              className={[
+                "rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-xl p-6",
+                "transition-all duration-700",
+                loaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2",
+              ].join(" ")}
+              style={{ transitionDelay: "90ms" }}
             >
-              <span>Enter Dashboard</span>
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </button>
+              <form onSubmit={onSubmitLogin} className="space-y-4">
+                <input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Email"
+                  className={[
+                    "h-12 w-full rounded-xl px-4",
+                    "bg-[#0B0F14]/40 border border-white/10",
+                    "text-white/90 placeholder:text-white/30",
+                    "focus:outline-none focus:ring-2 focus:ring-white/15",
+                  ].join(" ")}
+                  autoComplete="email"
+                  type="email"
+                  required
+                />
+
+                <input
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Password"
+                  className={[
+                    "h-12 w-full rounded-xl px-4",
+                    "bg-[#0B0F14]/40 border border-white/10",
+                    "text-white/90 placeholder:text-white/30",
+                    "focus:outline-none focus:ring-2 focus:ring-white/15",
+                  ].join(" ")}
+                  autoComplete="current-password"
+                  type="password"
+                  required
+                />
+
+                {authError ? <div className="text-[13px] text-red-300/90">{authError}</div> : null}
+
+                <button
+                  type="submit"
+                  disabled={authLoading || !email || !password}
+                  className={[
+                    "group w-full h-12 rounded-xl px-4",
+                    "bg-white text-[#0B0F14] font-medium",
+                    "transition-all duration-200",
+                    "hover:bg-white/90 active:scale-[0.99]",
+                    "disabled:opacity-40 disabled:pointer-events-none",
+                    "flex items-center justify-center gap-2",
+                  ].join(" ")}
+                >
+                  {authLoading ? "Signing in…" : "Sign in"}
+                  {!authLoading ? (
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                  ) : null}
+                </button>
+              </form>
+            </div>
+
+            {/* Ultra-min footer */}
+            <div className="mt-8 text-[12px] text-white/22">
+              © {new Date().getFullYear()}
+            </div>
           </div>
         </div>
+
+        <style jsx>{``}</style>
       </div>
     </div>
   )

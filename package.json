@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
+    "@mapbox/mapbox-gl-draw": "^1.5.1",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",
     "@radix-ui/react-aspect-ratio": "1.1.1",
@@ -45,11 +46,16 @@
     "@radix-ui/react-toggle-group": "1.1.1",
     "@radix-ui/react-tooltip": "latest",
     "@remix-run/react": "latest",
-    "@supabase/supabase-js": "^2.57.3",
     "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.57.3",
     "@sveltejs/kit": "latest",
-    "@turf/bbox": "^7.2.0",
+    "@turf/area": "^7.3.1",
+    "@turf/bbox": "^7.3.1",
+    "@turf/boolean-intersects": "^7.3.1",
     "@turf/center": "^7.3.1",
+    "@turf/circle": "^7.3.1",
+    "@turf/helpers": "^7.3.1",
+    "@turf/intersect": "^7.3.1",
     "@vercel/analytics": "latest",
     "@vis.gl/react-mapbox": "^8.0.4",
     "autoprefixer": "^10.4.20",
@@ -91,8 +97,15 @@
     "xlsx": "^0.18.5",
     "zod": "3.25.67"
   },
+  "pnpm": {
+    "overrides": {
+      "@turf/helpers": "^7.3.1",
+      "@turf/meta": "^7.3.1"
+    }
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.9",
+    "@types/mapbox__mapbox-gl-draw": "^1.4.9",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",

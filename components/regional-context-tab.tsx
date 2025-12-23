@@ -8,13 +8,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { MapScaffold } from "@/components/map-scaffold"
 import { REGIONS, type Metric, type Scenario } from "@/lib/metrics.config"
 import { fetchSeries, calculateChange, formatValue, formatPercentage, type DataPoint } from "@/lib/data-service"
-import type { RegionMetadata } from "@/components/region-search"
+import type { RegionMetadata, RegionLevel } from "@/components/region-search"
 import { getITL1ForLad, getITL1ForITL2, getITL1ForITL3, getLadsForITL1 } from "@/lib/itl-to-lad"
-import { getMapColorForValue, type MapType } from "@/lib/map-color-scale"
+import { getGrowthMapType, getMapColorForValue, type MapType } from "@/lib/map-color-scale"
 import { cn } from "@/lib/utils"
 import { TrendingUp, TrendingDown, Minus } from "lucide-react"
-
-type RegionLevel = "ITL1" | "ITL2" | "ITL3" | "LAD"
 type MapMode = "value" | "growth"
 
 type Role = "current" | "parent" | "national" | "peer"
@@ -83,14 +81,7 @@ export function RegionalContextTab({
   // Mirror map color semantics used by the main dashboard map (FullWidthMap + MapOverlaysDynamic)
   const mapType: MapType = useMemo(() => {
     if (mapMode === "value") return "level"
-    const canDeclineMetrics = [
-      "population_total",
-      "population_16_64",
-      "emp_total_jobs",
-      "employment_rate_pct",
-      "unemployment_rate_pct",
-    ]
-    return canDeclineMetrics.includes(metric.id) ? "growth" : "level"
+    return getGrowthMapType(metric.id)
   }, [mapMode, metric.id])
 
   const rampColors = useMemo(() => {

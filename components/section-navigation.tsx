@@ -1,31 +1,24 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 
 interface SectionNavigationProps {
   isMapFullscreen?: boolean
-  region?: string
-  year?: number
-  scenario?: string
 }
 
 const SECTIONS = [
   { id: "overview", label: "Overview" },
-  { id: "compare", label: "Compare Regions" },
   { id: "map", label: "Map" },
-  { id: "movers", label: "Movers" },
-  { id: "analysis", label: "Analysis" },
+  { id: "actions", label: "Actions" },
+  { id: "analysis", label: "Insight" },
+  { id: "roadmap", label: "Roadmap" },
+  { id: "contribute", label: "Contribute" },
 ] as const
 
 export function SectionNavigation({ 
   isMapFullscreen = false,
-  region,
-  year,
-  scenario,
 }: SectionNavigationProps) {
-  const router = useRouter()
   const [activeSection, setActiveSection] = useState<string>("overview")
   const observerRef = useRef<IntersectionObserver | null>(null)
 
@@ -35,7 +28,7 @@ export function SectionNavigation({
 
     const observerOptions = {
       root: null,
-      rootMargin: "-150px 0px -60% 0px", // Trigger when section is ~150px from top (accounting for sticky nav)
+      rootMargin: "-130px 0px -60% 0px", // Trigger when section is ~130px from top (accounting for sticky nav)
       threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
     }
 
@@ -57,7 +50,7 @@ export function SectionNavigation({
         const element = document.getElementById(section.id)
         if (element) {
           const rect = element.getBoundingClientRect()
-          const distance = Math.abs(rect.top - 150) // 150px accounts for sticky nav
+          const distance = Math.abs(rect.top - 130) // 130px accounts for sticky nav
 
           if (distance < closestDistance && rect.top < viewportHeight) {
             closestDistance = distance
@@ -75,8 +68,8 @@ export function SectionNavigation({
         (a, b) => a.boundingClientRect.top - b.boundingClientRect.top
       )
 
-      // Prefer the section that's at or above the trigger point (150px from top)
-      const topEntry = sortedEntries.find((entry) => entry.boundingClientRect.top <= 150)
+      // Prefer the section that's at or above the trigger point (130px from top)
+      const topEntry = sortedEntries.find((entry) => entry.boundingClientRect.top <= 130)
 
       if (topEntry) {
         setActiveSection(topEntry.target.id)
@@ -110,7 +103,7 @@ export function SectionNavigation({
         const element = document.getElementById(section.id)
         if (element) {
           const rect = element.getBoundingClientRect()
-          const distance = Math.abs(rect.top - 150)
+          const distance = Math.abs(rect.top - 130)
 
           // Section is in viewport and closer to the trigger point
           if (rect.top < viewportHeight && rect.bottom > 0 && distance < minDistance) {
@@ -136,22 +129,11 @@ export function SectionNavigation({
   const handleClick = (sectionId: string, e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault()
     
-    // Special case: "Compare Regions" navigates to the compare page
-    if (sectionId === "compare") {
-      const params = new URLSearchParams()
-      // Use canonical compare params so the compare page loads populated.
-      if (region) params.set("regions", region)
-      if (year) params.set("year", year.toString())
-      if (scenario) params.set("scenario", scenario)
-      router.push(`/compare?${params.toString()}`)
-      return
-    }
-    
-    // For other sections, scroll to the element
+    // Scroll to the section
     const element = document.getElementById(sectionId)
     if (element) {
-      // Calculate offset: toolbar height (~104px) + navigation height (~48px) + some padding
-      const headerOffset = 160
+      // Calculate offset: toolbar height (~88px) + navigation height (~48px) + some padding
+      const headerOffset = 140
       const elementPosition = element.getBoundingClientRect().top
       const offsetPosition = elementPosition + window.pageYOffset - headerOffset
 
@@ -166,7 +148,7 @@ export function SectionNavigation({
   if (isMapFullscreen) return null
 
   return (
-    <nav className="sticky top-[104px] z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-sm">
+    <nav className="sticky top-[88px] z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-sm">
       <div className="container mx-auto px-4">
         <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide py-2">
           {SECTIONS.map((section) => {
@@ -177,17 +159,24 @@ export function SectionNavigation({
                 href={`#${section.id}`}
                 onClick={(e) => handleClick(section.id, e)}
                 className={cn(
-                  "relative px-4 py-2.5 text-sm font-medium transition-all whitespace-nowrap rounded-md",
+                  "relative px-4 py-2.5 text-sm font-medium transition-all duration-200 whitespace-nowrap rounded-md",
                   "hover:text-foreground hover:bg-accent/50",
                   isActive
-                    ? "text-foreground bg-accent/30"
+                    ? "text-foreground"
                     : "text-muted-foreground hover:text-foreground/80"
                 )}
               >
                 {section.label}
-                {isActive && (
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full" />
+                {/* Sliding underline with scale animation */}
+                <span 
+                  className={cn(
+                    "absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 bg-primary rounded-full",
+                    "transition-all duration-300 ease-out",
+                    isActive 
+                      ? "w-8 opacity-100 scale-x-100" 
+                      : "w-0 opacity-0 scale-x-0"
                 )}
+                />
               </a>
             )
           })}

@@ -9,12 +9,11 @@ import { MapScaffold } from "@/components/map-scaffold"
 import { TrendingUp, TrendingDown, MapPin } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { PoliticalSummary } from "@/components/political-summary"
-import { getMapColorForValue, type MapType } from "@/lib/map-color-scale"
+import { getGrowthMapType, getMapColorForValue, type MapType, DIVERGING_GROWTH_METRICS } from "@/lib/map-color-scale"
 
-type RegionLevel = "ITL1" | "ITL2" | "ITL3" | "LAD"
+import type { RegionMetadata, RegionLevel } from "@/components/region-search"
+
 type MapMode = "value" | "growth"
-
-import type { RegionMetadata } from "@/components/region-search"
 
 /** Calculate CAGR (Compound Annual Growth Rate) */
 function calculateCAGR(startValue: number, endValue: number, years: number): number {
@@ -107,8 +106,7 @@ export function FullWidthMap({
   // Determine map type for canonical color system
   const getMapTypeForMetric = (mode: MapMode, metricId: string): MapType => {
     if (mode === "value") return "level"
-    const canDeclineMetrics = ["population_total", "population_16_64", "emp_total_jobs", "employment_rate_pct", "unemployment_rate_pct"]
-    return canDeclineMetrics.includes(metricId) ? "growth" : "level"
+    return getGrowthMapType(metricId)
   }
   
   const mapType = getMapTypeForMetric(mapMode, mapMetric)
@@ -244,12 +242,12 @@ export function FullWidthMap({
   return (
     <div className="w-full bg-neutral-50/80 dark:bg-neutral-900/30 rounded-xl border border-border/50 overflow-hidden shadow-sm">
       {/* Full-width contextual header with badge inline */}
-      <div className="px-6 py-2.5 bg-background/50">
+      <div className="px-6 py-3 bg-background/50">
         <div className="flex items-center justify-between">
-          <h3 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-3">
+            <MapPin className="h-5 w-5 text-muted-foreground" />
             Regional Map — {selectedMetric?.title || "Economic Indicators"}
-          </h3>
+          </h2>
           <Badge variant="outline" className="text-xs font-medium">
             {year} • {scenario.charAt(0).toUpperCase() + scenario.slice(1)}
           </Badge>
@@ -303,7 +301,10 @@ export function FullWidthMap({
       <div className="h-[600px]">
         <div className="flex flex-col lg:flex-row h-full gap-0">
           {/* Map section - flex-1 with min-width constraint, no padding */}
-          <div className="flex-1 min-w-0 relative overflow-hidden min-h-[250px] lg:min-h-full">
+          <div
+            id="tour-map-viewport"
+            className="flex-1 min-w-0 relative overflow-hidden min-h-[250px] lg:min-h-full"
+          >
             <MapScaffold
               selectedRegion={selectedRegion}
               selectedRegionMetadata={selectedRegionMetadata}
@@ -454,12 +455,16 @@ export function FullWidthMap({
             {/* Divider */}
             <div className="border-t border-neutral-200/40 dark:border-border/40 my-2" />
 
-            {/* Political Summary - Only show for LAD level */}
+            {/* Local Political Summary - HIDDEN FOR V1
+                Local election data is complex (thirds elections, mayoral vs council, etc.)
+                Keeping Westminster context which is clearer and more accurate.
+                To re-enable, uncomment:
             {level === "LAD" && (
               <div className="mb-3">
                 <PoliticalSummary ladCode={selectedRegion} year={year} />
               </div>
             )}
+            */}
 
             {/* Insight Summary Block (hero takeaway) */}
             <div className="space-y-2 mb-1.5">
@@ -618,8 +623,7 @@ export function FullWidthMap({
                     // Use canonical map type to determine labels
                     // Diverging scale: weaker (red-orange) → neutral → stronger (blue)
                     // Sequential scale: lower (light blue) → higher (dark blue)
-                    const canDeclineMetrics = ["population_total", "population_16_64", "emp_total_jobs", "employment_rate_pct", "unemployment_rate_pct"]
-                    const useDiverging = canDeclineMetrics.includes(mapMetric)
+                    const useDiverging = DIVERGING_GROWTH_METRICS.has(mapMetric)
                     return useDiverging ? (
                       <>
                         <span>Weaker</span>

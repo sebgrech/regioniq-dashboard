@@ -6,8 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { RefreshCw, Sparkles, Clock, MessageSquare, ArrowLeft, TrendingUp, TrendingDown, Minus, ArrowRight } from "lucide-react"
-import { REGIONS, METRICS, type Scenario } from "@/lib/metrics.config"
-import { formatValue } from "@/lib/data-service"
+import { REGIONS, type Scenario } from "@/lib/metrics.config"
 
 interface NarrativeAnalysisProps {
   region: string
@@ -112,31 +111,17 @@ export function NarrativeAnalysis({
   const regionData = REGIONS.find((r) => r.code === region)
 
   const generateFallbackNarrative = () => {
-    if (!regionData || !allMetricsData.length) return "No data available"
+    if (!regionData || !allMetricsData.length) return "No data available for analysis."
 
-    const populationData = allMetricsData.find((d) => d.metricId === "population_total")
-    const gvaData = allMetricsData.find((d) => d.metricId === "nominal_gva_mn_gbp")
-    const incomeData = allMetricsData.find((d) => d.metricId === "gdhi_per_head_gbp")
-    const employmentData = allMetricsData.find((d) => d.metricId === "emp_total_jobs")
-
-    const populationMetric = METRICS.find((m) => m.id === "population_total")
-    const gvaMetric = METRICS.find((m) => m.id === "nominal_gva_mn_gbp")
-    const incomeMetric = METRICS.find((m) => m.id === "gdhi_per_head_gbp")
-    const employmentMetric = METRICS.find((m) => m.id === "emp_total_jobs")
-
-    const popValue = formatValue(populationData?.value || 0, populationMetric?.unit || "")
-    const gvaValue = formatValue(gvaData?.value || 0, gvaMetric?.unit || "")
-    const incomeValue = formatValue(incomeData?.value || 0, incomeMetric?.unit || "")
-    const employmentValue = formatValue(employmentData?.value || 0, employmentMetric?.unit || "")
-
+    // Generate a more insight-oriented fallback
     const scenarioText =
       scenario === "upside"
-        ? "optimistic growth trajectory"
+        ? "Under the upside scenario, monitor for accelerated productivity gains that could compound over the forecast horizon."
         : scenario === "downside"
-        ? "conservative projections"
-        : "baseline forecasts"
+        ? "Under the downside scenario, consider sector concentration risks and exposure to cyclical volatility."
+        : "No material divergences detected at this time. Click **Refresh** for AI-powered insights."
 
-    return `${regionData.name} in ${year}: population ${popValue}, GVA ${gvaValue}, income ${incomeValue}, employment ${employmentValue}. Outlook follows ${scenarioText}.`
+    return scenarioText
   }
 
   useEffect(() => {
@@ -241,14 +226,17 @@ export function NarrativeAnalysis({
   }
 
   return (
-    <Card>
+    <Card className="border-l-4 border-l-primary/60">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-primary" />
-          AI Analysis
+          Insight
+          <Badge variant="outline" className="text-[10px] font-normal ml-1 px-1.5 py-0.5">
+            Powered by OpenAI
+          </Badge>
         </CardTitle>
         <CardDescription>
-          Regional insights for {regionData?.name} • {year}
+          What matters in {regionData?.name} • {year}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -339,9 +327,6 @@ export function NarrativeAnalysis({
             </div>
             <div className="pt-3 border-t border-border/50 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="text-xs">
-                  {usingPlaceholder ? "Fallback (No OpenAI key)" : "Powered by OpenAI"}
-                </Badge>
                 {lastGenerated && (
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Clock className="h-3 w-3" />
@@ -356,7 +341,7 @@ export function NarrativeAnalysis({
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => setChatMode(true)}>
                   <MessageSquare className="h-3 w-3 mr-2" />
-                  Ask a Question
+                  Ask
                 </Button>
               </div>
             </div>

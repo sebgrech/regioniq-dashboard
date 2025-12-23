@@ -1,17 +1,17 @@
 "use client"
 
-import React, { useState, useEffect, useMemo, Suspense } from "react"
+import React, { useState, useEffect, useMemo, Suspense, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Loader2, GitCompareArrows } from "lucide-react"
+import { Loader2, GitCompareArrows, Sparkles, Database, ArrowRight, Target, TrendingUp, TrendingDown } from "lucide-react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { DashboardControls } from "@/components/dashboard-controls"
 import { MetricCard } from "@/components/metric-card"
 import { FullWidthMap } from "@/components/full-width-map"
 import { NarrativeAnalysis } from "@/components/narrative-analysis"
 import { DataTable } from "@/components/data-table"
-import { SentimentStrip } from "@/components/sentiment-strip"
-import { TopMovers } from "@/components/top-movers"
-import { MetricCorrelationExplorer } from "@/components/metric-correlation-explorer"
+import { ComingSoonGrid } from "@/components/coming-soon-grid"
+import { RoadmapFeedback } from "@/components/roadmap-feedback"
 import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/hooks/use-toast"
 import { METRICS, REGIONS, type Scenario } from "@/lib/metrics.config"
@@ -28,12 +28,14 @@ import {
   getSearchParam,
   getSearchParamNumber,
 } from "@/lib/utils"
-import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { RegionCategoryBadge } from "@/components/region-category-badge"
 import { getRegionCategory } from "@/lib/region-category"
 import { SectionNavigation } from "@/components/section-navigation"
 import { getElectionSummary, getAvailableYears } from "@/lib/elections"
+import { OnboardingTour } from "@/components/onboarding-tour"
+import { FilmGrainOverlay } from "@/components/film-grain-overlay"
+import { useMicroConfetti, resetCelebrations } from "@/components/micro-confetti"
 
 interface DashboardData {
   allMetricsData: {
@@ -48,6 +50,19 @@ function DashboardContent() {
   const router = useRouter()
   const { toast } = useToast()
   const [isMapFullscreen, setIsMapFullscreen] = useState(false)
+  const [user, setUser] = useState<any>(null)
+  const [tourOpen, setTourOpen] = useState(false)
+  
+  // Micro-confetti for #1 celebrations
+  const { celebrate } = useMicroConfetti()
+  
+  // Track scroll for parallax effect
+  const [scrollY, setScrollY] = useState(0)
+  useEffect(() => {
+    const handleScroll = () => setScrollY(window.scrollY)
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [])
 
   // ----- Persisted readiness for skipping the Supabase test gate -----
   const READY_KEY = "riq:sb-ready"
@@ -78,6 +93,88 @@ function DashboardContent() {
         console.error('Failed to load region index:', err)
       })
   }, [])
+
+  // Load current user (for welcome + per-user tour persistence)
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/auth/me", { cache: "no-store" as RequestCache })
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return
+        setUser(data?.user ?? null)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setUser(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const displayName = useMemo(() => {
+    const u = user as any
+    const meta = u?.user_metadata ?? {}
+    return (
+      meta?.full_name ||
+      meta?.name ||
+      meta?.display_name ||
+      meta?.preferred_username ||
+      (typeof u?.email === "string" ? u.email.split("@")[0] : null) ||
+      null
+    )
+  }, [user])
+
+  const clearQS = (keys: string[]) => {
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    keys.forEach((k) => params.delete(k))
+    const qs = params.toString()
+    router.replace(qs ? `?${qs}` : ".", { scroll: false })
+  }
+
+  const markTourSeen = () => {
+    if (typeof window === "undefined") return
+    const uid = (user as any)?.id
+    if (!uid) return
+    try {
+      localStorage.setItem(`riq:tour:v1:${uid}`, "1")
+    } catch {}
+    clearQS(["tour"])
+  }
+
+  // Auto-open tour right after login (once per user per browser), after the Supabase gate is passed.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (showSupabaseTest) return
+    const uid = (user as any)?.id
+    if (!uid) return
+
+    const forceTour = (searchParams?.get("tour") ?? "0") === "1"
+
+    let seen = false
+    try {
+      seen = localStorage.getItem(`riq:tour:v1:${uid}`) === "1"
+    } catch {}
+
+    let justLoggedIn = false
+    try {
+      justLoggedIn = localStorage.getItem("riq:just-logged-in") === "1"
+    } catch {}
+
+    if ((justLoggedIn || forceTour) && !seen) {
+      setTourOpen(true)
+    }
+
+    // Consume the flag so normal navigation/refresh doesn't re-trigger.
+    if (justLoggedIn) {
+      try {
+        localStorage.removeItem("riq:just-logged-in")
+      } catch {}
+    }
+    if (forceTour) clearQS(["tour"])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSupabaseTest, (user as any)?.id, searchParams])
   
   // Load/sync region metadata from URL (keep in lockstep with `region`)
   useEffect(() => {
@@ -239,6 +336,8 @@ function DashboardContent() {
   }, []) // Only run once on mount
 
   const handleRegionChange = (metadata: import("@/components/region-search").RegionMetadata) => {
+    // Reset confetti celebrations when region changes
+    resetCelebrations()
     setSelectedRegionMetadata(metadata)
     // Save to localStorage for persistence
     if (typeof window !== "undefined") {
@@ -433,14 +532,6 @@ function DashboardContent() {
     })
   }, [dashboardData.allMetricsData, year, scenario, region])
 
-  // Prepare sentiment strip data
-  const sentimentMetrics = useMemo(() => {
-    return metricCardsData.map((card) => ({
-      title: card.title || card.shortTitle || card.id,
-      change: card.changeValue ?? 0,
-      changeFormatted: card.change || "+0.0%",
-    }))
-  }, [metricCardsData])
 
   const allMetricsForMap = METRICS.filter((m) => m.showInDashboard !== false).map((metricConfig) => {
     const metricData =
@@ -452,6 +543,7 @@ function DashboardContent() {
   const currentRegion = REGIONS.find((r) => r.code === region)
   const regionName = currentRegion?.name || region
   const regionCode = currentRegion?.code || region
+  const isUK = currentRegion?.level === "UK"
 
   // Calculate region category based on metric changes
   const regionCategory = useMemo(() => {
@@ -485,52 +577,100 @@ function DashboardContent() {
     })
   }, [metricCardsData, dashboardData.allMetricsData, year])
 
-  const breadcrumbItems = [
-    { label: "UK", href: "/?level=ITL1" },
-    {
-      label: currentRegion?.country || "UK",
-      href: `/regions?country=${currentRegion?.country || "UK"}`,
-    },
-    { label: regionName },
-  ]
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Film Grain Overlay - "Time Machine" effect for historical data */}
+      <FilmGrainOverlay year={year} forecastStartYear={2024} />
+      
       {!isMapFullscreen && (
         <DashboardControls
           region={region}
           year={year}
-          scenario={scenario}
           onRegionChange={handleRegionChange}
           onYearChange={handleYearChange}
-          onScenarioChange={handleScenarioChange}
-          onExport={handleExport}
         />
       )}
 
       {/* Section Navigation */}
-      <SectionNavigation 
-        isMapFullscreen={isMapFullscreen}
-        region={region}
-        year={year}
-        scenario={scenario}
-      />
+      <SectionNavigation isMapFullscreen={isMapFullscreen} />
 
-      {/* Header */}
-      <div className="container mx-auto px-4 py-8 space-y-4 border-b border-border/40">
-        <div className="flex items-center justify-between pb-4">
-          <div>
-            <h1 className="text-4xl font-bold tracking-tight">
-              Main Dashboard
-            </h1>
-            <p className="text-xl text-muted-foreground">
-              Regional Overview • {regionName} ({regionCode}) • {year}{" "}
-              {scenario.charAt(0).toUpperCase() + scenario.slice(1)}
+      {/* Header - Region as hero with subtle parallax */}
+      <div 
+        className="container mx-auto px-4 py-6 border-b border-border/40"
+        style={{
+          transform: `translateY(${scrollY * 0.03}px)`,
+          transition: "transform 0.1s ease-out",
+        }}
+      >
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            {displayName ? (
+              <p className="text-xs text-muted-foreground">
+                Welcome <span className="font-medium text-foreground">{displayName}</span>
+              </p>
+            ) : null}
+            <h1 className="text-3xl font-bold tracking-tight">{regionName}</h1>
+            <p className="text-sm text-muted-foreground">
+              {regionCode} • {year} • {scenario.charAt(0).toUpperCase() + scenario.slice(1)}
             </p>
-            <Breadcrumbs items={breadcrumbItems} />
           </div>
           <div className="flex items-center gap-3">
+            {/* Sentiment Badge - single summary of all metrics */}
+            {!dashboardData.isLoading && metricCardsData.length > 0 && (() => {
+              const positiveCount = metricCardsData.filter(m => m.changeValue > 0).length
+              const negativeCount = metricCardsData.filter(m => m.changeValue < 0).length
+              const totalCount = metricCardsData.length
+              
+              if (positiveCount === totalCount) {
+                return (
+                  <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
+                    <TrendingUp className="h-3 w-3" />
+                    All metrics growing
+                  </div>
+                )
+              } else if (negativeCount === totalCount) {
+                return (
+                  <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+                    <TrendingDown className="h-3 w-3" />
+                    All metrics declining
+                  </div>
+                )
+              } else if (positiveCount > negativeCount) {
+                return (
+                  <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
+                    <TrendingUp className="h-3 w-3" />
+                    {positiveCount}/{totalCount} growing
+                  </div>
+                )
+              } else if (negativeCount > positiveCount) {
+                return (
+                  <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                    <TrendingDown className="h-3 w-3" />
+                    {negativeCount}/{totalCount} declining
+                  </div>
+                )
+              } else {
+                return (
+                  <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-muted text-muted-foreground border border-border">
+                    Mixed signals
+                  </div>
+                )
+              }
+            })()}
             {regionCategory && <RegionCategoryBadge category={regionCategory} />}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setTourOpen(true)}
+              className="hidden sm:inline-flex"
+            >
+              Take a tour
+            </Button>
+            {/* Local Control Badge - HIDDEN FOR V1
+                Local election data is complex (thirds elections, mayoral vs council, etc.)
+                Westminster context is kept as it's clearer and more accurate.
+                To re-enable, uncomment the block below:
             {currentRegion?.level === "LAD" && (() => {
               const availableYears = getAvailableYears(currentRegion.code)
               const mostRecentYear = availableYears.length > 0 ? Math.max(...availableYears) : null
@@ -544,7 +684,6 @@ function DashboardContent() {
                 ? `${electionSummary.dominant_party} locally controlled`
                 : "No overall control"
               
-              // Party colors
               const partyColors: Record<string, string> = {
                 Labour: "#d50000",
                 Conservative: "#0047ab",
@@ -575,28 +714,21 @@ function DashboardContent() {
                 </div>
               )
             })()}
+            */}
             <ThemeToggle />
           </div>
         </div>
       </div>
 
-      {/* Sentiment Strip */}
-      {sentimentMetrics && sentimentMetrics.length > 0 && (
-        <SentimentStrip
-          regionName={regionName}
-          year={year}
-          metrics={sentimentMetrics}
-          isLoading={dashboardData.isLoading}
-        />
-      )}
-
-      {/* Cards - Light blue tint for economic data */}
-      <div className="container mx-auto px-4 space-y-8">
-        <div id="overview" className="scroll-mt-32 bg-blue-50/50 dark:bg-blue-950/20 rounded-xl p-6 -mx-4">
+      {/* Main content sections */}
+      <div className="container mx-auto px-4 space-y-4">
+        {/* KPI Cards */}
+        <div id="overview" className="scroll-mt-32 pt-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          {metricCardsData.map((cardData) => (
+          {metricCardsData.map((cardData, idx) => (
             <div
               key={cardData.id}
+              id={idx === 0 ? "tour-kpi-card" : undefined}
               className="group cursor-pointer transition-all duration-200 hover:scale-[1.02] relative z-10"
               onClick={cardData.onClick}
             >
@@ -612,29 +744,6 @@ function DashboardContent() {
               )}
             </div>
           ))}
-          </div>
-        </div>
-
-        <div id="compare" className="scroll-mt-32 px-4">
-          <div className="rounded-xl border border-border/60 bg-accent/10 dark:bg-accent/15 px-6 py-5">
-            {/* Mobile: stack. Desktop: text left, CTA right (standard SaaS CTA layout). */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0 text-left">
-                <div className="text-sm font-semibold text-foreground">
-                  Compare regions side-by-side
-                </div>
-                <div className="text-sm text-muted-foreground mt-0.5">
-                  Start with <span className="font-medium text-foreground/85">{regionName}</span> and add up to 5 regions.
-                </div>
-              </div>
-
-              <div className="flex sm:justify-end">
-                <Button onClick={handleCompareRegions} size="lg" className="w-full sm:w-auto">
-                  <GitCompareArrows className="h-4 w-4 mr-2" />
-            Compare Regions
-          </Button>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -657,18 +766,152 @@ function DashboardContent() {
           />
         </div>
 
-        {/* Top Movers - Comparative context */}
-        <div id="movers" className="scroll-mt-32 w-full">
-          <TopMovers
-            year={year}
-            scenario={scenario}
-            isLoading={dashboardData.isLoading}
-          />
+        {/* Action Cards - What do you want to do next? */}
+        <div id="actions" className="scroll-mt-32 w-full">
+          <div
+            className={`grid gap-4 ${
+              isUK ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+            }`}
+          >
+            {/* Compare Regions */}
+            <div 
+              className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500"
+              style={{ animationDelay: "0ms", animationFillMode: "backwards" }}
+            >
+              <button
+                id="tour-compare-action"
+                onClick={handleCompareRegions}
+                className="w-full cursor-pointer group relative flex flex-col items-start gap-3 rounded-xl border border-border/60 bg-card hover:bg-accent/10 hover:border-primary/40 p-5 text-left transition-all duration-300 hover:shadow-lg hover:shadow-primary/5"
+              >
+                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-all duration-300 group-hover:scale-110">
+                  <GitCompareArrows className="h-5 w-5 text-primary transition-transform duration-500 group-hover:rotate-180" />
+                </div>
+                <div className="space-y-1">
+                  <div className="font-semibold text-foreground flex items-center gap-2">
+                    Compare Regions
+                    <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Compare {regionName} with up to 5 regions
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Full Analysis - Hidden for UK */}
+            {!isUK && (
+              <div 
+                className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500"
+                style={{ animationDelay: "75ms", animationFillMode: "backwards" }}
+              >
+                <Link
+                  id="tour-full-analysis-action"
+                  href={`/analysis?region=${region}&year=${year}${scenario !== "baseline" ? `&scenario=${scenario}` : ""}`}
+                  className="h-full group relative flex flex-col items-start gap-3 rounded-xl border border-border/60 bg-card hover:bg-accent/10 hover:border-primary/40 p-5 text-left transition-all duration-300 hover:shadow-lg hover:shadow-primary/5"
+                >
+                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-all duration-300 group-hover:scale-110">
+                    <Sparkles className="h-5 w-5 text-primary transition-transform duration-300 group-hover:scale-125" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="font-semibold text-foreground flex items-center gap-2">
+                      Full Analysis
+                      <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Deep-dive into {regionName}
+                    </div>
+                  </div>
+                </Link>
+              </div>
+            )}
+
+            {/* Westminster Deep Dive - UK only */}
+            {isUK && (
+              <div 
+                className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500"
+                style={{ animationDelay: "75ms", animationFillMode: "backwards" }}
+              >
+                <Link
+                  id="tour-westminster-action"
+                  href={`/westminster?region=${region}&year=${year}${scenario !== "baseline" ? `&scenario=${scenario}` : ""}`}
+                  className="h-full group relative flex flex-col items-start gap-3 rounded-xl border border-border/60 bg-card hover:bg-accent/10 hover:border-primary/40 p-5 text-left transition-all duration-300 hover:shadow-lg hover:shadow-primary/5"
+                >
+                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-all duration-300 group-hover:scale-110">
+                    <Sparkles className="h-5 w-5 text-primary transition-transform duration-300 group-hover:scale-125" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="font-semibold text-foreground flex items-center gap-2">
+                      Westminster
+                      <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                    </div>
+                    <div className="text-sm text-muted-foreground">Deep-dive into Westminster</div>
+                  </div>
+                </Link>
+              </div>
+            )}
+
+            {/* Catchment Analysis */}
+            <div 
+              className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500"
+              style={{ animationDelay: "150ms", animationFillMode: "backwards" }}
+            >
+              <Link
+                id="tour-catchment-action"
+                href={`/catchment?region=${region}&year=${year}${scenario !== "baseline" ? `&scenario=${scenario}` : ""}`}
+                className="h-full group relative flex flex-col items-start gap-3 rounded-xl border border-border/60 bg-card hover:bg-accent/10 hover:border-primary/40 p-5 text-left transition-all duration-300 hover:shadow-lg hover:shadow-primary/5"
+              >
+                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-all duration-300 group-hover:scale-110 relative overflow-hidden">
+                  <Target className="h-5 w-5 text-primary transition-all duration-500 group-hover:rotate-90" />
+                  {/* Pulse rings on hover */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-3 h-3 rounded-full border-2 border-primary/40 opacity-0 group-hover:opacity-100 group-hover:scale-[2.5] transition-all duration-700" />
+                  </div>
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-3 h-3 rounded-full border border-primary/20 opacity-0 group-hover:opacity-100 group-hover:scale-[3.5] transition-all duration-1000 delay-100" />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="font-semibold text-foreground flex items-center gap-2">
+                    Catchment Analysis
+                    <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Draw areas or generate isochrones
+                  </div>
+                </div>
+              </Link>
+            </div>
+
+            {/* Data Explorer */}
+            <div 
+              className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500"
+              style={{ animationDelay: "225ms", animationFillMode: "backwards" }}
+            >
+              <Link
+                id="tour-data-action"
+                href={`/data?region=${region}&year=${year}${scenario !== "baseline" ? `&scenario=${scenario}` : ""}`}
+                className="h-full group relative flex flex-col items-start gap-3 rounded-xl border border-border/60 bg-card hover:bg-accent/10 hover:border-primary/40 p-5 text-left transition-all duration-300 hover:shadow-lg hover:shadow-primary/5"
+              >
+                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-all duration-300 group-hover:scale-110">
+                  <Database className="h-5 w-5 text-primary transition-all duration-700 ease-out group-hover:rotate-[360deg]" />
+                </div>
+                <div className="space-y-1">
+                  <div className="font-semibold text-foreground flex items-center gap-2">
+                    Data Explorer
+                    <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Query & export raw data
+                  </div>
+                </div>
+              </Link>
+            </div>
+          </div>
         </div>
 
-        {/* Analysis - Warm beige background (narrative) */}
-        <div id="analysis" className="scroll-mt-32 w-full bg-amber-50/50 dark:bg-amber-950/20 rounded-xl -mx-4">
-          <div className="p-6 space-y-6">
+        {/* AI Insight */}
+        <div id="analysis" className="scroll-mt-32 w-full mt-6">
+          <div id="tour-ai-analysis" className="w-full">
             <NarrativeAnalysis
               region={region}
               year={year}
@@ -677,18 +920,31 @@ function DashboardContent() {
               allMetricsSeriesData={dashboardData.allMetricsData}
               isLoading={dashboardData.isLoading}
             />
+          </div>
+        </div>
 
-            <MetricCorrelationExplorer
-              regionName={regionName}
-              year={year}
-              scenario={scenario}
-              allMetricsSeriesData={dashboardData.allMetricsData}
-            />
+        {/* Roadmap Section - Coming Soon features */}
+        <div id="roadmap" className="scroll-mt-32 w-full mt-8 pt-6 border-t border-border/30">
+          <ComingSoonGrid regionName={regionName} />
+        </div>
+
+        {/* Contribute Section - Feedback form */}
+        <div id="contribute" className="scroll-mt-32 w-full mt-6 pb-12">
+          <div id="tour-feedback">
+            <RoadmapFeedback currentRegion={region} />
           </div>
         </div>
       </div>
 
       <Toaster />
+
+      <OnboardingTour
+        open={tourOpen}
+        onOpenChange={setTourOpen}
+        isUK={isUK}
+        onFinish={markTourSeen}
+        userName={displayName}
+      />
     </div>
   )
 }

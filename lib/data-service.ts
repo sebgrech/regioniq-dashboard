@@ -50,17 +50,31 @@ function getTableName(regionCode: string): string {
   const level = region?.level || "ITL1"
   
   switch(level) {
+    case "UK":
+      return "macro_latest_all"
     case "ITL1":
       return "itl1_latest_all"
     case "ITL2":
       return "itl2_latest_all"
     case "ITL3":
       return "itl3_latest_all"
-    case "LAD": // ADDED LAD TABLE CASE
+    case "LAD":
       return "lad_latest_all"
     default:
       return "itl1_latest_all"
   }
+}
+
+/**
+ * Get the correct metric_id for the given region.
+ * macro_latest_all uses uk_ prefixed metric IDs (e.g., uk_population_total).
+ */
+function getMetricIdForRegion(metricId: string, regionCode: string): string {
+  const region = REGIONS.find(r => r.code === regionCode)
+  if (region?.level === "UK") {
+    return `uk_${metricId}`
+  }
+  return metricId
 }
 
 // -----------------------------------------------------------------------------
@@ -248,12 +262,15 @@ export async function fetchSeries(params: {
   
   // Determine which table to query based on region level
   const tableName = resolved.tableNameOverride ?? getTableName(region)
+  
+  // Get the correct metric_id for the table (macro_latest_all uses uk_ prefix)
+  const queryMetricId = getMetricIdForRegion(metricId, region)
 
   try {
     if (DEBUG_FETCH) {
       console.log(`🔍 Fetching from Supabase:`)
       console.log(`   Table: ${tableName}`)
-      console.log(`   Metric: ${metricId}`)
+      console.log(`   Metric: ${metricId} → Query Metric: ${queryMetricId}`)
       console.log(`   UI Region: ${region} → DB Region: ${dbRegionCode}`)
       console.log(`   Scenario: ${scenario}`)
     }
@@ -262,7 +279,7 @@ export async function fetchSeries(params: {
     const { data, error } = await supabase
       .from(tableName)
       .select("period, value, ci_lower, ci_upper, data_type, data_quality")
-      .eq("metric_id", metricId)
+      .eq("metric_id", queryMetricId)
       .eq("region_code", dbRegionCode)
       .order("period", { ascending: true })
 
@@ -275,7 +292,7 @@ export async function fetchSeries(params: {
       console.warn(`⚠️ No data found`)
       console.log("Query attempted:", { 
         table: tableName,
-        metric_id: metricId, 
+        metric_id: queryMetricId, 
         region_code: dbRegionCode
       })
       return []
@@ -343,15 +360,16 @@ export async function fetchSeriesWithMetadata(params: {
  */
 export async function fetchChoropleth(params: {
   metricId: string
-  level: string  // "ITL1", "ITL2", "ITL3", or "LAD"
+  level: string  // "UK", "ITL1", "ITL2", "ITL3", or "LAD"
   year: number
   scenario: Scenario
 }): Promise<ChoroplethData> {
   const { level, year, scenario } = params
   const metricId = params.metricId
 
-  // Determine table name based on level (UPDATED TO INCLUDE LAD)
-  const tableName = level === "ITL1" ? "itl1_latest_all" :
+  // Determine table name based on level
+  const tableName = level === "UK" ? "macro_latest_all" :
+                    level === "ITL1" ? "itl1_latest_all" :
                     level === "ITL2" ? "itl2_latest_all" :
                     level === "ITL3" ? "itl3_latest_all" :
                     level === "LAD" ? "lad_latest_all" :
@@ -566,8 +584,8 @@ export async function testSupabaseConnection(): Promise<boolean> {
  * Get available metrics from the database
  */
 export async function getAvailableMetrics(level: string = "ITL1"): Promise<string[]> {
-  // UPDATED TO INCLUDE LAD
-  const tableName = level === "ITL1" ? "itl1_latest_all" :
+  const tableName = level === "UK" ? "macro_latest_all" :
+                    level === "ITL1" ? "itl1_latest_all" :
                     level === "ITL2" ? "itl2_latest_all" :
                     level === "ITL3" ? "itl3_latest_all" :
                     level === "LAD" ? "lad_latest_all" :
@@ -595,8 +613,8 @@ export async function getAvailableMetrics(level: string = "ITL1"): Promise<strin
  * Get available regions from the database (returns UI codes)
  */
 export async function getAvailableRegions(level: string = "ITL1"): Promise<string[]> {
-  // UPDATED TO INCLUDE LAD
-  const tableName = level === "ITL1" ? "itl1_latest_all" :
+  const tableName = level === "UK" ? "macro_latest_all" :
+                    level === "ITL1" ? "itl1_latest_all" :
                     level === "ITL2" ? "itl2_latest_all" :
                     level === "ITL3" ? "itl3_latest_all" :
                     level === "LAD" ? "lad_latest_all" :

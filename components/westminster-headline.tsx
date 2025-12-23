@@ -4,6 +4,7 @@ import { partyColor } from "@/lib/politics"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { Vote } from "lucide-react"
 
 interface WestminsterHeadlineProps {
   seats: Array<{
@@ -12,7 +13,7 @@ interface WestminsterHeadlineProps {
     color: string
   }>
   turnout: number // average turnout across seats
-  majority: number // average majority in points
+  majority?: number // not used in V1 - blurs constituency lines
   leadingParty: string
   electionYear?: number
   viewResultsUrl?: string
@@ -37,33 +38,9 @@ function getPartyColor(party: string): string {
   return PARTY_COLORS[party] || partyColor(party)
 }
 
-// Get majority label and color
-function getMajorityLabel(majority: number): {
-  label: string
-  color: string
-} {
-  if (majority > 15) {
-    return {
-      label: `${majority.toFixed(1)} pts (Safe)`,
-      color: "text-green-600 dark:text-green-400",
-    }
-  } else if (majority >= 5) {
-    return {
-      label: `${majority.toFixed(1)} pts (Competitive)`,
-      color: "text-amber-600 dark:text-amber-400",
-    }
-  } else {
-    return {
-      label: `${majority.toFixed(1)} pts (Marginal)`,
-      color: "text-red-600 dark:text-red-400",
-    }
-  }
-}
-
 export function WestminsterHeadline({
   seats,
   turnout,
-  majority,
   leadingParty,
   electionYear = 2024,
   viewResultsUrl,
@@ -76,29 +53,32 @@ export function WestminsterHeadline({
   const totalSeats = seats.reduce((sum, s) => sum + s.count, 0)
   const leadingPartySeats = partiesWithSeats[0]?.count || 0
   const hasMajority = leadingPartySeats > totalSeats / 2
+  const hasAllSeats = leadingPartySeats === totalSeats
   
   // Check if there's a tie for first place
   const isTied = partiesWithSeats.length > 1 && partiesWithSeats[0].count === partiesWithSeats[1].count
   
+  // Cleaner headline - focus on the outcome
   let headlineText: string
-  if (isTied) {
-    headlineText = "Mixed representation"
+  if (totalSeats === 0) {
+    headlineText = "No constituencies overlap"
+  } else if (isTied) {
+    headlineText = "Split representation"
+  } else if (hasAllSeats) {
+    headlineText = `${leadingParty} holds all ${totalSeats} seat${totalSeats !== 1 ? "s" : ""}`
   } else if (hasMajority) {
-    headlineText = `${leadingParty} dominates Westminster representation`
+    headlineText = `${leadingParty} holds ${leadingPartySeats} of ${totalSeats} seats`
   } else {
-    // Leading party doesn't have majority, show actual seat count
-    headlineText = `${leadingParty} leads Westminster representation`
+    headlineText = `${leadingParty} leads with ${leadingPartySeats} of ${totalSeats} seats`
   }
 
-  const majorityInfo = getMajorityLabel(majority)
-
-  // Get region type label
+  // Get region type label for overlap text
   const getRegionTypeLabel = () => {
     switch (regionType) {
       case "lad":
-        return "this local authority"
+        return "this LAD"
       case "city":
-        return "this city"
+        return "this city region"
       case "itl1":
         return "this ITL1 region"
       case "itl2":
@@ -111,59 +91,67 @@ export function WestminsterHeadline({
   }
 
   return (
-    <div className="space-y-4">
-      {/* Party Control Bar */}
-      <div className="flex flex-wrap gap-2">
-        {partiesWithSeats.map(({ party, count, color }) => (
-          <div
-            key={party}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium",
-              "bg-background/50 backdrop-blur-sm"
-            )}
-            style={{
-              borderColor: color,
-              color: color,
-            }}
-          >
-            <span
-              className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: color }}
-            />
-            {party} {count}
-          </div>
-        ))}
+    <div className="space-y-2">
+      {/* Election Year Header */}
+      <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide -mt-1">
+        <Vote className="h-4 w-4" />
+        {electionYear} General Election
       </div>
 
-      {/* Large Headline */}
-      <div className="space-y-1">
+      {/* Constituency overlap text */}
+      <p className="text-sm text-foreground">
+        {totalSeats} {totalSeats === 1 ? "constituency overlaps" : "constituencies overlap"} with {getRegionTypeLabel()}
+      </p>
+
+      {/* Party Seat Pills */}
+      {partiesWithSeats.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {partiesWithSeats.map(({ party, count, color }) => (
+            <div
+              key={party}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold",
+                "bg-background/50 backdrop-blur-sm"
+              )}
+              style={{
+                borderColor: color,
+                color: color,
+              }}
+            >
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: color }}
+              />
+              {party} {count}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Main Headline */}
+      {totalSeats > 0 && (
         <h3 className="text-lg font-semibold text-foreground">
-          {headlineText} • {leadingPartySeats}/{totalSeats} seats • {electionYear} General Election
+          {headlineText}
         </h3>
-        <p className="text-sm text-neutral-400 dark:text-neutral-300">
-          {totalSeats} Westminster {totalSeats === 1 ? "seat" : "seats"} overlap {getRegionTypeLabel()}
-        </p>
-      </div>
+      )}
 
-      {/* Micro-metrics Row */}
-      <div className="flex flex-wrap items-center gap-4 text-sm">
-        <div className="text-neutral-400 dark:text-neutral-300">
-          <span className="font-medium text-foreground">Average Turnout:</span> {turnout.toFixed(1)}%
+      {/* Turnout - simple inline stat */}
+      {totalSeats > 0 && (
+        <div className="text-sm text-muted-foreground">
+          Average turnout {turnout.toFixed(1)}%
         </div>
-      </div>
+      )}
 
-      {/* View Full Results Button */}
-      {viewResultsUrl && (
-        <div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="rounded-full"
-            asChild
-          >
-            <Link href={viewResultsUrl}>View full Westminster results →</Link>
-          </Button>
-        </div>
+      {/* View Breakdown CTA */}
+      {viewResultsUrl && totalSeats > 0 && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-2"
+          asChild
+        >
+          <Link href={viewResultsUrl}>View breakdown →</Link>
+        </Button>
       )}
     </div>
   )

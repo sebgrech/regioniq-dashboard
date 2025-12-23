@@ -23,6 +23,26 @@
 
 export type MapType = "level" | "growth" | "deviation"
 
+/**
+ * Metrics that should use a diverging colour ramp (orange→neutral→blue) in growth mode.
+ *
+ * Rationale: YoY (and multi-year) growth rates can be negative for any economic series
+ * (including GVA/GDHI), so we treat growth as a signed delta surface by default.
+ */
+export const DIVERGING_GROWTH_METRICS = new Set<string>([
+  "population_total",
+  "population_16_64",
+  "emp_total_jobs",
+  "employment_rate_pct",
+  "unemployment_rate_pct",
+  "nominal_gva_mn_gbp",
+  "gdhi_per_head_gbp",
+])
+
+export function getGrowthMapType(metricId: string): MapType {
+  return DIVERGING_GROWTH_METRICS.has(metricId) ? "growth" : "level"
+}
+
 interface MapColorScaleOptions {
   mapType: MapType
   value: number | null
@@ -93,13 +113,17 @@ const MAP_COLOR_HEX: Record<string, { light: string; dark: string }> = {
   "nodata": { light: "#d1d5db", dark: "#4b5563" }, // Grey - aligns with muted/disabled
   "neutral": { light: "#f3f4f6", dark: "#6b7280" }, // Very light grey - visually recedes
   "positive": { light: "#3b82f6", dark: "#60a5fa" }, // Deep analytical blue
-  "positive-light": { light: "#93c5fd", dark: "#3b82f6" }, // Light blue
-  "positive-mid": { light: "#60a5fa", dark: "#3b82f6" }, // Mid blue
-  "positive-dark": { light: "#1e40af", dark: "#93c5fd" }, // Dark blue
+  // Keep direction consistent across themes:
+  // low → light, high → dark (so legend "Lower → Higher" always matches the ramp)
+  "positive-light": { light: "#93c5fd", dark: "#93c5fd" }, // Light blue (low)
+  "positive-mid": { light: "#60a5fa", dark: "#60a5fa" }, // Mid blue
+  "positive-dark": { light: "#1e40af", dark: "#1d4ed8" }, // Dark blue (high)
   "negative": { light: "#f97316", dark: "#fb923c" }, // Muted red-orange
-  "negative-light": { light: "#fdba74", dark: "#f97316" }, // Light red-orange
-  "negative-mid": { light: "#fb923c", dark: "#f97316" }, // Mid red-orange
-  "negative-dark": { light: "#c2410c", dark: "#fdba74" }, // Dark red-orange
+  // Same consistency for the negative side of diverging ramps:
+  // mild negative → light, strong negative → dark
+  "negative-light": { light: "#fdba74", dark: "#fdba74" }, // Light red-orange (mild negative)
+  "negative-mid": { light: "#fb923c", dark: "#fb923c" }, // Mid red-orange
+  "negative-dark": { light: "#c2410c", dark: "#c2410c" }, // Dark red-orange (strong negative)
 }
 
 /**

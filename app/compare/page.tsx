@@ -4,14 +4,17 @@ import React, { Suspense, useCallback, useEffect, useMemo, useState } from "reac
 import { useSearchParams, useRouter } from "next/navigation"
 import { useTheme } from "next-themes"
 import Link from "next/link"
-import { ArrowLeft, Loader2, X, ZoomIn, ZoomOut, RotateCcw } from "lucide-react"
+import Image from "next/image"
+import { ArrowLeft, Loader2, X, ZoomIn, ZoomOut, RotateCcw, GitCompareArrows, Database } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { RegionPicker } from "@/components/region-picker"
-import { DataTable } from "@/components/data-table"
-import { ExportMenu } from "@/components/export-menu"
+// DataTable removed - using Data Explorer link instead
+// import { DataTable } from "@/components/data-table"
+// ExportMenu removed from header - users export via Data Explorer
+// import { ExportMenu } from "@/components/export-menu"
 import { ExportableChartCard } from "@/components/exportable-chart-card"
 import { dataTypeLabel, scenarioLabel, sourceLabel } from "@/lib/export/canonical"
 import { ErrorBoundaryWrapper } from "@/components/error-boundary"
@@ -768,45 +771,57 @@ function CompareContent() {
     [chartExportRows],
   )
 
-  const exportData = useMemo(
-    () =>
-      allDisplayRegions.map((regionCode) => {
-        const region = REGIONS.find((r) => r.code === regionCode)
-        const metricData = comparisonData[regionCode]?.[metric] || []
-        const latest = metricData[metricData.length - 1]
-        return {
-          region: region?.name || regionCode,
-          code: regionCode,
-          metric: selectedMetric?.title || metric,
-          value: latest?.value ?? 0,
-          scenario,
-          year: latest?.year ?? "",
-        }
-      }),
-    [allDisplayRegions, comparisonData, metric, scenario, selectedMetric?.title],
-  )
+  // URL to open this comparison in the Data Explorer with prefilled selections
+  const dataExplorerUrl = useMemo(() => {
+    const params = new URLSearchParams()
+    params.set("metric", metric)
+    params.set("regions", selectedRegions.join(","))
+    params.set("scenario", scenario)
+    params.set("year", String(year))
+    return `/data?${params.toString()}`
+  }, [metric, selectedRegions, scenario, year])
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b bg-card/95 backdrop-blur">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" asChild>
+      {/* Header - matches DashboardControls layout */}
+      <div className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+        <div className="w-full px-6 py-2 flex items-center justify-between">
+          <div className="flex items-center">
+            {/* Logo */}
+            <div className="relative h-12 w-12 flex-shrink-0">
+              <Image
+                src="/x.png"
+                alt="RegionIQ"
+                fill
+                className="object-contain dark:hidden"
+                priority
+              />
+              <Image
+                src="/Frame 11.png"
+                alt="RegionIQ"
+                fill
+                className="object-contain hidden dark:block"
+                priority
+              />
+            </div>
+
+            <div className="flex items-center gap-4 ml-4">
+              <Button variant="ghost" size="sm" asChild className="h-8 px-3">
                 <Link href={`/?region=${selectedRegions[0] || ""}&year=${year}&scenario=${scenario}`}>
-                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  <ArrowLeft className="h-5 w-5 mr-2" />
                   Back to Dashboard
                 </Link>
               </Button>
-              <div>
-                <h1 className="text-2xl font-bold">Regional Comparison</h1>
-                <p className="text-sm text-muted-foreground">
-                  Compare economic metrics across multiple UK regions
-                </p>
+
+              <div className="h-10 w-px bg-border" />
+
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <GitCompareArrows className="h-4 w-4 text-primary" />
               </div>
+                <h1 className="text-lg font-semibold">Regional Comparison</h1>
             </div>
-            <ExportMenu data={exportData} filename="region-comparison" disabled={!hasAllData && isLoading} />
+          </div>
           </div>
         </div>
       </div>
@@ -889,10 +904,8 @@ function CompareContent() {
 
         {/* Comparison Results */}
         <div className="space-y-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Chart - Using inline component */}
+          {/* Chart - Full width now that Copilot is hidden */}
             <ErrorBoundaryWrapper name="comparison chart">
-              <div className="lg:col-span-2">
                 <ExportableChartCard
                   rows={chartExportRows}
                   csvRows={chartExportCsvRows}
@@ -913,9 +926,10 @@ function CompareContent() {
                     isLoading={!hasAllData && isLoading}
                   />
                 </ExportableChartCard>
-              </div>
             </ErrorBoundaryWrapper>
 
+          {/* Compare Copilot - HIDDEN FOR V1: Component exists but is not rendered
+              To re-enable, uncomment the section below:
             <ErrorBoundaryWrapper name="compare copilot">
               <CompareCopilot
                 metricId={metric}
@@ -927,24 +941,31 @@ function CompareContent() {
                 onApplyAction={applyCopilotAction}
               />
             </ErrorBoundaryWrapper>
-          </div>
+          */}
 
-          {/* Table */}
-          <ErrorBoundaryWrapper name="comparison table">
-            <DataTable
-              title="Regional Data Comparison"
-              description={`${selectedMetric?.title ?? "Metric"} values across selected regions`}
-              data={allDisplayRegions.map((regionCode) => ({
-                region: regionCode,
-                metricId: metric,
-                scenario,
-                data: comparisonData[regionCode]?.[metric] || [],
-              }))}
-              unit={selectedMetric?.unit || ""}
-              year={new Date().getFullYear()}
-              isLoading={!hasAllData && isLoading}
-            />
-          </ErrorBoundaryWrapper>
+          {/* Data Explorer CTA */}
+          <Card className="border-dashed border-2 bg-muted/20">
+            <CardContent className="py-8">
+              <div className="flex flex-col items-center justify-center text-center space-y-4">
+                <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <Database className="h-7 w-7 text-primary" />
+        </div>
+                <div className="space-y-2">
+                  <h3 className="text-xl font-semibold">Explore the Data</h3>
+                  <p className="text-muted-foreground max-w-md">
+                    View detailed tables, select additional years, and export {selectedMetric?.title ?? "metric"} data 
+                    for {selectedRegions.length} selected region{selectedRegions.length !== 1 ? "s" : ""}.
+                  </p>
+                </div>
+                <Button size="lg" asChild className="mt-2">
+                  <Link href={dataExplorerUrl}>
+                    <Database className="h-5 w-5 mr-2" />
+                    Open in Data Explorer
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

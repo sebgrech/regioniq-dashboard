@@ -18,7 +18,7 @@ import { searchRegions, type GroupedResults, type ScoredRegion } from "@/lib/reg
 import { cn } from "@/lib/utils"
 import { CITY_REGIONS } from "@/lib/city-regions"
 
-export type RegionLevel = "ITL1" | "ITL2" | "ITL3" | "LAD"
+export type RegionLevel = "UK" | "ITL1" | "ITL2" | "ITL3" | "LAD"
 
 export interface RegionMetadata {
   code: string
@@ -35,6 +35,7 @@ interface RegionSearchProps {
 }
 
 const LEVEL_LABELS: Record<string, string> = {
+  UK: "National",
   LAD: "LAD",
   CITY: "City",
   ITL3: "ITL3",
@@ -200,6 +201,7 @@ export function RegionSearch({
   const renderGroupedResults = (results: GroupedResults) => {
     const hasResults =
       (results.topMatch && results.topMatch.length > 0) ||
+      results.uk.length > 0 ||
       results.cities.length > 0 ||
       results.lads.length > 0 ||
       results.itl3.length > 0 ||
@@ -215,6 +217,12 @@ export function RegionSearch({
         {results.topMatch && results.topMatch.length > 0 && (
           <CommandGroup heading="Top Match">
             {results.topMatch.map((region) => renderRegionItem(region))}
+          </CommandGroup>
+        )}
+
+        {results.uk.length > 0 && (
+          <CommandGroup heading="National">
+            {results.uk.map((region) => renderRegionItem(region))}
           </CommandGroup>
         )}
 

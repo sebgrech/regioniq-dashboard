@@ -1,4 +1,4 @@
-export type RegionLevel = "ITL1" | "ITL2" | "ITL3" | "LAD"
+export type RegionLevel = "UK" | "ITL1" | "ITL2" | "ITL3" | "LAD"
 
 // Must match the `Layer id`s used by `MapOverlaysDynamic`.
 //
@@ -9,11 +9,12 @@ export type RegionLevel = "ITL1" | "ITL2" | "ITL3" | "LAD"
 //
 // Freeze to reduce the chance of accidental runtime mutation.
 export const INTERACTIVE_LAYER_IDS = Object.freeze([
+  "uk-fill",
   "itl1-fill",
   "itl2-fill",
   "itl3-fill",
   "lad-fill",
-]) as readonly ["itl1-fill", "itl2-fill", "itl3-fill", "lad-fill"]
+]) as readonly ["uk-fill", "itl1-fill", "itl2-fill", "itl3-fill", "lad-fill"]
 
 export const SOURCE_ID = "dynamic-geojson-src" as const
 
@@ -22,6 +23,7 @@ export function fillLayerId(level: RegionLevel) {
 }
 
 export const PROPERTY_MAP: Record<RegionLevel, { code: string; name: string }> = {
+  UK: { code: "shapeISO", name: "shapeName" }, // UK GeoJSON uses these properties
   ITL1: { code: "ITL125CD", name: "ITL125NM" },
   ITL2: { code: "ITL225CD", name: "ITL225NM" }, // 2025 codes
   ITL3: { code: "ITL325CD", name: "ITL325NM" },
@@ -51,12 +53,14 @@ export const ITL3_OLD_TO_NEW: Record<string, string> = {
 
 /**
  * Convert a GeoJSON feature code into the canonical region code used by the app / region-index.json.
+ * - UK: shapeISO (GBR) -> UK
  * - ITL1: TL* -> UK*
  * - ITL3: known old -> new remaps (e.g. Sheffield)
  * - ITL2/LAD: pass-through
  */
 export function canonicalRegionCode(level: RegionLevel, featureCode: string | undefined | null) {
   if (!featureCode) return null
+  if (level === "UK") return "UK" // UK GeoJSON has shapeISO="GBR", we map to "UK"
   if (level === "ITL1") return TL_TO_UK[featureCode] ?? featureCode
   if (level === "ITL3") return ITL3_OLD_TO_NEW[featureCode] ?? featureCode
   return featureCode

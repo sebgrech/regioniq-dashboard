@@ -4,10 +4,12 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { createPortal } from "react-dom"
 import { Map, useMap, type MapRef } from "@vis.gl/react-mapbox"
+import { useTheme } from "next-themes"
 import "mapbox-gl/dist/mapbox-gl.css"
 
-import { ZoomIn, ZoomOut, Maximize, Info, MapPin, Search, Download, Clock, Copy, X } from "lucide-react"
+import { ZoomIn, ZoomOut, Maximize, Info, MapPin, Search, Download, Clock, Copy, X, Target } from "lucide-react"
 import Image from "next/image"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -22,11 +24,9 @@ import { formatValue } from "@/lib/data-service"
 
 // ✅ Dynamic overlay
 import { MapOverlaysDynamic } from "@/components/map-overlays-dynamic"
-import type { RegionMetadata } from "@/components/region-search"
+import type { RegionMetadata, RegionLevel } from "@/components/region-search"
 import type { ChoroplethStats } from "@/lib/map/choropleth-stats"
 import { INTERACTIVE_LAYER_IDS, PROPERTY_MAP, SOURCE_ID, canonicalRegionCode, fillLayerId } from "@/lib/map/region-layers"
-
-type RegionLevel = "ITL1" | "ITL2" | "ITL3" | "LAD"
 type MapMode = "value" | "growth"
 
 interface MapScaffoldProps {
@@ -210,6 +210,27 @@ function MapControls({
         </TooltipTrigger>
         <TooltipContent side="left" align="center" sideOffset={10} className="pointer-events-none">
           {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+        </TooltipContent>
+      </Tooltip>
+
+      {/* Catchment Analysis Button */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Link href="/catchment">
+            <Button
+              variant="secondary"
+              size="sm"
+              className={cn(
+                "p-0 opacity-80 hover:opacity-100 transition-opacity bg-primary/10 hover:bg-primary/20",
+                isFullscreen ? "h-8 w-8" : "h-6 w-6"
+              )}
+            >
+              <Target className={isFullscreen ? "h-3.5 w-3.5" : "h-3 w-3"} />
+            </Button>
+          </Link>
+        </TooltipTrigger>
+        <TooltipContent side="left" align="center" sideOffset={10} className="pointer-events-none">
+          Catchment Analysis
         </TooltipContent>
       </Tooltip>
     </div>
@@ -476,7 +497,7 @@ function FullscreenControls({
   onMapModeChange?: (mode: MapMode) => void
   onGrowthPeriodChange?: (period: number) => void
 }) {
-  const levels: RegionLevel[] = ["ITL1", "ITL2", "ITL3", "LAD"]
+  const levels: RegionLevel[] = ["UK", "ITL1", "ITL2", "ITL3", "LAD"]
 
   return (
     <div className="absolute bottom-16 right-4 z-[10] flex flex-col gap-3">
@@ -538,8 +559,8 @@ function FullscreenControls({
         </div>
       )}
 
-      {/* Level Selector */}
-      {onLevelChange && (
+      {/* Level Selector - Only show when UK is selected (other levels navigate via click) */}
+      {onLevelChange && currentLevel === "UK" && (
         <div className="bg-background/90 backdrop-blur-md rounded-lg border border-border/50 shadow-lg p-3">
           <h4 className="text-sm font-semibold mb-2 text-foreground/90">Granularity</h4>
           <div className="flex rounded-lg border p-1">
@@ -651,6 +672,7 @@ function MapContainerInner({
   mapId: string
 }) {
   const router = useRouter()
+  const { resolvedTheme } = useTheme()
   const region = REGIONS.find((r) => r.code === selectedRegion)
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapRef | null>(null)
@@ -660,6 +682,21 @@ function MapContainerInner({
   const mapboxRef = useRef<any>(null)
   const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastClickRef = useRef<{ time: number; regionCode: string } | null>(null)
+  const [themeMounted, setThemeMounted] = useState(false)
+  const [mapLoaded, setMapLoaded] = useState(false)
+
+  // Track mount state for hydration-safe theme detection
+  useEffect(() => setThemeMounted(true), [])
+  
+  // Reset map loaded state when theme changes to show skeleton during style swap
+  useEffect(() => {
+    setMapLoaded(false)
+  }, [themeMounted && resolvedTheme])
+
+  // Dynamic map style based on theme
+  const mapStyle = themeMounted && resolvedTheme === "dark"
+    ? "mapbox://styles/mapbox/dark-v11"
+    : "mapbox://styles/mapbox/light-v11"
 
   const [hoverInfo, setHoverInfo] = useState<{
     x: number
@@ -1030,6 +1067,107 @@ function MapContainerInner({
             }
       }
           >
+            {/* Map loading skeleton - pulsing UK outline (branded loading state) */}
+            {!mapLoaded && (
+              <div className="absolute inset-0 z-10 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                  {/* Animated UK silhouette SVG */}
+                  <div className="relative">
+                    {/* Outer pulse ring */}
+                    <div className="absolute inset-0 -m-4 rounded-full bg-primary/10 animate-ping" style={{ animationDuration: "2s" }} />
+                    <div className="absolute inset-0 -m-2 rounded-full bg-primary/5 animate-pulse" />
+                    
+                    {/* UK outline SVG - simplified silhouette */}
+                    <svg
+                      width="80"
+                      height="100"
+                      viewBox="0 0 80 100"
+                      className="relative z-10"
+                      style={{
+                        filter: "drop-shadow(0 0 8px rgba(var(--primary), 0.3))",
+                      }}
+                    >
+                      {/* UK silhouette path - simplified but recognizable */}
+                      <path
+                        d="M35 5 L45 3 L55 8 L58 15 L52 22 L60 28 L65 25 L70 30 L68 40 L72 48 L68 55 L60 52 L55 58 L58 65 L52 70 L55 78 L48 85 L40 82 L35 88 L28 85 L25 92 L18 95 L12 88 L8 80 L12 72 L8 65 L15 58 L10 50 L18 42 L12 35 L18 28 L25 32 L30 25 L25 18 L30 12 L35 5 Z"
+                        className="fill-primary/20 stroke-primary"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        style={{
+                          strokeDasharray: 300,
+                          strokeDashoffset: 0,
+                          animation: "uk-draw 2s ease-in-out infinite",
+                        }}
+                      />
+                      {/* Scotland highlight */}
+                      <circle
+                        cx="38"
+                        cy="20"
+                        r="3"
+                        className="fill-primary/40"
+                        style={{
+                          animation: "uk-pulse 1.5s ease-in-out infinite",
+                          animationDelay: "0s",
+                        }}
+                      />
+                      {/* London highlight */}
+                      <circle
+                        cx="55"
+                        cy="65"
+                        r="3"
+                        className="fill-primary/40"
+                        style={{
+                          animation: "uk-pulse 1.5s ease-in-out infinite",
+                          animationDelay: "0.5s",
+                        }}
+                      />
+                      {/* Wales highlight */}
+                      <circle
+                        cx="25"
+                        cy="60"
+                        r="2.5"
+                        className="fill-primary/40"
+                        style={{
+                          animation: "uk-pulse 1.5s ease-in-out infinite",
+                          animationDelay: "1s",
+                        }}
+                      />
+                    </svg>
+                  </div>
+                  
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
+                    <span>Loading regional data</span>
+                    <span className="animate-pulse">...</span>
+                  </div>
+                </div>
+                
+                {/* CSS keyframes for UK loading animation */}
+                <style jsx>{`
+                  @keyframes uk-draw {
+                    0%, 100% {
+                      stroke-dashoffset: 0;
+                      opacity: 1;
+                    }
+                    50% {
+                      stroke-dashoffset: 50;
+                      opacity: 0.7;
+                    }
+                  }
+                  @keyframes uk-pulse {
+                    0%, 100% {
+                      transform: scale(1);
+                      opacity: 0.4;
+                    }
+                    50% {
+                      transform: scale(1.5);
+                      opacity: 0.8;
+                    }
+                  }
+                `}</style>
+              </div>
+            )}
+            
             <Map
               id={mapId}
               ref={mapRef as any}
@@ -1037,7 +1175,7 @@ function MapContainerInner({
               mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN}
               initialViewState={{ longitude: -2, latitude: 54.5, zoom: 5 }}
         style={{ width: "100%", height: "100%", padding: "0", margin: "0", display: "block" }}
-              mapStyle="mapbox://styles/mapbox/light-v11"
+              mapStyle={mapStyle}
               reuseMaps={false}
               onLoad={(e: any) => {
                 // Capture the underlying Mapbox GL JS map instance (most reliable).
@@ -1050,6 +1188,9 @@ function MapContainerInner({
 
                 // Dev-only: capture initial Mapbox instance identity
                 assignRid()
+                
+                // Mark map as loaded to hide skeleton
+                setMapLoaded(true)
               }}
               // IMPORTANT:
               // `interactiveLayerIds` must remain constant and include ALL region fill layers.

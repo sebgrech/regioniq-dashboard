@@ -47,6 +47,8 @@ type ApiQuery = {
 interface DataTabProps {
   metricId: string
   region: string
+  /** Optional: pre-fill with multiple regions (comma-separated string or array) */
+  regions?: string | string[]
   year: number
   scenario: Scenario
   title?: string
@@ -225,9 +227,18 @@ const LadRow = memo(function LadRow({
   )
 })
 
-export function MetricDataTab({ metricId, region, year, scenario, title, className }: DataTabProps) {
+export function MetricDataTab({ metricId, region, regions: initialRegions, year, scenario, title, className }: DataTabProps) {
   const [metrics, setMetrics] = useState<string[]>([metricId])
-  const [regions, setRegions] = useState<string[]>([region])
+  // Support both single region prop and multi-region prop
+  const [regions, setRegions] = useState<string[]>(() => {
+    if (initialRegions) {
+      const parsed = typeof initialRegions === "string" 
+        ? initialRegions.split(",").filter(Boolean) 
+        : initialRegions.filter(Boolean)
+      return parsed.length > 0 ? parsed : [region]
+    }
+    return [region]
+  })
   const [localScenario, setLocalScenario] = useState<Scenario>(scenario)
   const [selectedYears, setSelectedYears] = useState<number[]>([year])
 
@@ -251,7 +262,19 @@ export function MetricDataTab({ metricId, region, year, scenario, title, classNa
 
   // Prefill/scoping behavior: always mirror the page selection by default.
   useEffect(() => setMetrics([metricId]), [metricId])
-  useEffect(() => setRegions([region]), [region])
+  useEffect(() => {
+    // Support both single region and multi-region
+    if (initialRegions) {
+      const parsed = typeof initialRegions === "string" 
+        ? initialRegions.split(",").filter(Boolean) 
+        : initialRegions.filter(Boolean)
+      if (parsed.length > 0) {
+        setRegions(parsed)
+        return
+      }
+    }
+    setRegions([region])
+  }, [region, initialRegions])
   useEffect(() => setSelectedYears([year]), [year])
   useEffect(() => setLocalScenario(scenario), [scenario])
 

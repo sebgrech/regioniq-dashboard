@@ -36,12 +36,15 @@ const UK_TO_TL: Record<string, string> = Object.entries(TL_TO_UK).reduce(
   {} as Record<string, string>
 )
 
-export type RegionLevel = "ITL1" | "ITL2" | "ITL3" | "LAD"
+export type RegionLevel = "UK" | "ITL1" | "ITL2" | "ITL3" | "LAD"
 
 /**
  * Detect the level of a region code
  */
 export function detectRegionLevel(code: string): RegionLevel | null {
+  // UK: exactly "UK"
+  if (code === "UK") return "UK"
+  
   // ITL1: UK[C-N] (3 chars)
   if (code.match(/^UK[C-N]$/)) return "ITL1"
   
@@ -91,9 +94,15 @@ export function getParentRegion(regionCode: string): ParentRegion | null {
       return parent ? { code: parent.code, name: parent.name, level: "ITL1" } : null
     }
     
-    case "ITL1":
+    case "ITL1": {
+      // ITL1 parent is UK
+      const parent = REGIONS.find(r => r.code === "UK" && r.level === "UK")
+      return parent ? { code: parent.code, name: parent.name, level: "UK" } : null
+    }
+    
+    case "UK":
     case "LAD":
-      // ITL1 has no parent (national is implicit)
+      // UK has no parent (top level)
       // LAD parent handling would need the itl-to-lad mapping
       return null
     

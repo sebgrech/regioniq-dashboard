@@ -49,6 +49,7 @@ interface SignalForUI {
   outcome: "high" | "low" | "neutral" | "rising" | "falling"
   strength: 1 | 2 | 3  // for ●●○ display
   detail: string       // short detail on expand (max 60 chars)
+  robustness: "all" | "baseline" | "mixed"  // scenario stability indicator
 }
 
 interface UIBlock {
@@ -213,6 +214,58 @@ const SIGNAL_LABELS: Record<string, string> = {
   growth_composition: "Growth balance"
 }
 
+// =============================================================================
+// Place Context Computation (capitals, #1 rankings)
+// =============================================================================
+
+// UK and devolved capitals (by region code)
+const CAPITAL_LABELS: Record<string, string> = {
+  // ITL1 level
+  "UKI": "UK capital region",
+  // ITL3 level - capitals
+  "TLM13": "Scottish capital",  // City of Edinburgh ITL3
+  // LAD level - major capitals
+  "E09000001": "City of London",
+  "E09000033": "UK capital",  // Westminster
+  "S12000036": "Scottish capital",  // City of Edinburgh LAD
+  "W06000015": "Welsh capital",     // Cardiff
+  "N09000003": "Northern Ireland capital", // Belfast
+}
+
+/**
+ * Compute place context prefix based on:
+ * 1. Capital status (UK, Scottish, Welsh, NI)
+ * 2. #1 rank for key metrics (GVA, Employment)
+ * 
+ * Returns a short prefix like "UK capital" or "#1 GVA nationally"
+ */
+function computePlaceContextPrefix(
+  regionCode: string,
+  allMetricsData: Record<string, { current: number | null; growth5yr: number | null }>,
+  regionLevel: string
+): string | null {
+  // Check for capital status first
+  const region = REGIONS.find(r => r.code === regionCode)
+  const dbCode = region?.dbCode ?? regionCode
+  
+  if (CAPITAL_LABELS[regionCode]) {
+    return CAPITAL_LABELS[regionCode]
+  }
+  if (CAPITAL_LABELS[dbCode]) {
+    return CAPITAL_LABELS[dbCode]
+  }
+  
+  // For London LADs (E09...), add context
+  if (dbCode.startsWith("E09")) {
+    return "London borough"
+  }
+  
+  // Could add #1 GVA/Employment detection here if we had percentiles loaded
+  // For now, we rely on the signals to convey this
+  
+  return null
+}
+
 // Signal to verdict visual type mapping
 const SIGNAL_TO_VISUAL: Record<string, VerdictVisualType> = {
   employment_density: "weekdayPull",
@@ -269,8 +322,10 @@ function selectDominantSignal(signals: SignalResult[]): SignalResult | null {
 }
 
 /**
- * Generate verdict sentence (max 120 chars, no semicolons, opinionated)
- * Format: "[Main claim], [connector] [qualifier][temporal suffix]"
+ * Generate verdict sentence (max 140 chars, no semicolons, opinionated)
+ * Format: "[Place context] — [Main claim], [connector] [qualifier][temporal suffix]"
+ * 
+ * Place context: "UK capital", "Scottish capital", "London borough", etc.
  * 
  * Temporal suffix rules (only ONE per verdict):
  * - Holds to horizon → "through 2035"
@@ -281,7 +336,8 @@ function selectDominantSignal(signals: SignalResult[]): SignalResult | null {
 function generateVerdictSentence(
   characterConclusions: string[],
   pressureSlackConclusions: string[],
-  persistenceSuffix: string = ""
+  persistenceSuffix: string = "",
+  placeContextPrefix: string | null = null
 ): string {
   const character = characterConclusions[0] || ""
   const pressure = pressureSlackConclusions[0] || ""
@@ -301,41 +357,51 @@ function generateVerdictSentence(
   const mainClaim = cleanClaim(character)
   const qualifier = cleanClaim(pressure)
   
+  // Build the core sentence first
+  let coreSentence = ""
+  
   // If no main claim, use qualifier with persistence
   if (!mainClaim && qualifier) {
-    const base = qualifier.charAt(0).toUpperCase() + qualifier.slice(1)
-    const result = base + persistenceSuffix
-    return result.slice(0, 120)
+    coreSentence = qualifier.charAt(0).toUpperCase() + qualifier.slice(1) + persistenceSuffix
+  } else if (!qualifier) {
+    // If no qualifier, just return main claim (no persistence on character claims)
+    coreSentence = mainClaim.charAt(0).toUpperCase() + mainClaim.slice(1)
+  } else {
+    // Combine with "but" or "with" (no semicolons)
+    const lowerQualifier = qualifier.charAt(0).toLowerCase() + qualifier.slice(1)
+    const connector = lowerQualifier.includes("capacity") || lowerQualifier.includes("available") 
+      ? "with" 
+      : "but"
+    
+    // Add persistence suffix to the qualifier (pressure/slack signal)
+    const qualifierWithPersistence = lowerQualifier + persistenceSuffix
+    coreSentence = `${mainClaim.charAt(0).toUpperCase()}${mainClaim.slice(1)}, ${connector} ${qualifierWithPersistence}`
   }
   
-  // If no qualifier, just return main claim (no persistence on character claims)
-  if (!qualifier) {
-    const result = mainClaim.charAt(0).toUpperCase() + mainClaim.slice(1)
-    return result.slice(0, 120)
-  }
-  
-  // Combine with "but" or "with" (no semicolons)
-  const lowerQualifier = qualifier.charAt(0).toLowerCase() + qualifier.slice(1)
-  const connector = lowerQualifier.includes("capacity") || lowerQualifier.includes("available") 
-    ? "with" 
-    : "but"
-  
-  // Add persistence suffix to the qualifier (pressure/slack signal)
-  const qualifierWithPersistence = lowerQualifier + persistenceSuffix
-  const combined = `${mainClaim.charAt(0).toUpperCase()}${mainClaim.slice(1)}, ${connector} ${qualifierWithPersistence}`
-  
-  // Truncate to 120 chars max (slightly increased for temporal suffix)
-  if (combined.length > 120) {
-    // Try without persistence suffix first
-    const withoutPersistence = `${mainClaim.charAt(0).toUpperCase()}${mainClaim.slice(1)}, ${connector} ${lowerQualifier}`
-    if (withoutPersistence.length <= 120) {
-      return withoutPersistence
+  // Prepend place context if available (use colon, not em dash)
+  if (placeContextPrefix) {
+    const withContext = `${placeContextPrefix}: ${coreSentence.charAt(0).toLowerCase()}${coreSentence.slice(1)}`
+    // Check length (allow up to 140 chars for context-enhanced verdicts)
+    if (withContext.length <= 140) {
+      return withContext
     }
-    // Fall back to main claim only
-    return (mainClaim.charAt(0).toUpperCase() + mainClaim.slice(1)).slice(0, 120)
+    // Try without persistence suffix
+    const coreWithoutPersistence = coreSentence.replace(persistenceSuffix, "")
+    const withContextNoPersistence = `${placeContextPrefix}: ${coreWithoutPersistence.charAt(0).toLowerCase()}${coreWithoutPersistence.slice(1)}`
+    if (withContextNoPersistence.length <= 140) {
+      return withContextNoPersistence
+    }
+    // Fall back to just context + main claim
+    if (mainClaim) {
+      const shortVersion = `${placeContextPrefix}: ${mainClaim.charAt(0).toLowerCase()}${mainClaim.slice(1)}`
+      if (shortVersion.length <= 140) {
+        return shortVersion
+      }
+    }
   }
   
-  return combined
+  // Truncate core sentence to 120 chars max
+  return coreSentence.slice(0, 120)
 }
 
 /**
@@ -355,19 +421,35 @@ function generateICCopyText(
 }
 
 /**
- * Convert signals to UI format (max 4)
+ * Convert signals to UI format (max 5)
  * Shows ALL signals including neutral (source of truth)
+ * Now includes robustness indicator from scenario persistence analysis
  */
-function signalsToUI(signals: SignalResult[]): SignalForUI[] {
+function signalsToUI(
+  signals: SignalResult[],
+  forecastData: ForecastTimeSeries,
+  year: number
+): SignalForUI[] {
   return signals
-    .slice(0, 4)  // No filter — show all signals as source of truth
-    .map(s => ({
-      id: s.id,
-      label: SIGNAL_LABELS[s.id] || s.label,
-      outcome: s.outcome,
-      strength: outcomeToStrength(s.outcome),
-      detail: s.detail.slice(0, 60)
-    }))
+    .slice(0, 5)  // Show all 5 signals
+    .map(s => {
+      // Compute persistence for this signal across scenarios
+      const persistence = computeSignalPersistence(
+        s.id,
+        s.outcome,
+        forecastData,
+        year
+      )
+      
+      return {
+        id: s.id,
+        label: SIGNAL_LABELS[s.id] || s.label,
+        outcome: s.outcome,
+        strength: outcomeToStrength(s.outcome),
+        detail: s.detail.slice(0, 60),
+        robustness: persistence.holdsIn
+      }
+    })
 }
 
 // =============================================================================
@@ -468,10 +550,18 @@ export async function POST(request: NextRequest) {
       persistenceSuffix = formatPersistenceSuffix(persistence, year)
     }
     
+    // Compute place context prefix (capitals, boroughs, etc.)
+    const placeContextPrefix = computePlaceContextPrefix(
+      regionCode,
+      allMetricsData,
+      region.level
+    )
+    
     const verdictSentence = generateVerdictSentence(
       characterConclusions, 
       pressureSlackConclusions,
-      persistenceSuffix
+      persistenceSuffix,
+      placeContextPrefix
     )
     const verdictVisualType = SIGNAL_TO_VISUAL[dominantSignalId] || "weekdayPull"
     
@@ -484,7 +574,7 @@ export async function POST(request: NextRequest) {
         payload: dominantSignal ? { outcome: dominantSignal.outcome } : undefined
       },
       icCopyText: generateICCopyText(region.name, verdictSentence, implications),
-      signals: signalsToUI(signals)
+      signals: signalsToUI(signals, forecastData, year)
     }
     
     // Build response (preserves existing fields for backwards compatibility)

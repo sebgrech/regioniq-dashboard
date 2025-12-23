@@ -30,6 +30,8 @@ interface PlaceInsightsProps {
   regionName: string
   year: number
   scenario: "baseline" | "upside" | "downside"
+  /** Expanded layout for standalone pages - larger region name, split cards */
+  expanded?: boolean
 }
 
 interface SignalForUI {
@@ -38,6 +40,7 @@ interface SignalForUI {
   outcome: "high" | "low" | "neutral" | "rising" | "falling"
   strength: 1 | 2 | 3
   detail: string
+  robustness?: "all" | "baseline" | "mixed"
 }
 
 interface UIBlock {
@@ -192,6 +195,7 @@ export function PlaceInsights({
   regionName,
   year,
   scenario,
+  expanded = false,
 }: PlaceInsightsProps) {
   const [data, setData] = useState<PlaceInsightsResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -294,6 +298,125 @@ export function PlaceInsights({
     ...data.pressureAndSlack.conclusions.slice(0, 1)
   ].join(" ").slice(0, 220)
   
+  // Expanded layout for standalone pages
+  if (expanded) {
+    return (
+      <div className="space-y-4">
+        {/* Card 1: Hero header with large region name + verdict */}
+        <Card className="bg-card/80 backdrop-blur-sm border border-border/50 overflow-hidden">
+          <CardContent className="px-5 py-4">
+            {/* Large region name */}
+            <div className="flex items-center justify-between gap-4 mb-2">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <Building2 className="h-7 w-7 text-primary" />
+                </div>
+                <h2 className="text-4xl font-bold text-foreground tracking-tight">{regionName}</h2>
+              </div>
+              <div className="flex items-center gap-3">
+                {ui.bucketLabel && (
+                  <Badge variant="outline" className="text-sm font-normal bg-background/50">
+                    {ui.bucketLabel}
+                  </Badge>
+                )}
+                <Button
+                  size="sm"
+                  variant={copied ? "default" : "outline"}
+                  onClick={handleCopy}
+                  className="h-8 gap-1.5 text-xs"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-3 w-3" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3 w-3" />
+                      Copy
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+            
+            {/* Verdict sentence */}
+            <p className="text-lg font-medium text-foreground/90 leading-snug">
+              {ui.verdictSentence}
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Card 2: Signals + Implications */}
+        <Card className="bg-card/80 backdrop-blur-sm border border-border/50 overflow-hidden">
+          <CardContent className="p-0">
+            {/* Two-column layout: Signals (33%) | Implications (66%) */}
+            <div className="grid grid-cols-1 md:grid-cols-3">
+              {/* Left: Signals by category (1/3 width, grey background) */}
+              <div className="md:col-span-1 bg-muted/40 p-5 space-y-4">
+                <SignalGroup 
+                  title="Structure" 
+                  signals={structureSignals} 
+                  startIndex={0}
+                />
+                <SignalGroup 
+                  title="Capacity" 
+                  signals={capacitySignals}
+                  startIndex={structureSignals.length}
+                />
+              </div>
+              
+              {/* Right: What this means (2/3 width) */}
+              {implications.length > 0 && (
+                <div className="md:col-span-2 p-5">
+                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-3">
+                    What this means
+                  </p>
+                  <ol className="space-y-1">
+                    {implications.slice(0, 3).map((impl) => (
+                      <ImplicationItem 
+                        key={impl.id} 
+                        text={impl.text}
+                        id={impl.id}
+                      />
+                    ))}
+                  </ol>
+                </div>
+              )}
+            </div>
+            
+            {/* Why these signals? (collapsed) */}
+            {rationale && (
+              <div className="border-t border-border/50">
+                <button
+                  onClick={() => setShowRationale(!showRationale)}
+                  className={cn(
+                    "w-full flex items-center justify-between px-5 py-2.5",
+                    "text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  )}
+                >
+                  <span>Why these signals?</span>
+                  <ChevronDown className={cn(
+                    "h-3.5 w-3.5 transition-transform",
+                    showRationale && "rotate-180"
+                  )} />
+                </button>
+                {showRationale && (
+                  <div className="px-5 pb-3 -mt-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {rationale}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+  
+  // Default compact layout (for metric detail page)
   return (
     <Card className="bg-card/80 backdrop-blur-sm border border-border/50 overflow-hidden">
       <CardContent className="p-0">

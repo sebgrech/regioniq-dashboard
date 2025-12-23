@@ -142,14 +142,15 @@
   --map-neutral: oklch(0.30 0 0); /* Dark grey - visually recedes in dark mode */
   /* Blue = stronger / higher / outperforming */
   --map-positive: oklch(0.60 0.12 240); /* Lighter blue for dark mode visibility */
-  --map-positive-light: oklch(0.50 0.08 240); /* Light blue for low positive values */
-  --map-positive-mid: oklch(0.55 0.10 240); /* Mid blue */
-  --map-positive-dark: oklch(0.65 0.14 240); /* Bright blue for high positive values */
+  /* Keep direction consistent with light theme: low → lighter, high → darker/more saturated */
+  --map-positive-light: oklch(0.65 0.08 240); /* Light blue for low positive values */
+  --map-positive-mid: oklch(0.58 0.10 240); /* Mid blue */
+  --map-positive-dark: oklch(0.50 0.14 240); /* Darker blue for high positive values */
   /* Muted red/orange = weaker / lower / underperforming */
   --map-negative: oklch(0.55 0.12 35); /* Muted red-orange - desaturated, analytical */
-  --map-negative-light: oklch(0.45 0.08 35); /* Light red-orange for mild negative */
-  --map-negative-mid: oklch(0.50 0.10 35); /* Mid red-orange */
-  --map-negative-dark: oklch(0.60 0.14 35); /* Bright red-orange for strong negative */
+  --map-negative-light: oklch(0.65 0.08 35); /* Light red-orange for mild negative */
+  --map-negative-mid: oklch(0.58 0.10 35); /* Mid red-orange */
+  --map-negative-dark: oklch(0.50 0.14 35); /* Dark red-orange for strong negative */
 }
 
 @theme inline {

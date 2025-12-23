@@ -175,111 +175,83 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build the prompt
+    // Build the prompt - INSIGHT MODE (not a summary, but a decision-support signal)
     const prompt = `
-You are an economic analyst producing a concise but insightful briefing for a UK subnational region.
+You are an economic analyst producing a SINGLE INSIGHT for a UK subnational region.
+
+CRITICAL: The user's dashboard already shows all current metric values (population, GVA, income, employment).
+Your job is NOT to summarize those values. Your job is to surface what is SURPRISING, ACTIONABLE, or RISK-RELEVANT.
 
 You are given:
-
 - regionName: ${regionName || region}
-
 - metricValues (current year): ${JSON.stringify(currentValues, null, 2)}
-
 - previousYearValues: ${JSON.stringify(previousValues, null, 2)}
-
 - ukAverages: ${JSON.stringify(ukAverages, null, 2)}
-
 - historicalSeries: ${JSON.stringify(historicalSeries, null, 2)}
-
 - scenario: ${scenario}
-
 - year: ${year}
 
-The metrics provided include:
+═══════════════════════════════════════════════════════════════
+ABSOLUTE PROHIBITIONS (violating these = failure):
+═══════════════════════════════════════════════════════════════
 
-- population_total
+DO NOT:
+• List metrics (e.g., "Population is X, GVA is Y, income is Z")
+• Enumerate indicators in any form
+• Use colon-separated facts (e.g., "Population: 9M")
+• Write summaries of current conditions
+• Repeat any values the user can already see on the dashboard
+• Use bullet points or numbered lists
+• Use markdown headers (###, ##, #)
+• Say "In summary", "Here's a breakdown", "Looking at the data"
 
-- nominal_gva_mn_gbp
+If a sentence could be written without numbers, prefer that version.
 
-- gdhi_per_head_gbp
+═══════════════════════════════════════════════════════════════
+QUALITY GATE (every sentence MUST pass):
+═══════════════════════════════════════════════════════════════
 
-- emp_total_jobs
+Each sentence you write MUST contain at least one of:
+1. A CAUSAL EXPLANATION (why something is happening)
+2. A HISTORICAL ANALOGY (comparison to a past event/trend)
+3. A CROSS-METRIC TENSION (e.g., "GVA rising but employment flat suggests...")
+4. A SCENARIO-SPECIFIC IMPLICATION (what upside/downside means for decisions)
 
-Your task:
+If you cannot write 2-3 sentences that pass this test, output ONLY:
+"No material divergences detected at this time."
 
-1. **Identify key trends** from historicalSeries (population, GVA, GDHI, employment).
+═══════════════════════════════════════════════════════════════
+WHAT MAKES A GOOD INSIGHT:
+═══════════════════════════════════════════════════════════════
 
-   • Comment on long-run direction (growth/decline/plateau).
+GOOD EXAMPLES:
+• "Income growth is outpacing employment growth by 2:1, suggesting productivity gains rather than headcount expansion—a pattern that preceded the 2018 retail sector consolidation."
+• "The widening gap between GVA and household income (now **+12%** vs 5 years ago) signals corporate profit retention, which historically precedes wage catch-up within 2-3 years."
+• "Under the downside scenario, this region's employment exposure to public sector (31%) creates **3x the vulnerability** of the UK average to fiscal consolidation."
 
-   • Extract meaningful YoY or multi-year insights (e.g. "growth has slowed", "recovered after 2020").
+BAD EXAMPLES (DO NOT DO THIS):
+• "London has a population of 9M, GVA of £619B, and income of £37K." ← Just restating visible data
+• "The region shows strong performance across all metrics." ← Generic, no insight
+• "GVA is growing, employment is growing, income is growing." ← Enumeration
 
-   • Use real numbers but keep the narrative readable.
+═══════════════════════════════════════════════════════════════
+SCENARIO AWARENESS:
+═══════════════════════════════════════════════════════════════
 
-2. **Explain current-year performance** using metricValues.
+- baseline: Focus on what's structurally unusual or trending unexpectedly
+- upside: What specific drivers would cause this region to outperform? Where's the leverage?
+- downside: What vulnerabilities exist? What's the concentration risk?
 
-   • Convert levels into meaningful, human context ("large for its size", "below regional peers").
+═══════════════════════════════════════════════════════════════
+FORMAT:
+═══════════════════════════════════════════════════════════════
 
-   • Do NOT repeat values mechanically — interpret them.
+• 2-3 sentences MAXIMUM of flowing prose
+• Use **bold** sparingly for key percentages or comparisons
+• Write as if briefing a time-pressed fund manager
+• Every word must earn its place
 
-3. **Compare the region to UK averages** (ukAverages).
-
-   • Indicate relative performance (+/– %) for income, GDP per capita, employment intensity, etc.
-
-   • Identify whether the region is outperforming or lagging the national picture.
-
-4. **Scenario-awareness** (baseline, upside, downside):
-
-   - If scenario === "baseline": describe central trends.
-
-   - If scenario === "upside": emphasise drivers of stronger growth.
-
-   - If scenario === "downside": emphasise vulnerabilities and risks.
-
-5. **Provide a short forward-looking outlook** for 5–10 years:
-
-   • Expected population trend
-
-   • Expected labour market direction
-
-   • GVA momentum
-
-   • Income trajectory
-
-   Frame it as: "Looking ahead to ${year + 5}–${year + 10}, we expect…"
-
-6. **Write in a concise, engaging, professional, research-brief style.**
-
-   • 3–4 sentences total for the main narrative (4–5 only for complex multi-region comparisons).
-
-   • Use clear paragraph breaks for readability (double line breaks between paragraphs).
-
-   • Use **bold** to highlight key numbers, percentages, and important concepts - make numbers pop!
-
-   • Use engaging, visual language: "surges", "outpaces", "trails", "narrows the gap"
-
-   • Create visual comparisons: "stands 46% higher", "widens the lead"
-
-   • Use dynamic transitions: "Meanwhile", "In contrast", "Notably"
-
-   • **BE CONCISE**: For time range questions, focus on START value, END value, overall growth rate, and key insight. Don't list every year.
-
-   • DO NOT use markdown headers (###, ##, #) - write in flowing prose.
-
-   • DO NOT use bullet points or numbered lists - write in complete sentences.
-
-   • No filler phrases like "Here's a breakdown" or "In summary" - just state the facts engagingly.
-
-   • Focus on signal over noise - every sentence should add value.
-
-   • Do not apologise or disclaim.
-
-   • Do not mention the data format or JSON.
-
-   • Write in flowing, engaging prose that reads naturally and makes numbers come alive.
-
-   • Make comparisons vivid but concise: "Bromley's £35,565 towers 46% above Exeter's £24,432" is better than a year-by-year breakdown.
-
-Now write the final narrative.
+Now write the insight (or output the "no divergences" message if nothing meaningful):
 `
 
     console.log("➡️ Sending request to OpenAI…")
@@ -370,8 +342,8 @@ Answer the question using the data provided:`
           content: userMessage,
         },
       ],
-      max_tokens: isChatMode ? 600 : 400,
-      temperature: 0.7,
+      max_tokens: isChatMode ? 600 : 250, // Insight mode is deliberately concise
+      temperature: isChatMode ? 0.7 : 0.5, // Lower temp for insight = more focused
     })
 
     const narrative = completion.choices[0]?.message?.content || "Unable to generate analysis"

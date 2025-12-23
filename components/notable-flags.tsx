@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Zap, Copy, Check, Trophy, TrendingUp, TrendingDown, Activity } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { DataPoint } from "@/lib/data-service"
+import { useMicroConfetti } from "@/components/micro-confetti"
 
 // -----------------------------------------------------------------------------
 // Types
@@ -252,6 +253,9 @@ export function NotableFlags({
   const [response, setResponse] = useState<PlaceFlagsResponse | null>(null)
   const [isFetching, setIsFetching] = useState(false)
   const [copied, setCopied] = useState(false)
+  const cardRef = useRef<HTMLDivElement>(null)
+  const { celebrate } = useMicroConfetti()
+  const hasCelebratedRef = useRef<Set<string>>(new Set())
 
   // Stable-ish key to avoid refetch loops if parent recreates arrays frequently
   const metricsKey = useMemo(() => {
@@ -266,7 +270,33 @@ export function NotableFlags({
   useEffect(() => {
     setResponse(null)
     setCopied(false)
+    hasCelebratedRef.current.clear() // Reset celebrations on region change
   }, [regionCode])
+
+  // Trigger micro-confetti when #1 rank is detected (Bloomberg discipline: restrained)
+  useEffect(() => {
+    if (!response?.flags?.length || !cardRef.current) return
+    
+    // Find any #1 flags
+    const numberOneFlags = response.flags.filter(f => f.headline === "#1")
+    
+    for (const flag of numberOneFlags) {
+      const celebrationKey = `${regionCode}:${flag.metricId}`
+      if (hasCelebratedRef.current.has(celebrationKey)) continue
+      
+      hasCelebratedRef.current.add(celebrationKey)
+      
+      // Get origin from the card (center of the Notable Flags card)
+      const rect = cardRef.current.getBoundingClientRect()
+      celebrate(flag.metricId, {
+        x: rect.left + rect.width / 2,
+        y: rect.top + 60, // Near the top of the card
+      })
+      
+      // Only celebrate one #1 per load (Bloomberg discipline)
+      break
+    }
+  }, [response, regionCode, celebrate])
 
   useEffect(() => {
     if (isLoading || !allMetricsData || allMetricsData.length === 0) return
@@ -337,7 +367,7 @@ export function NotableFlags({
   if (!response?.hasFlags || !response.flags?.length) return null
 
   return (
-    <Card className="bg-card/60 backdrop-blur-sm border border-border/50">
+    <Card ref={cardRef} className="bg-card/60 backdrop-blur-sm border border-border/50">
       <CardHeader className="px-5 pt-4 pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-xl font-semibold flex items-center gap-2">

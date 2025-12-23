@@ -7,8 +7,7 @@ import { TrendingUp, TrendingDown, Briefcase, PoundSterling, DollarSign, Users }
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-
-type RegionLevel = "ITL1" | "ITL2" | "ITL3" | "LAD"
+import type { RegionLevel } from "@/components/region-search"
 
 interface TopMoversProps {
   year: number

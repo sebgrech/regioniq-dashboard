@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Source, Layer, useMap } from "@vis.gl/react-mapbox"
 import { createClient } from "@supabase/supabase-js"
@@ -13,7 +13,13 @@ import { ArrowRight } from "lucide-react"
 import { SOURCE_ID } from "@/lib/map/region-layers"
 import { getCacheKey, getCached, getOrFetch } from "@/lib/cache/choropleth-cache"
 import type { ChoroplethStats } from "@/lib/map/choropleth-stats"
-import { buildMapboxColorRamp, getMapColorForValue, type MapType } from "@/lib/map-color-scale"
+import {
+  buildMapboxColorRamp,
+  getGrowthMapType,
+  getMapColorForValue,
+  type MapType,
+  DIVERGING_GROWTH_METRICS,
+} from "@/lib/map-color-scale"
 
 // Supabase client (env must be set)
 const supabase = createClient(
@@ -21,9 +27,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-import type { RegionMetadata } from "@/components/region-search"
-
-type RegionLevel = "ITL1" | "ITL2" | "ITL3" | "LAD"
+import type { RegionMetadata, RegionLevel } from "@/components/region-search"
 type MapMode = "value" | "growth"
 
 type OutlineSpec = { level: RegionLevel; code: string }
@@ -81,6 +85,7 @@ const getGeoJsonPath = (level: RegionLevel): string => {
 }
 
 const GEO_PATHS: Record<RegionLevel, string> = {
+  UK: getGeoJsonPath('UK'),
   ITL1: getGeoJsonPath('ITL1'),
   ITL2: getGeoJsonPath('ITL2'),
   ITL3: getGeoJsonPath('ITL3'),
@@ -89,6 +94,7 @@ const GEO_PATHS: Record<RegionLevel, string> = {
 
 // Property name mapping for each level
 const PROPERTY_MAP: Record<RegionLevel, { code: string; name: string }> = {
+  UK: { code: "shapeISO", name: "shapeName" }, // UK GeoJSON uses these properties
   ITL1: { code: "ITL125CD", name: "ITL125NM" },
   ITL2: { code: "ITL225CD", name: "ITL225NM" }, // Updated to 2025 codes
   ITL3: { code: "ITL325CD", name: "ITL325NM" },
@@ -164,22 +170,9 @@ function getMapType(mapMode: MapMode, metricId: string): MapType {
   if (mapMode === "value") {
     return "level" // Absolute values → sequential blue
   }
-  
-  // Growth mode: determine if metric can have negative values
-  const canDeclineMetrics = [
-    "population_total",
-    "population_16_64",
-    "emp_total_jobs",
-    "employment_rate_pct",
-    "unemployment_rate_pct",
-  ]
-  
-  if (canDeclineMetrics.includes(metricId)) {
-    return "growth" // Can decline → diverging scale (red-orange → grey → blue)
-  }
-  
-  // Always-positive growth metrics → sequential blue (same as level)
-  return "level"
+
+  // Growth mode: centralized semantics (diverging orange→neutral→blue by default)
+  return getGrowthMapType(metricId)
 }
 
 function quantile(sorted: number[], p: number) {
@@ -223,6 +216,24 @@ export function MapOverlaysDynamic({
     ITL3: false,
     LAD: false,
   })
+  
+  // ─────────────────────────────────────────────────────────────────────────────
+  // REGION "POP" ANIMATION - pulse effect when selecting a region
+  // ─────────────────────────────────────────────────────────────────────────────
+  const [selectionPulse, setSelectionPulse] = useState(false)
+  const lastSelectedCodeRef = useRef<string | null>(null)
+  
+  // Trigger pulse animation when selected region changes
+  useEffect(() => {
+    if (selectedRegion?.code && selectedRegion.code !== lastSelectedCodeRef.current) {
+      lastSelectedCodeRef.current = selectedRegion.code
+      setSelectionPulse(true)
+      
+      // Reset pulse after animation completes
+      const timer = setTimeout(() => setSelectionPulse(false), 600)
+      return () => clearTimeout(timer)
+    }
+  }, [selectedRegion?.code])
 
   const lastFocusKeyRef = useRef<string | null>(null)
 
@@ -261,11 +272,15 @@ export function MapOverlaysDynamic({
   }, [metric])
 
   // Determine table name based on level
-  const tableName = level === "ITL1" ? "itl1_latest_all" :
+  const tableName = level === "UK" ? "macro_latest_all" :
+                    level === "ITL1" ? "itl1_latest_all" :
                     level === "ITL2" ? "itl2_latest_all" :
                     level === "ITL3" ? "itl3_latest_all" :
                     level === "LAD" ? "lad_latest_all" :
                     "itl1_latest_all"
+
+  // Get the correct metric_id for the table (macro_latest_all uses uk_ prefix)
+  const queryMetricId = level === "UK" ? `uk_${metric}` : metric
 
   // Load GeoJSON for the active level.
   // IMPORTANT: Must be race-safe. Rapid level switching can otherwise apply ITL1/ITL3/LAD geoData
@@ -348,8 +363,8 @@ export function MapOverlaysDynamic({
         return
       }
 
-      console.log(`🗺️ [Choropleth] Fetching data for ${level}:`, { metric, year, scenario, tableName })
-      console.log(`🔍 [Choropleth] Query: metric_id="${metric}", period=${year}, table="${tableName}"`)
+      console.log(`🗺️ [Choropleth] Fetching data for ${level}:`, { metric, queryMetricId, year, scenario, tableName })
+      console.log(`🔍 [Choropleth] Query: metric_id="${queryMetricId}", period=${year}, table="${tableName}"`)
         
       try {
         const processedRows = await getOrFetch<typeof metricRows>(key, async () => {
@@ -361,7 +376,7 @@ export function MapOverlaysDynamic({
           const { data: baseRows, error: baseErr } = await supabase
         .from(tableName)
         .select("region_code, value, ci_lower, ci_upper, data_type")
-            .eq("metric_id", "emp_total_jobs")
+            .eq("metric_id", queryMetricId)
         .eq("period", year)
           if (baseErr) throw new Error(baseErr.message)
 
@@ -391,7 +406,7 @@ export function MapOverlaysDynamic({
           const { data: rows, error } = await supabase
             .from(tableName)
             .select("region_code, value, ci_lower, ci_upper, data_type")
-            .eq("metric_id", metric)
+            .eq("metric_id", queryMetricId)
             .eq("period", year)
         if (error) {
             throw new Error(error.message)
@@ -650,9 +665,12 @@ export function MapOverlaysDynamic({
         continue
       }
       
-      // Resolve the key (TL code for ITL1, region_code otherwise)
+      // Resolve the key (TL code for ITL1, GBR for UK, region_code otherwise)
       let key: string | null = null
-      if (level === "ITL1") {
+      if (level === "UK") {
+        // UK GeoJSON uses shapeISO = "GBR", but Supabase uses K02000001
+        if (row.region_code === "K02000001") key = "GBR"
+      } else if (level === "ITL1") {
         const tl = REGION_TO_TL[row.region_code]
         if (tl) key = tl
       } else {
@@ -707,11 +725,10 @@ export function MapOverlaysDynamic({
     const rawMax = values[values.length - 1]
     
     if (mapMode === "growth") {
-      // For growth mode with always-positive metrics (GVA/GDHI), use percentile-based scaling
-      // This ensures better visual variation even when values are clustered in a narrow range
+      // For growth mode with sequential ramps (if any), use percentile-based scaling.
+      // If a metric is rendered as sequential in growth mode, values may cluster and look flat.
       const mapType = getMapType(mapMode, metric)
-      const canDeclineMetrics = ["population_total", "population_16_64", "emp_total_jobs", "employment_rate_pct", "unemployment_rate_pct"]
-      const isAlwaysPositive = !canDeclineMetrics.includes(metric)
+      const isAlwaysPositive = !DIVERGING_GROWTH_METRICS.has(metric)
       
       if (isAlwaysPositive && mapType === "level") {
         // AGGRESSIVE percentile-based scaling for maximum visual variation
@@ -1139,17 +1156,19 @@ export function MapOverlaysDynamic({
           id={fillLayerId}
           type="fill"
           paint={{
-            "fill-color": [
-              "case",
-              // Phase 5: Feature-state hover highlighting (GPU-side, instant)
-              ["boolean", ["feature-state", "hover"], false],
-              "#FFD700", // Highlight color on hover
-              [
-                "case",
-                ["==", ["get", "value"], null], "#94a3b8",
-                colorRampExpr as any,
-              ],
-            ],
+            "fill-color": level === "UK" 
+              ? "#60a5fa" // Light blue solid fill for UK (Tailwind blue-400)
+              : [
+                  "case",
+                  // Phase 5: Feature-state hover highlighting (GPU-side, instant)
+                  ["boolean", ["feature-state", "hover"], false],
+                  "#FFD700", // Highlight color on hover
+                  [
+                    "case",
+                    ["==", ["get", "value"], null], "#94a3b8",
+                    colorRampExpr as any,
+                  ],
+                ],
             "fill-opacity": maskSet
               ? ([
                   "case",
@@ -1157,7 +1176,7 @@ export function MapOverlaysDynamic({
                   0.72,
                   0.08,
                 ] as any)
-              : 0.72,
+              : level === "UK" ? 0.5 : 0.72, // Slightly more transparent for UK
           }}
         />
         <Layer
@@ -1184,23 +1203,25 @@ export function MapOverlaysDynamic({
               : 1,
           }}
         />
-        {/* Highlight layer for selected region */}
+      </Source>
+
+      {/* Highlight layer for selected LAD region - rendered FIRST so parent outline goes on top, then we add another highlight on very top */}
         <Layer
-          key={`${level}-highlight`}
-          id={`${level.toLowerCase()}-highlight`}
+        key={`${level}-highlight-base`}
+        id={`${level.toLowerCase()}-highlight-base`}
+        source={sourceId}
           type="line"
           paint={{
             "line-color": "#ff0066",
             "line-width": [
               "case",
               ["==", ["get", "__selected"], true],
-              3,
+            5,
               0
             ],
-            "line-opacity": 0.8,
+          "line-opacity": 1,
           }}
         />
-      </Source>
 
       {/* Parent boundary outline (e.g. ITL1 outline while viewing LADs) */}
       {parentOutline && parentGeoData && parentOutlineFilterCode && (
@@ -1209,6 +1230,22 @@ export function MapOverlaysDynamic({
           type="geojson"
           data={parentGeoData}
         >
+          {/* Outer glow/halo for visibility */}
+          <Layer
+            id={`${mapId}-${parentOutline.level.toLowerCase()}-parent-outline-halo`}
+            type="line"
+            filter={[
+              "==",
+              ["get", PROPERTY_MAP[parentOutline.level].code],
+              parentOutlineFilterCode,
+            ] as any}
+            paint={{
+              "line-color": "#ffffff",
+              "line-width": 6,
+              "line-opacity": 0.6,
+            }}
+          />
+          {/* Main parent boundary line */}
           <Layer
             id={`${mapId}-${parentOutline.level.toLowerCase()}-parent-outline`}
             type="line"
@@ -1220,11 +1257,59 @@ export function MapOverlaysDynamic({
             paint={{
               "line-color": "#2563eb",
               "line-width": 3,
-              "line-opacity": 0.85,
+              "line-opacity": 0.9,
             }}
           />
         </Source>
       )}
+
+      {/* Selected LAD highlight - rendered LAST (on top of parent outline) with pink border */}
+      {/* Outer glow layer - creates the "pop" effect during selection */}
+      <Source
+        id={`${SOURCE_ID}-highlight-glow-${mapId}`}
+        type="geojson"
+        data={dataForRender}
+      >
+        <Layer
+          key={`${level}-highlight-glow`}
+          id={`${level.toLowerCase()}-highlight-glow`}
+          type="line"
+          paint={{
+            "line-color": "#ff0066",
+            "line-width": [
+              "case",
+              ["==", ["get", "__selected"], true],
+              selectionPulse ? 12 : 8, // Expands during pulse
+              0
+            ],
+            "line-opacity": selectionPulse ? 0.4 : 0.2, // Fades during pulse
+            "line-blur": selectionPulse ? 6 : 4,
+          }}
+        />
+      </Source>
+      
+      {/* Main selection highlight */}
+      <Source
+        id={`${SOURCE_ID}-highlight-top-${mapId}`}
+        type="geojson"
+        data={dataForRender}
+      >
+        <Layer
+          key={`${level}-highlight-top`}
+          id={`${level.toLowerCase()}-highlight-top`}
+          type="line"
+          paint={{
+            "line-color": "#ff0066",
+            "line-width": [
+              "case",
+              ["==", ["get", "__selected"], true],
+              selectionPulse ? 7 : 5, // Slightly larger during pulse
+              0
+            ],
+            "line-opacity": 1,
+          }}
+        />
+      </Source>
 
       {/* Hover tooltip - Recharts style (rendered via React state, updated via requestAnimationFrame) */}
       {hoverInfo && (

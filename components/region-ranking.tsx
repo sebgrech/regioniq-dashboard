@@ -135,15 +135,15 @@ export function RegionRanking({ metricId, region, year, scenario }: RegionRankin
     return null
   }
 
-  const getQuartileMessage = (percentile: number) => {
+  const getGrowthQuartileMessage = (percentile: number) => {
     if (percentile >= 75) {
-      return "Top-quartile growth relative to other UK regions."
+      return "Top-quartile year-on-year growth compared to peers."
     } else if (percentile >= 50) {
-      return "Above-median growth relative to other UK regions."
+      return "Above-median year-on-year growth compared to peers."
     } else if (percentile >= 25) {
-      return "Below-median growth relative to other UK regions."
+      return "Below-median year-on-year growth compared to peers."
     } else {
-      return "Bottom-quartile growth relative to other UK regions."
+      return "Bottom-quartile year-on-year growth compared to peers."
     }
   }
 
@@ -152,19 +152,25 @@ export function RegionRanking({ metricId, region, year, scenario }: RegionRankin
       <CardContent className="pt-6">
         <div className="space-y-4">
           <div className="space-y-2">
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Year-on-Year Growth Rank
+            </div>
             <div className="text-lg font-semibold">
               Rank {rankData.growthRank} / {rankData.growthTotal} ({rankData.growthPercentile}th percentile)
             </div>
             <div className="text-sm text-muted-foreground">
-              {getQuartileMessage(rankData.growthPercentile)}
+              {getGrowthQuartileMessage(rankData.growthPercentile)}
+            </div>
+            <div className="text-xs text-muted-foreground/70 italic">
+              Note: This ranks how fast this metric is changing, not its absolute level.
             </div>
           </div>
 
           {/* Visual Rank Strip */}
           <div className="space-y-2 pt-2">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Declining</span>
-              <span>Growing</span>
+              <span>Slowest growth</span>
+              <span>Fastest growth</span>
             </div>
             {/* Progress bar background */}
             <div className="relative w-full h-3 bg-muted rounded-full overflow-hidden">

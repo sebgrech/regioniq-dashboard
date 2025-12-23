@@ -85,14 +85,42 @@ const METRIC_NAMES: Record<string, string> = {
   population_total: "Population",
   population_16_64: "Working Age",
   nominal_gva_mn_gbp: "GVA",
+  gdhi_per_head_gbp: "Income per head",
+  emp_total_jobs: "Employment",
+  employment_rate_pct: "Employment Rate",
+  unemployment_rate_pct: "Unemployment",
+}
+
+// Short names for headlines (without "per head")
+const METRIC_SHORT_NAMES: Record<string, string> = {
+  population_total: "Population",
+  population_16_64: "Working Age",
+  nominal_gva_mn_gbp: "GVA",
   gdhi_per_head_gbp: "Income",
   emp_total_jobs: "Employment",
   employment_rate_pct: "Employment Rate",
   unemployment_rate_pct: "Unemployment",
 }
 
+// Granularity labels for each region level
+const LEVEL_LABELS: Record<string, string> = {
+  UK: "nationally",
+  ITL1: "among UK regions",
+  ITL2: "among ITL2 areas",
+  ITL3: "among ITL3 areas",
+  LAD: "among all UK local authorities",
+}
+
 function getMetricName(metricId: string): string {
   return METRIC_NAMES[metricId] ?? metricId
+}
+
+function getMetricShortName(metricId: string): string {
+  return METRIC_SHORT_NAMES[metricId] ?? metricId
+}
+
+function getLevelLabel(level: string): string {
+  return LEVEL_LABELS[level] ?? "nationally"
 }
 
 function computeSparkline(data: DataPoint[]): number[] {
@@ -134,7 +162,8 @@ function checkNationalExtreme(
   metricId: string,
   data: DataPoint[],
   regionCode: string,
-  percentiles: MetricPercentiles | null
+  percentiles: MetricPercentiles | null,
+  regionLevel: string
 ): PlaceFlag | null {
   if (!percentiles) return null
   
@@ -145,6 +174,8 @@ function checkNationalExtreme(
   const region = REGIONS.find(r => r.code === regionCode)
   const dbCode = region?.dbCode ?? regionCode
   const metricName = getMetricName(metricId)
+  const metricShortName = getMetricShortName(metricId)
+  const levelLabel = getLevelLabel(regionLevel)
   
   // Check if highest nationally
   if (percentiles.value.maxRegion === dbCode) {
@@ -152,9 +183,9 @@ function checkNationalExtreme(
       id: `extreme-high-${metricId}`,
       type: "extreme",
       metricId,
-      metricName,
+      metricName: metricShortName,
       headline: "#1",
-      subline: `Highest ${metricName.toLowerCase()} nationally`,
+      subline: `Highest ${metricName.toLowerCase()} ${levelLabel}`,
       signal: "positive",
       percentile: 100,
       sparkline: computeSparkline(data),
@@ -169,9 +200,9 @@ function checkNationalExtreme(
       id: `top-${metricId}`,
       type: "extreme",
       metricId,
-      metricName,
+      metricName: metricShortName,
       headline: `Top ${topPct}%`,
-      subline: `${metricName} nationally`,
+      subline: `${metricName} ${levelLabel}`,
       signal: "positive",
       percentile: 100 - topPct,
       sparkline: computeSparkline(data),
@@ -185,9 +216,9 @@ function checkNationalExtreme(
       id: `extreme-low-${metricId}`,
       type: "extreme",
       metricId,
-      metricName,
+      metricName: metricShortName,
       headline: "Lowest",
-      subline: `${metricName} nationally`,
+      subline: `${metricName} ${levelLabel}`,
       signal: "negative",
       percentile: 0,
       sparkline: computeSparkline(data),
@@ -317,7 +348,7 @@ export async function POST(request: NextRequest) {
         : null
       
       // Check for national extremes
-      const extreme = checkNationalExtreme(metricId, data, regionCode, metricPercentiles)
+      const extreme = checkNationalExtreme(metricId, data, regionCode, metricPercentiles, regionLevel ?? "UK")
       if (extreme) allFlags.push(extreme)
       
       // Check for surges

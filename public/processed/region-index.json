@@ -1,4 +1,14 @@
 {
+  "UK": {
+    "name": "United Kingdom",
+    "level": "UK",
+    "bbox": [
+      -8.65,
+      49.86,
+      1.76,
+      60.86
+    ]
+  },
   "UKC": {
     "name": "North East (England)",
     "level": "ITL1",

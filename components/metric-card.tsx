@@ -1,12 +1,110 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { TrendingUp, TrendingDown } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import type { LucideIcon } from "lucide-react"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANIMATED COUNTER HOOK - Creates the "Bloomberg effect" count-up animation
+// ─────────────────────────────────────────────────────────────────────────────
+function useAnimatedCounter(
+  targetValue: string,
+  duration: number = 800
+): string {
+  const [displayValue, setDisplayValue] = useState(targetValue)
+  const prevValueRef = useRef<string>(targetValue)
+  const frameRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    // Parse numeric value from string (e.g., "£347.2B" → 347.2)
+    const extractNumber = (val: string): number | null => {
+      const match = val.match(/[\d,.]+/)
+      if (!match) return null
+      return parseFloat(match[0].replace(/,/g, ""))
+    }
+
+    const targetNum = extractNumber(targetValue)
+    const prevNum = extractNumber(prevValueRef.current)
+
+    // If we can't parse numbers, just set directly
+    if (targetNum === null || prevNum === null || !isFinite(targetNum)) {
+      setDisplayValue(targetValue)
+      prevValueRef.current = targetValue
+      return
+    }
+
+    // Don't animate if the value hasn't meaningfully changed
+    if (Math.abs(targetNum - prevNum) < 0.01) {
+      setDisplayValue(targetValue)
+      prevValueRef.current = targetValue
+      return
+    }
+
+    const startTime = performance.now()
+    const startNum = prevNum
+    const endNum = targetNum
+
+    // Extract prefix/suffix from target value for formatting
+    const prefix = targetValue.match(/^[^\d]*/)?.[0] || ""
+    const suffix = targetValue.match(/[^\d.,]*$/)?.[0] || ""
+    
+    // Determine decimal places from target
+    const decimalMatch = targetValue.match(/\.(\d+)/)
+    const decimals = decimalMatch ? decimalMatch[1].length : 0
+
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      
+      // Ease-out cubic for smooth deceleration
+      const eased = 1 - Math.pow(1 - progress, 3)
+      
+      const currentNum = startNum + (endNum - startNum) * eased
+      
+      // Format the number with the same style as target
+      let formatted: string
+      if (targetValue.includes("B")) {
+        formatted = `${prefix}${currentNum.toFixed(decimals)}B`
+      } else if (targetValue.includes("M")) {
+        formatted = `${prefix}${currentNum.toFixed(decimals)}M`
+      } else if (targetValue.includes("K")) {
+        formatted = `${prefix}${currentNum.toFixed(decimals)}K`
+      } else if (targetValue.includes("%")) {
+        formatted = `${currentNum.toFixed(decimals)}%`
+      } else if (targetValue.includes(",")) {
+        formatted = `${prefix}${currentNum.toLocaleString("en-GB", { 
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals 
+        })}${suffix}`
+      } else {
+        formatted = `${prefix}${currentNum.toFixed(decimals)}${suffix}`
+      }
+      
+      setDisplayValue(formatted)
+
+      if (progress < 1) {
+        frameRef.current = requestAnimationFrame(animate)
+      } else {
+        setDisplayValue(targetValue)
+        prevValueRef.current = targetValue
+      }
+    }
+
+    frameRef.current = requestAnimationFrame(animate)
+
+    return () => {
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current)
+      }
+    }
+  }, [targetValue, duration])
+
+  return displayValue
+}
 
 interface RelatedMetricData {
   id: string
@@ -52,6 +150,9 @@ export function MetricCard({
 }: MetricCardProps) {
   const [isHovered, setIsHovered] = useState(false)
   const hasRelatedMetrics = relatedMetrics.length > 0
+  
+  // Animated counter effect for the main value
+  const animatedValue = useAnimatedCounter(value, 800)
 
   // Debug logging
   useEffect(() => {
@@ -136,7 +237,7 @@ export function MetricCard({
       />
 
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 relative z-10 min-h-[60px]">
-        <CardTitle className="text-sm font-medium text-muted-foreground leading-tight tracking-tight flex-1 pr-2">{title}</CardTitle>
+        <CardTitle className="text-base font-medium text-muted-foreground leading-tight tracking-tight flex-1 pr-2">{title}</CardTitle>
         <div
           className={cn(
             "h-14 w-14 rounded-lg flex items-center justify-center transition-colors duration-200 flex-shrink-0",
@@ -150,11 +251,16 @@ export function MetricCard({
 
       <CardContent className="relative z-10 pt-0">
         <div className="space-y-2">
-          {/* Main value - larger */}
-          <div className="text-4xl font-bold tracking-tight leading-tight">{value}</div>
+          {/* Main value - with animated counter effect (Bloomberg style) */}
+          <div className="text-4xl font-bold tracking-tight leading-tight animate-in fade-in-0 slide-in-from-bottom-2 duration-500 tabular-nums">
+            {animatedValue}
+          </div>
 
-          {/* Change indicator - tighter labels */}
-          <div className="flex items-center space-x-2">
+          {/* Change indicator - tighter labels with staggered entrance */}
+          <div 
+            className="flex items-center space-x-2 animate-in fade-in-0 slide-in-from-bottom-1 duration-500"
+            style={{ animationDelay: "100ms", animationFillMode: "backwards" }}
+          >
             <div
               className={cn(
                 "flex items-center space-x-1 text-base font-semibold",
@@ -263,7 +369,9 @@ export function MetricCard({
   return cardContent
 }
 
-// Mini sparkline component using SVG
+// ─────────────────────────────────────────────────────────────────────────────
+// MINI SPARKLINE - with "draw-on" animation (Apple-style SVG line reveal)
+// ─────────────────────────────────────────────────────────────────────────────
 interface MiniSparklineProps {
   data: number[]
   className?: string
@@ -271,6 +379,22 @@ interface MiniSparklineProps {
 }
 
 function MiniSparkline({ data, className, isExpanded = false }: MiniSparklineProps) {
+  const pathRef = useRef<SVGPathElement>(null)
+  const [pathLength, setPathLength] = useState(0)
+  const [isAnimating, setIsAnimating] = useState(true)
+
+  // Calculate path length on mount for stroke-dasharray animation
+  useEffect(() => {
+    if (pathRef.current) {
+      const length = pathRef.current.getTotalLength()
+      setPathLength(length)
+      // Trigger re-animation when data changes
+      setIsAnimating(true)
+      const timer = setTimeout(() => setIsAnimating(false), 1200)
+      return () => clearTimeout(timer)
+    }
+  }, [data])
+
   if (!data || data.length === 0) {
     return <div className={cn("h-full w-full bg-muted/20 rounded", className)} />
   }
@@ -295,7 +419,7 @@ function MiniSparkline({ data, className, isExpanded = false }: MiniSparklinePro
   return (
     <div className={cn("h-full w-full transition-all duration-300", className)}>
       <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
-        {/* Optional: Add area fill when expanded for better visibility */}
+        {/* Gradient for area fill when expanded */}
         {isExpanded && (
           <defs>
             <linearGradient id={`gradient-${data.length}`} x1="0%" y1="0%" x2="0%" y2="100%">
@@ -314,20 +438,25 @@ function MiniSparkline({ data, className, isExpanded = false }: MiniSparklinePro
           />
         )}
 
-        {/* Line - black in light mode, white in dark mode */}
+        {/* Line with draw-on animation - draws from left to right */}
         <path
+          ref={pathRef}
           d={pathData}
           fill="none"
-          className={cn(
-            "transition-all duration-300",
-            "stroke-black dark:stroke-white"
-          )}
+          className="stroke-black dark:stroke-white"
           strokeWidth={isExpanded ? "2.5" : "2"}
           strokeLinecap="round"
           strokeLinejoin="round"
+          style={{
+            strokeDasharray: pathLength || 200,
+            strokeDashoffset: isAnimating ? (pathLength || 200) : 0,
+            transition: isAnimating 
+              ? "stroke-dashoffset 1s ease-out" 
+              : "stroke-dashoffset 0.3s ease-out",
+          }}
         />
 
-        {/* Data points when expanded */}
+        {/* Data points when expanded - fade in after line draws */}
         {isExpanded && points.map((point, index) => {
           const [x, y] = point.split(",").map(Number)
           return (
@@ -336,17 +465,27 @@ function MiniSparkline({ data, className, isExpanded = false }: MiniSparklinePro
               cx={x}
               cy={y}
               r="2.5"
-              className="fill-black dark:fill-white opacity-60"
+              className="fill-black dark:fill-white"
+              style={{
+                opacity: isAnimating ? 0 : 0.6,
+                transition: `opacity 0.3s ease-out ${0.8 + index * 0.05}s`,
+              }}
             />
           )
         })}
 
-        {/* End point dot - larger when expanded */}
+        {/* End point dot - appears after line finishes drawing */}
         <circle
           cx={points[points.length - 1]?.split(",")[0]}
           cy={points[points.length - 1]?.split(",")[1]}
           r={isExpanded ? "4" : "3"}
-          className="fill-black dark:fill-white transition-all duration-300"
+          className="fill-black dark:fill-white"
+          style={{
+            opacity: isAnimating ? 0 : 1,
+            transform: isAnimating ? "scale(0)" : "scale(1)",
+            transformOrigin: "center",
+            transition: "opacity 0.3s ease-out 0.9s, transform 0.3s ease-out 0.9s",
+          }}
         />
       </svg>
     </div>

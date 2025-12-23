@@ -52,15 +52,14 @@ import {
   updateSearchParams,
   cn,
 } from "@/lib/utils"
-import type { RegionMetadata } from "@/components/region-search"
+import type { RegionMetadata, RegionLevel } from "@/components/region-search"
 import { RegionRanking } from "@/components/region-ranking"
 import { RegionalContextTab } from "@/components/regional-context-tab"
 // Analysis tab components
 import { PlaceInsights } from "@/components/place-insights"
 import { NotableFlags } from "@/components/notable-flags"
 import { MetricInteractionInsights } from "@/components/metric-interaction-insights"
-
-type RegionLevel = "ITL1" | "ITL2" | "ITL3" | "LAD"
+import { ScenarioRobustness } from "@/components/scenario-robustness"
 
 interface MetricDetailData {
   currentData: DataPoint[]
@@ -157,6 +156,7 @@ export default function MetricDetailContent({ id }: { id: string }) {
 
   const selectedRegion = REGIONS.find((r) => r.code === region)
   const isLad = selectedRegion?.level === "LAD"
+  const isUK = region === "UK" || selectedRegion?.level === "UK"
   const isNIEmployment = metric.id === "emp_total_jobs" && selectedRegion?.country === "Northern Ireland"
 
   // Political context (works for LAD, City, ITL2, ITL3, ITL1)
@@ -437,11 +437,11 @@ export default function MetricDetailContent({ id }: { id: string }) {
       <DashboardControls
         region={region}
         year={year}
-        scenario={scenario}
         onRegionChange={handleRegionChange}
         onYearChange={handleYearChange}
-        onScenarioChange={handleScenarioChange}
         activeTab={activeTab}
+        scenario={scenario}
+        onScenarioChange={handleScenarioChange}
       />
 
       {/* Header */}
@@ -451,7 +451,11 @@ export default function MetricDetailContent({ id }: { id: string }) {
             <div className="flex-1 space-y-4">
               <div className="flex items-center gap-4">
                 <Button variant="ghost" size="sm" asChild>
-                  <Link href={`/?region=${region}&year=${year}${scenario !== "baseline" ? `&scenario=${scenario}` : ""}`}>
+                  <Link
+                    href={`/dashboard?region=${region}&year=${year}${
+                      scenario !== "baseline" ? `&scenario=${scenario}` : ""
+                    }`}
+                  >
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Dashboard
                   </Link>
@@ -538,13 +542,13 @@ export default function MetricDetailContent({ id }: { id: string }) {
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
         <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="space-y-8">
-          {/* 👇 now 5 tabs */}
-          <TabsList className="grid w-full grid-cols-5">
+          {/* Conditionally show 4 tabs for UK (no Regional), 5 tabs for other regions */}
+          <TabsList className={`grid w-full ${isUK ? "grid-cols-4" : "grid-cols-5"}`}>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="scenarios">Scenarios</TabsTrigger>
-            <TabsTrigger value="regional">Regional</TabsTrigger>
-            <TabsTrigger value="analysis">Analysis</TabsTrigger>
-            <TabsTrigger value="data">Data</TabsTrigger> {/* NEW */}
+            {!isUK && <TabsTrigger value="regional">Regional</TabsTrigger>}
+            {!isUK && <TabsTrigger value="analysis">Analysis</TabsTrigger>}
+            <TabsTrigger value="data">Data</TabsTrigger>
           </TabsList>
 
           {/* Overview */}
@@ -709,51 +713,46 @@ export default function MetricDetailContent({ id }: { id: string }) {
                   />
                 </div>
 
-                {/* Political Context - Show for all region types */}
-                {politicalContext && (
-                  <Card>
-                    <CardHeader>
+                {/* Political Context - Show for all region types except UK (no meaningful single-region political context) */}
+                {!isUK && politicalContext && (
+                  <Card className="gap-4">
+                    <CardHeader className="pb-0">
                       <CardTitle className="text-2xl">Political Context</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-6">
+                    <CardContent>
                       {politicalLoading ? (
-                        <div className="text-sm text-muted-foreground">Loading political context...</div>
+                        <div className="text-sm text-muted-foreground">Loading...</div>
                       ) : politicalContext ? (
                         <>
-                          {/* SECTION A — Westminster Representation (Parliamentary Layer) - PRIMARY */}
-                          <div className="space-y-4 pb-6 border-b border-border/60">
-                            <div className="text-sm font-bold uppercase tracking-wide text-foreground">
-                              WESTMINSTER REPRESENTATION
-                            </div>
-                            
-                            <WestminsterHeadline
-                              seats={Object.entries(politicalContext.seatCounts)
-                                .sort(([, a], [, b]) => b - a)
-                                .map(([party, count]) => ({
-                                  party,
-                                  count,
-                                  color: partyColor(party),
-                                }))}
-                              turnout={politicalContext.turnout}
-                              majority={politicalContext.majority}
-                              leadingParty={politicalContext.leadingParty}
-                              electionYear={2024}
-                              viewResultsUrl={`/westminster/${region}?return=${encodeURIComponent(
-                                `/metric/${id}?region=${region}&year=${year}${
-                                  scenario !== "baseline" ? `&scenario=${scenario}` : ""
-                                }`
-                              )}`}
-                              regionType={politicalContext.type}
-                            />
-                          </div>
+                          <WestminsterHeadline
+                            seats={Object.entries(politicalContext.seatCounts)
+                              .sort(([, a], [, b]) => b - a)
+                              .map(([party, count]) => ({
+                                party,
+                                count,
+                                color: partyColor(party),
+                              }))}
+                            turnout={politicalContext.turnout}
+                            leadingParty={politicalContext.leadingParty}
+                            electionYear={2024}
+                            viewResultsUrl={`/westminster/${region}?return=${encodeURIComponent(
+                              `/metric/${id}?region=${region}&year=${year}${
+                                scenario !== "baseline" ? `&scenario=${scenario}` : ""
+                              }`
+                            )}`}
+                            regionType={politicalContext.type}
+                          />
 
-                          {/* SECTION B — Local Governance (Council Layer) - SECONDARY */}
+                          {/* SECTION B — Local Governance (Council Layer) - HIDDEN FOR V1
+                              Local election data is complex (thirds elections, mayoral vs council, etc.)
+                              Westminster context is kept as it's clearer and more accurate.
+                              To re-enable, uncomment this entire block including the wrapping div.
+                          
                           <div className="space-y-4 pt-6">
                             <div className="text-sm font-bold uppercase tracking-wide text-foreground">
                               LOCAL GOVERNANCE CONTEXT
                             </div>
                             
-                            {/* Local Authority Control Summary (for aggregated regions) */}
                             {politicalContext.type !== "lad" && politicalContext.ladCount > 1 && (
                               <div>
                                 <div className="text-xs text-muted-foreground mb-2">
@@ -815,7 +814,6 @@ export default function MetricDetailContent({ id }: { id: string }) {
                               </div>
                             )}
 
-                            {/* Local Authority Control (for single LAD) */}
                             {politicalContext.type === "lad" && (
                               <div>
                                 {(() => {
@@ -834,6 +832,7 @@ export default function MetricDetailContent({ id }: { id: string }) {
                               </div>
                             )}
                           </div>
+                          */}
                         </>
                       ) : (
                         <div className="text-sm text-muted-foreground">
@@ -1033,79 +1032,59 @@ export default function MetricDetailContent({ id }: { id: string }) {
                   </Card>
           </TabsContent>
 
-          {/* Regional */}
-          <TabsContent value="regional" className="space-y-8">
-            <RegionalContextTab
-              metric={metric}
-              region={region}
-              year={year}
-              scenario={scenario}
-              selectedRegionMetadata={selectedRegionMetadata}
-            />
-          </TabsContent>
+          {/* Regional - hidden for UK level (no parent context) */}
+          {!isUK && (
+            <TabsContent value="regional" className="space-y-8">
+              <RegionalContextTab
+                metric={metric}
+                region={region}
+                year={year}
+                scenario={scenario}
+                selectedRegionMetadata={selectedRegionMetadata}
+              />
+            </TabsContent>
+          )}
 
-          {/* Analysis - AI-powered interpretive analysis */}
-          <TabsContent value="analysis" className="space-y-6">
-            {/* PlaceInsights - PRIMARY: Place-level truth (3 canonical questions) */}
-            <PlaceInsights
-              regionCode={region}
-              regionName={selectedRegion?.name ?? region}
-              year={year}
-              scenario={scenario}
-            />
-
-            {/* Two-column layout: Notable Flags | Patterns */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Notable Flags - Place-specific exceptional observations */}
-              <NotableFlags
+          {/* Analysis - AI-powered interpretive analysis (hidden for UK) */}
+          {!isUK && (
+            <TabsContent value="analysis" className="space-y-6">
+              {/* PlaceInsights - PRIMARY: Place-level truth (3 canonical questions) */}
+              <PlaceInsights
                 regionCode={region}
                 regionName={selectedRegion?.name ?? region}
                 year={year}
-                allMetricsData={allMetricsData}
-                isLoading={detailData.isLoading || allMetricsData.length === 0}
+                scenario={scenario}
               />
 
-              {/* Metric Interaction Insights - Cross-metric computed patterns */}
-              <MetricInteractionInsights
-                allMetricsData={allMetricsData}
+              {/* Two-column layout: Notable Flags | Patterns */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Notable Flags - Place-specific exceptional observations */}
+                <NotableFlags
+                  regionCode={region}
+                  regionName={selectedRegion?.name ?? region}
+                  year={year}
+                  allMetricsData={allMetricsData}
+                  isLoading={detailData.isLoading || allMetricsData.length === 0}
+                />
+
+                {/* Metric Interaction Insights - Cross-metric computed patterns */}
+                <MetricInteractionInsights
+                  allMetricsData={allMetricsData}
+                  year={year}
+                  regionName={selectedRegion?.name ?? region}
+                  currentMetricId={metric.id}
+                  isLoading={detailData.isLoading || allMetricsData.length === 0}
+                />
+              </div>
+
+              {/* Scenario Robustness - lightweight signal stability indicator */}
+              <ScenarioRobustness
+                regionCode={region}
                 year={year}
-                regionName={selectedRegion?.name ?? region}
-                currentMetricId={metric.id}
-                isLoading={detailData.isLoading || allMetricsData.length === 0}
+                scenario={scenario}
               />
-            </div>
-
-            {/* Related Metrics - quick navigation */}
-            <Card className="bg-card/60 backdrop-blur-sm border border-border/50">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Related Metrics</CardTitle>
-                <CardDescription>Explore connected indicators for deeper analysis</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {METRICS.filter((m) => m.id !== metric.id && m.showInDashboard !== false).map((rm) => {
-                    const RelatedIcon = rm.icon
-                    return (
-                      <Link
-                        key={rm.id}
-                        href={`/metric/${rm.id}?region=${region}&year=${year}${
-                          scenario !== "baseline" ? `&scenario=${scenario}` : ""
-                        }`}
-                        className="flex items-center gap-3 p-3 rounded-lg border bg-background/50 hover:bg-accent transition-colors"
-                      >
-                        <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <RelatedIcon className="h-4 w-4 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm truncate">{rm.shortTitle}</div>
-                        </div>
-                      </Link>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+            </TabsContent>
+          )}
 
           {/* ✅ Data (NEW) */}
           <TabsContent value="data" className="space-y-8">

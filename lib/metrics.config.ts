@@ -13,11 +13,11 @@ export interface Metric {
 }
 
 export interface Region {
-  code: string // UI code (UKC, TLC3, TLC31, E06000001, etc.)
-  dbCode: string // Database region code (ITL1 = E/S/W/N..., ITL2/3 = TL..., LAD = E/S/W/N...)
+  code: string // UI code (UK, UKC, TLC3, TLC31, E06000001, etc.)
+  dbCode: string // Database region code (UK = K02000001, ITL1 = E/S/W/N..., ITL2/3 = TL..., LAD = E/S/W/N...)
   name: string
-  level: "ITL1" | "ITL2" | "ITL3" | "LAD"
-  country: "England" | "Wales" | "Scotland" | "Northern Ireland"
+  level: "UK" | "ITL1" | "ITL2" | "ITL3" | "LAD"
+  country: "United Kingdom" | "England" | "Wales" | "Scotland" | "Northern Ireland"
 }
 
 // -----------------------------------------------------------------------------
@@ -126,10 +126,21 @@ export const METRICS: Metric[] = [
 ]
 
 // -----------------------------------------------------------------------------
-// Regions (ITL1 + ITL2 + ITL3 + LAD)
+// Regions (UK + ITL1 + ITL2 + ITL3 + LAD)
 // -----------------------------------------------------------------------------
 
 export const REGIONS: Region[] = [
+  // ========================================================================
+  // UK (NATIONAL)
+  // ========================================================================
+  {
+    code: "UK",
+    dbCode: "K02000001",
+    name: "United Kingdom",
+    level: "UK",
+    country: "United Kingdom",
+  },
+
   // ========================================================================
   // ITL1 REGIONS
   // ========================================================================
@@ -918,6 +929,8 @@ export function getTableName(regionCode: string): string {
   const level = region?.level || "ITL1"
 
   switch (level) {
+    case "UK":
+      return "macro_latest_all"
     case "ITL1":
       return "itl1_latest_all"
     case "ITL2":

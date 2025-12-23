@@ -103,4 +103,3 @@ function StrengthDots({ strength }: { strength: 1 | 2 | 3 }) {
     </div>
   )
 }
-

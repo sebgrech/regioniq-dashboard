@@ -57,6 +57,7 @@ export interface ScoredRegion extends SearchableRegion {
 
 export interface GroupedResults {
   topMatch?: ScoredRegion[]
+  uk: ScoredRegion[]
   cities: ScoredRegion[]
   lads: ScoredRegion[]
   itl3: ScoredRegion[]
@@ -66,6 +67,7 @@ export interface GroupedResults {
 
 // Base weights for scoring
 const BASE_WEIGHTS: Record<RegionLevel, number> = {
+  UK: 120,
   LAD: 100,
   CITY: 90,
   ITL3: 70,
@@ -87,7 +89,8 @@ export function createRegionIndex(): SearchableRegion[] {
   
   // Add all regions from REGIONS config
   for (const region of REGIONS) {
-    const level = region.level === "LAD" ? "LAD" :
+    const level = region.level === "UK" ? "UK" :
+                  region.level === "LAD" ? "LAD" :
                   region.level === "ITL1" ? "ITL1" :
                   region.level === "ITL2" ? "ITL2" :
                   region.level === "ITL3" ? "ITL3" : "LAD"
@@ -372,6 +375,7 @@ export function groupResults(scoredRegions: ScoredRegion[]): GroupedResults {
   
   // Group by level
   const groups: GroupedResults = {
+    uk: [],
     cities: [],
     lads: [],
     itl3: [],
@@ -390,6 +394,9 @@ export function groupResults(scoredRegions: ScoredRegion[]): GroupedResults {
     }
     
     switch (region.level) {
+      case "UK":
+        groups.uk.push(region)
+        break
       case "CITY":
         groups.cities.push(region)
         break
@@ -416,6 +423,7 @@ export function groupResults(scoredRegions: ScoredRegion[]): GroupedResults {
  */
 export function collapseDuplicates(grouped: GroupedResults): GroupedResults {
   const collapsed: GroupedResults = {
+    uk: [],
     cities: [],
     lads: [],
     itl3: [],
@@ -459,6 +467,7 @@ export function collapseDuplicates(grouped: GroupedResults): GroupedResults {
     return result.sort((a, b) => b.score - a.score)
   }
   
+  collapsed.uk = collapseGroup(grouped.uk)
   collapsed.cities = collapseGroup(grouped.cities)
   collapsed.lads = collapseGroup(grouped.lads)
   collapsed.itl3 = collapseGroup(grouped.itl3)
