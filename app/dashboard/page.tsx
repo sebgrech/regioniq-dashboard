@@ -130,7 +130,9 @@ function DashboardContent() {
     const params = new URLSearchParams(window.location.search)
     keys.forEach((k) => params.delete(k))
     const qs = params.toString()
-    router.replace(qs ? `?${qs}` : ".", { scroll: false })
+    // Replace the current path (not "."), so we never accidentally route back to "/" after clearing params.
+    const path = window.location.pathname
+    router.replace(qs ? `${path}?${qs}` : path, { scroll: false })
   }
 
   const markTourSeen = () => {
