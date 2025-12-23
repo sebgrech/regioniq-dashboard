@@ -16,8 +16,9 @@ export type DataApiQueryResponse = {
 }
 
 export function getDataApiBase(): string {
-  const base = (process.env.NEXT_PUBLIC_DATA_API_BASE_URL ?? "").replace(/\/$/, "")
-  if (!base) throw new Error("Data API not configured (NEXT_PUBLIC_DATA_API_BASE_URL).")
+  // Server-side routes should prefer a non-public env var.
+  const base = (process.env.DATA_API_BASE_URL ?? process.env.NEXT_PUBLIC_DATA_API_BASE_URL ?? "").replace(/\/$/, "")
+  if (!base) throw new Error("Data API not configured (set DATA_API_BASE_URL or NEXT_PUBLIC_DATA_API_BASE_URL).")
   return base
 }
 

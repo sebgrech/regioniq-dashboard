@@ -62,6 +62,13 @@ function selectionRange(sel: Selection | undefined): { from: number; to: number 
   return { from, to }
 }
 
+function selectionYears(sel: Selection | undefined): number[] | null {
+  if (!sel) return null
+  if (sel.filter !== "item") return null
+  const years = (sel.values ?? []).map((v) => Number(v)).filter((n) => Number.isFinite(n)) as number[]
+  return years.length ? Array.from(new Set(years)).sort((a, b) => a - b) : null
+}
+
 function normalizeScenario(values: string[] | null): Scenario[] {
   const allowed: Scenario[] = ["baseline", "upside", "downside"]
   if (!values) return ["baseline"]
@@ -103,6 +110,7 @@ export async function POST(req: NextRequest) {
   const metricSel = selectionItems(getDim(query, "metric"))
   const regionSel = selectionItems(getDim(query, "region"))
   const levelSel = selectionItems(getDim(query, "level")) as RegionLevel[] | null
+  const yearItems = selectionYears(getDim(query, "year"))
   const yearRange = selectionRange(getDim(query, "year")) ?? { from: 2010, to: 2050 }
   const scenarioSel = normalizeScenario(selectionItems(getDim(query, "scenario")))
   const measureSelRaw = selectionItems(getDim(query, "measure"))
@@ -147,11 +155,15 @@ export async function POST(req: NextRequest) {
       )
       .in("region_code", dbCodes)
       .in("metric_id", metricIdsCapped)
-      .gte("period", yearRange.from)
-      .lte("period", yearRange.to)
       .order("metric_id", { ascending: true })
       .order("region_code", { ascending: true })
       .order("period", { ascending: true })
+
+    if (yearItems && yearItems.length > 0) {
+      q.in("period", yearItems)
+    } else {
+      q.gte("period", yearRange.from).lte("period", yearRange.to)
+    }
 
     if (dataTypeSel && dataTypeSel.length > 0) {
       q.in("data_type", dataTypeSel)
@@ -193,7 +205,7 @@ export async function POST(req: NextRequest) {
       metrics: metricIdsCapped,
       regions: regionCodesCapped,
       levels,
-      years: yearRange,
+      years: yearItems?.length ? yearItems : yearRange,
       scenarios: scenarioSel,
       measure: measureSel ?? null,
       data_type: dataTypeSel ?? null,

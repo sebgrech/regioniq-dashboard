@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createSupabaseServerClient } from "@/lib/supabase-server"
 import { METRICS, REGIONS, type Scenario } from "@/lib/metrics.config"
-import { buildRegionYearMatrix } from "@/lib/export/server-compare"
+import {
+  fetchCompareSeries,
+  buildCanonicalCompareRows,
+  buildRegionYearMatrix,
+} from "@/lib/export/server-compare"
 import { buildCompareWorkbook } from "@/lib/export/server-compare-workbook"
-import { postObservationsQuery } from "@/lib/export/data-api-client"
-import { sourceLabel } from "@/lib/export/canonical"
-import { isNIRegionCode, jobsRegionCodeForQuery, remapJobsRegionCodeForOutput } from "@/lib/export/ni-jobs"
+import { jobsMetricIdForRegion } from "@/lib/export/ni-jobs"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -37,80 +39,41 @@ export async function POST(req: NextRequest) {
     }
 
     const scenario = body.scenario as Scenario
-
-    const { data: sessionData } = await supabase.auth.getSession()
-    const token = sessionData.session?.access_token
-    if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-    // NI jobs are stored as `emp_total_jobs_ni` (and UKN jobs live at TLN0).
-    // For compare exports we may have a mix of GB + NI regions, so we query BOTH metrics
-    // and then filter the result set per-region.
-    const isJobs = body.metricId === "emp_total_jobs"
-    const originalRegions = body.regionCodes
-    const queryToOriginal = new Map<string, string>()
-    const regionsForQuery = originalRegions.map((code) => {
-      const q = isJobs ? jobsRegionCodeForQuery(body.metricId, code) : code
-      queryToOriginal.set(q, code)
-      return q
-    })
-    const metricValuesForQuery = isJobs ? ["emp_total_jobs", "emp_total_jobs_ni"] : [body.metricId]
-
-    const requestBody = {
-      query: [
-        { code: "metric", selection: { filter: "item", values: metricValuesForQuery } },
-        { code: "region", selection: { filter: "item", values: regionsForQuery } },
-        { code: "time_period", selection: { filter: "range", from: "1991", to: "2050" } },
-        { code: "scenario", selection: { filter: "item", values: [scenario] } },
-      ],
-      response: { format: "records" },
-      limit: 250000,
-    }
-
-    const api = await postObservationsQuery({ accessToken: token, requestBody })
-    const records = (api?.data ?? []) as any[]
-
-    const regionNameByCode = new Map(body.regionCodes.map((c) => [c, REGIONS.find((r) => r.code === c)?.name ?? c]))
     const scenarioLabel = scenario === "baseline" ? "Baseline" : scenario === "upside" ? "Upside" : "Downside"
 
-    const canonicalRows: Record<string, any>[] = (records ?? [])
-      .map((r: any) => {
-        const apiRegion = String(r.region_code ?? "")
-        const originalRegion = queryToOriginal.get(apiRegion) ?? remapJobsRegionCodeForOutput(body.metricId, apiRegion)
-        const isNI = isNIRegionCode(originalRegion)
-        const mid = String(r.metric_id ?? "")
+    // Fetch data directly from Supabase for each region (no external Data API dependency)
+    const allCanonicalRows: Record<string, any>[] = []
 
-        // For jobs, keep the correct metric per-region:
-        // - NI regions: emp_total_jobs_ni
-        // - GB regions: emp_total_jobs
-        if (isJobs) {
-          if (isNI && mid !== "emp_total_jobs_ni") return null
-          if (!isNI && mid !== "emp_total_jobs") return null
-        }
+    for (const regionCode of body.regionCodes) {
+      // Use appropriate metric ID for NI jobs
+      const metricIdForQuery = jobsMetricIdForRegion(body.metricId, regionCode)
 
-        return {
-      Metric: metric.title,
-          Region: regionNameByCode.get(originalRegion) ?? originalRegion,
-          "Region Code": originalRegion,
-      Year: r.time_period,
-      Scenario: scenarioLabel,
-      Value: r.value ?? null,
-      Units: metric.unit,
-      "Data Type": String(r.data_type ?? "").toLowerCase() === "forecast" ? "Forecast" : "Historical",
-          Source: sourceLabel({ dataType: r.data_type, dataQuality: r.data_quality }),
-        }
+      const points = await fetchCompareSeries({
+        supabase,
+        metricId: metricIdForQuery,
+        regionCode,
+        scenario,
       })
-      .filter(Boolean) as Record<string, any>[]
 
-    const years = canonicalRows.map((r) => r.Year).filter((y) => typeof y === "number") as number[]
+      const regionRows = buildCanonicalCompareRows({
+        metricId: body.metricId,
+        regionCode,
+        scenario,
+        points,
+      })
+
+      allCanonicalRows.push(...regionRows)
+    }
+
+    const years = allCanonicalRows.map((r) => r.Year).filter((y) => typeof y === "number") as number[]
     const coverage = years.length ? `${Math.min(...years)}–${Math.max(...years)}` : ""
 
     const srcSet = new Set<string>()
-    for (const r of canonicalRows) if (r.Source) srcSet.add(String(r.Source))
+    for (const r of allCanonicalRows) if (r.Source) srcSet.add(String(r.Source))
     const sources = Array.from(srcSet).join("; ")
 
-    const matrix = buildRegionYearMatrix({ canonicalRows })
+    const matrix = buildRegionYearMatrix({ canonicalRows: allCanonicalRows })
 
-    const meta = api?.meta ?? {}
     const wb = await buildCompareWorkbook({
       metricLabel: metric.title,
       scenarioLabel,
@@ -119,13 +82,13 @@ export async function POST(req: NextRequest) {
       units: metric.unit,
       coverage,
       sources,
-      generated: meta.generated_at ?? new Date().toISOString(),
-      vintage: meta.vintage,
-      status: meta.status,
-      citation: meta.citation,
-      url: meta.url,
-      accessedAt: meta.accessed_at,
-      canonicalRows,
+      generated: new Date().toISOString(),
+      vintage: undefined,
+      status: undefined,
+      citation: undefined,
+      url: undefined,
+      accessedAt: undefined,
+      canonicalRows: allCanonicalRows,
       matrixHeader: matrix.header,
       matrixRows: matrix.rows,
     })

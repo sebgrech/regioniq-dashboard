@@ -38,7 +38,7 @@ type ApiSelection =
 
 type ApiQuery = {
   query: Array<{
-    code: "metric" | "region" | "level" | "time_period" | "scenario" | "data_type"
+    code: "metric" | "region" | "level" | "year" | "scenario" | "data_type"
     selection: ApiSelection
   }>
   response?: { format: "records" }
@@ -309,16 +309,16 @@ export function MetricDataTab({ metricId, region, regions: initialRegions, year,
     const q: ApiQuery["query"] = [
       { code: "metric", selection: { filter: "item", values: metrics } },
       { code: "region", selection: { filter: "item", values: regions } },
-      { code: "time_period", selection: { filter: "item", values: years.map(String) } },
+      { code: "year", selection: { filter: "item", values: years.map(String) } },
       { code: "scenario", selection: { filter: "item", values: [localScenario] } },
     ]
     return { query: q, response: { format: "records" } }
   }, [metrics, regions, selectedYears, year, localScenario])
 
-  const rawDataApiBase = (process.env.NEXT_PUBLIC_DATA_API_BASE_URL ?? "").trim()
-  const dataApiBase = rawDataApiBase.replace(/\/$/, "")
-  const dataUrl = `${dataApiBase}/api/v1/observations/query`
-  const schemaUrl = `${dataApiBase}/api/v1/schema`
+  // Prefer same-origin v1 endpoints (Supabase-backed) so the dashboard works on Vercel
+  // without requiring a public NEXT_PUBLIC_DATA_API_BASE_URL (and avoids mixed-content/CORS).
+  const dataUrl = "/api/v1/en/data/regional_observations"
+  const schemaUrl = "/api/v1/en/stat/regional_observations"
 
   async function fetchJsonOrThrow(res: Response) {
     const ct = res.headers.get("content-type") ?? ""
@@ -367,16 +367,6 @@ export function MetricDataTab({ metricId, region, regions: initialRegions, year,
     setLoading(true)
     setError(null)
     try {
-      if (!dataApiBase) {
-        throw new Error(
-          "Data API not configured. Set NEXT_PUBLIC_DATA_API_BASE_URL (e.g. http://localhost:8000) and restart the dev server."
-        )
-      }
-      if (!/^https?:\/\//i.test(dataApiBase)) {
-        throw new Error(
-          `Invalid NEXT_PUBLIC_DATA_API_BASE_URL: "${rawDataApiBase}". Include protocol, e.g. http://localhost:8000.`
-        )
-      }
       const token = await getAccessToken()
       if (!token) throw new Error("Not authenticated (missing access token)")
       const res = await fetchWithTimeout(
@@ -407,8 +397,8 @@ export function MetricDataTab({ metricId, region, regions: initialRegions, year,
       setError(
         isNetworkFailure
           ? [
-              `Failed to reach the Data API at ${dataUrl}.`,
-              "Check: (1) FastAPI is running, (2) NEXT_PUBLIC_DATA_API_BASE_URL includes http://, (3) if the UI is on https, the Data API must also be https (mixed-content is blocked).",
+              `Failed to reach the data endpoint at ${dataUrl}.`,
+              "Check: (1) you’re logged in, (2) the app can reach Supabase, (3) your network/VPN isn’t blocking requests.",
             ].join(" ")
           : msg
       )
@@ -420,8 +410,6 @@ export function MetricDataTab({ metricId, region, regions: initialRegions, year,
 
   async function loadSchema() {
     try {
-      if (!dataApiBase) return
-      if (!/^https?:\/\//i.test(dataApiBase)) return
       // Schema is intentionally public (bootstraps the selector before auth resolves).
       // If a token exists, we can still send it, but we must not require it.
       const token = await getAccessToken().catch(() => null)
@@ -455,10 +443,10 @@ export function MetricDataTab({ metricId, region, regions: initialRegions, year,
   const canonicalRows = useMemo(() => {
     const rows = (result?.data ?? []) as any[]
     return rows.map((r) => ({
-      Metric: metricLabel(r.metric_id),
-      Region: regionLabel(r.region_code),
-      "Region Code": r.region_code,
-      Year: r.time_period,
+      Metric: metricLabel(r.metric_id ?? r.metric),
+      Region: regionLabel(r.region_code ?? r.region),
+      "Region Code": r.region_code ?? r.region,
+      Year: r.time_period ?? r.year,
       Scenario: scenarioLabel(r.scenario),
       Value: typeof r.value === "number" ? r.value : r.value == null ? null : Number(r.value),
       Units: r.unit ?? "",
