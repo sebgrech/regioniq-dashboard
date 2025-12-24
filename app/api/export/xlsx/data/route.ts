@@ -134,6 +134,8 @@ export async function POST(req: NextRequest) {
     const token = sessionData.session?.access_token
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+    const dataApiBase = (process.env.DATA_API_BASE_URL ?? process.env.NEXT_PUBLIC_DATA_API_BASE_URL ?? "").replace(/\/$/, "")
+
     // Patch NI jobs export requests:
     // - include `emp_total_jobs_ni` alongside `emp_total_jobs`
     // - rewrite `UKN` -> `TLN0` for query (then remap back in output)
@@ -187,90 +189,112 @@ export async function POST(req: NextRequest) {
       requestBody = body.requestBody
     }
 
-    // Use Supabase directly (no external Data API dependency needed)
-    const query = Array.isArray(requestBody?.query) ? requestBody.query : []
+    let json: any = null
+    if (dataApiBase) {
+      // External Data API (FastAPI) expects `time_period` rather than `year`.
+      const external = (() => {
+        try {
+          const q = Array.isArray(requestBody?.query) ? requestBody.query : []
+          const nextQ = q.map((d: any) => (d?.code === "year" ? { ...d, code: "time_period" } : d))
+          return { ...requestBody, query: nextQ }
+        } catch {
+          return requestBody
+        }
+      })()
 
-    const metricValues = selectionItems(getDim(query, "metric")) ?? body.metrics ?? METRICS.map((m) => m.id)
-    const regionValues = selectionItems(getDim(query, "region")) ?? body.regions ?? REGIONS.map((r) => r.code)
-    const scenarioValuesRaw = selectionItems(getDim(query, "scenario")) ?? (body.scenario ? [body.scenario] : ["baseline"])
-    const scenarioValues = scenarioValuesRaw.filter((s): s is Scenario =>
-      ["baseline", "upside", "downside"].includes(String(s) as any)
-    )
-    const years = selectionYears(getDim(query, "year")) ?? selectionYears(getDim(query, "time_period"))
-    const yearRange =
-      selectionRange(getDim(query, "year")) ?? selectionRange(getDim(query, "time_period")) ?? { from: YEARS.min, to: YEARS.max }
-    const dataTypeSel = selectionItems(getDim(query, "data_type"))
+      const res = await fetch(`${dataApiBase}/api/v1/observations/query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(external),
+      })
+      json = await res.json().catch(() => null)
+      if (!res.ok) return NextResponse.json(json ?? { error: "Export query failed" }, { status: res.status })
+    } else {
+      // Fallback: same-origin Supabase-backed v1 data (no external Data API config needed).
+      const query = Array.isArray(requestBody?.query) ? requestBody.query : []
 
-    const metricIdsCapped = metricValues.slice(0, 50)
-    const regionCodesCapped = regionValues.slice(0, 500)
+      const metricValues = selectionItems(getDim(query, "metric")) ?? body.metrics ?? METRICS.map((m) => m.id)
+      const regionValues = selectionItems(getDim(query, "region")) ?? body.regions ?? REGIONS.map((r) => r.code)
+      const scenarioValuesRaw = selectionItems(getDim(query, "scenario")) ?? (body.scenario ? [body.scenario] : ["baseline"])
+      const scenarioValues = scenarioValuesRaw.filter((s): s is Scenario =>
+        ["baseline", "upside", "downside"].includes(String(s) as any)
+      )
+      const years = selectionYears(getDim(query, "year")) ?? selectionYears(getDim(query, "time_period"))
+      const yearRange =
+        selectionRange(getDim(query, "year")) ?? selectionRange(getDim(query, "time_period")) ?? { from: YEARS.min, to: YEARS.max }
+      const dataTypeSel = selectionItems(getDim(query, "data_type"))
 
-    const levels = (selectionItems(getDim(query, "level")) as RegionLevel[] | null) ?? (["ITL1", "ITL2", "ITL3", "LAD"] as RegionLevel[])
-    const byLevel = new Map<RegionLevel, string[]>()
-    for (const code of regionCodesCapped) {
-      const r = REGIONS.find((x) => x.code === code || x.dbCode === code)
-      if (!r) continue
-      const lvl = r.level as RegionLevel
-      if (!levels.includes(lvl)) continue
-      const dbCode = r.dbCode
-      if (!byLevel.has(lvl)) byLevel.set(lvl, [])
-      byLevel.get(lvl)!.push(dbCode)
-    }
+      const metricIdsCapped = metricValues.slice(0, 50)
+      const regionCodesCapped = regionValues.slice(0, 500)
 
-    const records: any[] = []
-    for (const [lvl, dbCodes] of byLevel.entries()) {
-      const table = TABLE_BY_LEVEL[lvl]
-      if (!table) continue
-      if (!dbCodes.length) continue
-
-      const q = supabase
-        .from(table)
-        .select(
-          "region_code, region_name, region_level, metric_id, period, value, ci_lower, ci_upper, unit, freq, data_type, vintage, forecast_run_date, forecast_version, is_calculated"
-        )
-        .in("region_code", dbCodes)
-        .in("metric_id", metricIdsCapped)
-        .order("metric_id", { ascending: true })
-        .order("region_code", { ascending: true })
-        .order("period", { ascending: true })
-
-      if (years && years.length > 0) {
-        q.in("period", years)
-      } else {
-        q.gte("period", yearRange.from).lte("period", yearRange.to)
+      const levels = (selectionItems(getDim(query, "level")) as RegionLevel[] | null) ?? (["ITL1", "ITL2", "ITL3", "LAD"] as RegionLevel[])
+      const byLevel = new Map<RegionLevel, string[]>()
+      for (const code of regionCodesCapped) {
+        const r = REGIONS.find((x) => x.code === code || x.dbCode === code)
+        if (!r) continue
+        const lvl = r.level as RegionLevel
+        if (!levels.includes(lvl)) continue
+        const dbCode = r.dbCode
+        if (!byLevel.has(lvl)) byLevel.set(lvl, [])
+        byLevel.get(lvl)!.push(dbCode)
       }
 
-      if (dataTypeSel && dataTypeSel.length > 0) {
-        q.in("data_type", dataTypeSel)
-      }
+      const records: any[] = []
+      for (const [lvl, dbCodes] of byLevel.entries()) {
+        const table = TABLE_BY_LEVEL[lvl]
+        if (!table) continue
+        if (!dbCodes.length) continue
 
-      const { data, error } = await q
-      if (error) return NextResponse.json({ error: error.message, table }, { status: 500 })
+        const q = supabase
+          .from(table)
+          .select(
+            "region_code, region_name, region_level, metric_id, period, value, ci_lower, ci_upper, unit, freq, data_type, vintage, forecast_run_date, forecast_version, is_calculated"
+          )
+          .in("region_code", dbCodes)
+          .in("metric_id", metricIdsCapped)
+          .order("metric_id", { ascending: true })
+          .order("region_code", { ascending: true })
+          .order("period", { ascending: true })
 
-      for (const row of data ?? []) {
-        for (const scenario of (scenarioValues.length ? scenarioValues : (["baseline"] as Scenario[]))) {
-          const measure = chooseMeasureForScenario(scenario)
-          records.push({
-            metric_id: row.metric_id,
-            region_code: REGIONS.find((x) => x.dbCode === row.region_code)?.code ?? row.region_code,
-            region_db: row.region_code,
-            level: lvl,
-            time_period: row.period,
-            scenario,
-            value: pickValue(row, measure),
-            data_type: row.data_type,
-            unit: row.unit,
-          })
+        if (years && years.length > 0) {
+          q.in("period", years)
+        } else {
+          q.gte("period", yearRange.from).lte("period", yearRange.to)
+        }
+
+        if (dataTypeSel && dataTypeSel.length > 0) {
+          q.in("data_type", dataTypeSel)
+        }
+
+        const { data, error } = await q
+        if (error) return NextResponse.json({ error: error.message, table }, { status: 500 })
+
+        for (const row of data ?? []) {
+          for (const scenario of (scenarioValues.length ? scenarioValues : (["baseline"] as Scenario[]))) {
+            const measure = chooseMeasureForScenario(scenario)
+            records.push({
+              metric_id: row.metric_id,
+              region_code: REGIONS.find((x) => x.dbCode === row.region_code)?.code ?? row.region_code,
+              region_db: row.region_code,
+              level: lvl,
+              time_period: row.period,
+              scenario,
+              value: pickValue(row, measure),
+              data_type: row.data_type,
+              unit: row.unit,
+            })
+          }
         }
       }
-    }
 
-    const json = {
-      meta: {
-        dataset: "regional_observations",
-        source: "supabase",
-        generated_at: new Date().toISOString(),
-      },
-      data: records,
+      json = {
+        meta: {
+          dataset: "regional_observations",
+          source: "supabase_v1_fallback",
+          generated_at: new Date().toISOString(),
+        },
+        data: records,
+      }
     }
 
     const regionIndex = await loadRegionIndex()
