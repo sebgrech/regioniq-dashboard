@@ -9,7 +9,7 @@ package-lock.json
 out/
 
 # Large boundary assets (served via Cloudflare; do not commit)
-public/**/*.geojson
+# public/**/*.geojson
 public/**/*.shp
 public/**/*.shx
 public/**/*.dbf

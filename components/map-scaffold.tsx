@@ -1068,7 +1068,8 @@ function MapContainerInner({
       }
           >
             {/* Map loading skeleton - pulsing UK outline (branded loading state) */}
-            {!mapLoaded && (
+            {/* Show loading until BOTH mapbox is ready AND choropleth data has loaded */}
+            {(!mapLoaded || !choroplethStats) && (
               <div className="absolute inset-0 z-10 bg-background/80 backdrop-blur-sm flex items-center justify-center">
                 <div className="flex flex-col items-center gap-4">
                   {/* Animated UK silhouette SVG */}

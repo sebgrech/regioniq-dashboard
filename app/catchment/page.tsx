@@ -70,7 +70,7 @@ function CatchmentContent() {
     (scenarioParam as Scenario) || "baseline"
   )
   const [circleRadius, setCircleRadius] = useState(10) // km
-  const [mapStyleOption, setMapStyleOption] = useState<MapStyleOption>("auto")
+  const [mapStyleOption, setMapStyleOption] = useState<MapStyleOption>("streets")
   const [mounted, setMounted] = useState(false)
 
   // Track mount state for hydration
