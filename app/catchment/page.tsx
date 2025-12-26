@@ -373,7 +373,7 @@ function CatchmentContent() {
             </div>
 
             <div className="flex items-center gap-3 ml-3">
-              <Button variant="ghost" size="sm" onClick={() => router.push("/dashboard")} className="h-8 px-3">
+              <Button variant="ghost" size="sm" onClick={() => router.push("/dashboard")} className="h-8 px-3 cursor-pointer">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Dashboard
               </Button>

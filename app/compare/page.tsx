@@ -807,7 +807,7 @@ function CompareContent() {
 
             <div className="flex items-center gap-4 ml-4">
               <Button variant="ghost" size="sm" asChild className="h-8 px-3">
-                <Link href={`/?region=${selectedRegions[0] || ""}&year=${year}&scenario=${scenario}`}>
+                <Link href={`/dashboard?region=${selectedRegions[0] || ""}&year=${year}&scenario=${scenario}`}>
                   <ArrowLeft className="h-5 w-5 mr-2" />
                   Back to Dashboard
                 </Link>

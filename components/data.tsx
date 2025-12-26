@@ -309,14 +309,15 @@ export function MetricDataTab({ metricId, region, regions: initialRegions, year,
     const q: ApiQuery["query"] = [
       { code: "metric", selection: { filter: "item", values: metrics } },
       { code: "region", selection: { filter: "item", values: regions } },
-      { code: "year", selection: { filter: "item", values: years.map(String) } },
+      // External Data API uses "time_period" instead of "year"
+      { code: "time_period", selection: { filter: "item", values: years.map(String) } },
       { code: "scenario", selection: { filter: "item", values: [localScenario] } },
     ]
-    return { query: q, response: { format: "records" } }
+    return { query: q, response: { format: "records" }, limit: 250000 }
   }, [metrics, regions, selectedYears, year, localScenario])
 
-  // Prefer same-origin v1 endpoints (Supabase-backed) so the dashboard works on Vercel
-  // without requiring a public NEXT_PUBLIC_DATA_API_BASE_URL (and avoids mixed-content/CORS).
+  // Use Next.js API route as wrapper around external Data API
+  // This ensures auth and CORS are handled consistently
   const dataUrl = "/api/v1/en/data/regional_observations"
   const schemaUrl = "/api/v1/en/stat/regional_observations"
 

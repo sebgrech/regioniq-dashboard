@@ -14,6 +14,8 @@ export async function middleware(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
+            // Also update the request cookies so subsequent middleware/routes see them
+            request.cookies.set(name, value)
             response.cookies.set(name, value, options)
           })
         },
@@ -24,7 +26,14 @@ export async function middleware(request: NextRequest) {
   // Refresh session + get user (also updates cookies on response via setAll).
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser()
+
+  // Debug logging in development
+  if (process.env.NODE_ENV === "development") {
+    const authCookies = request.cookies.getAll().filter(c => c.name.includes("auth") || c.name.includes("supabase"))
+    console.log(`[Middleware] ${request.nextUrl.pathname} | User: ${user?.email ?? "NONE"} | Cookies: ${authCookies.length} | Error: ${error?.message ?? "none"}`)
+  }
 
   if (!user) {
     const url = request.nextUrl.clone()
@@ -37,7 +46,14 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  matcher: [
+    "/dashboard/:path*",
+    "/compare/:path*",
+    "/catchment/:path*",
+    "/data/:path*",
+    "/metric/:path*",
+    "/analysis/:path*",
+  ],
 }
 
 

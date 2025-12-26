@@ -61,7 +61,7 @@ function DataPageContent() {
 
           <div className="flex items-center gap-4 ml-4">
             <Button variant="ghost" size="sm" asChild className="h-8 px-3">
-              <Link href={`/?region=${region}&year=${year}${scenario !== "baseline" ? `&scenario=${scenario}` : ""}`}>
+              <Link href={`/dashboard?region=${region}&year=${year}${scenario !== "baseline" ? `&scenario=${scenario}` : ""}`}>
                 <ArrowLeft className="h-5 w-5 mr-2" />
                 Back to Dashboard
               </Link>

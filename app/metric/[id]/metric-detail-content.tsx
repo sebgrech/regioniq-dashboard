@@ -144,7 +144,7 @@ export default function MetricDetailContent({ id }: { id: string }) {
           </p>
           <Button asChild>
             <Link
-              href={`/?region=${region}&year=${year}${scenario !== "baseline" ? `&scenario=${scenario}` : ""}`}
+              href={`/dashboard?region=${region}&year=${year}${scenario !== "baseline" ? `&scenario=${scenario}` : ""}`}
             >
               Return to Dashboard
             </Link>
