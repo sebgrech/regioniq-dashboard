@@ -9,9 +9,10 @@
 
 import { Suspense, useState, useEffect, useCallback, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { Map } from "@vis.gl/react-mapbox"
+import { Map, useMap } from "@vis.gl/react-mapbox"  // useMap used in FitToSourceRegion
 import { Source, Layer } from "@vis.gl/react-mapbox"
 import { Loader2, ArrowLeft, Map as MapIcon, Info, Layers, Sun, Moon, Satellite, MapPinned } from "lucide-react"
+import type { FeatureCollection, Feature, Geometry } from "geojson"
 import { useTheme } from "next-themes"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
@@ -44,6 +45,33 @@ import type { Polygon, MultiPolygon } from "geojson"
 const MAPBOX_LIB = import("mapbox-gl")
 
 const MAP_ID = "catchment-map"
+const REGION_KEY = "riq:last-region"
+
+// Region level type
+type RegionLevel = "UK" | "ITL1" | "ITL2" | "ITL3" | "LAD"
+
+// Property name mapping for each level (matches map-overlays-dynamic.tsx)
+const PROPERTY_MAP: Record<RegionLevel, { code: string; name: string }> = {
+  UK: { code: "shapeISO", name: "shapeName" },
+  ITL1: { code: "ITL125CD", name: "ITL125NM" },
+  ITL2: { code: "ITL225CD", name: "ITL225NM" },
+  ITL3: { code: "ITL325CD", name: "ITL325NM" },
+  LAD: { code: "LAD24CD", name: "LAD24NM" },
+}
+
+// UK slug -> ITL125CD (TL*) for matching GeoJSON
+const UK_TO_TL: Record<string, string> = {
+  UKC: "TLC", UKD: "TLD", UKE: "TLE", UKF: "TLF", UKG: "TLG",
+  UKH: "TLH", UKI: "TLI", UKJ: "TLJ", UKK: "TLK", UKL: "TLL",
+  UKM: "TLM", UKN: "TLN",
+}
+
+interface RegionMetadata {
+  code: string
+  name: string
+  level: RegionLevel
+  bbox: [number, number, number, number]
+}
 
 // Map style options
 type MapStyleOption = "auto" | "light" | "dark" | "streets" | "satellite" | "satellite-streets"
@@ -56,6 +84,42 @@ const MAP_STYLES: Record<string, { url: string; label: string; icon: typeof MapI
   "satellite-streets": { url: "mapbox://styles/mapbox/satellite-streets-v12", label: "Hybrid", icon: Layers },
 }
 
+/** Component to fit map to source region bbox (must be inside Map component) */
+function FitToSourceRegion({
+  mapId,
+  sourceRegion,
+  onFitComplete,
+}: {
+  mapId: string
+  sourceRegion: RegionMetadata | null
+  onFitComplete?: () => void
+}) {
+  const maps = useMap() as any
+  const mapRef = maps?.[mapId] ?? maps?.default ?? maps?.current
+  const mapbox = mapRef?.getMap?.() ?? mapRef
+  const didFitRef = useRef(false)
+
+  useEffect(() => {
+    if (!mapbox || !sourceRegion || didFitRef.current) return
+
+    const bbox = sourceRegion.bbox
+    if (bbox && bbox.length === 4) {
+      mapbox.fitBounds(
+        [[bbox[0], bbox[1]], [bbox[2], bbox[3]]],
+        { padding: 60, duration: 1000 }
+      )
+      didFitRef.current = true
+      
+      // Notify parent to start fade-out timer
+      if (onFitComplete) {
+        setTimeout(onFitComplete, 100) // Small delay to ensure animation starts
+      }
+    }
+  }, [mapbox, sourceRegion, onFitComplete])
+
+  return null
+}
+
 function CatchmentContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -65,6 +129,7 @@ function CatchmentContent() {
   // URL state
   const yearParam = searchParams?.get("year")
   const scenarioParam = searchParams?.get("scenario")
+  const regionParam = searchParams?.get("region")
   const [year, setYear] = useState(yearParam ? parseInt(yearParam) : 2024)
   const [scenario, setScenario] = useState<Scenario>(
     (scenarioParam as Scenario) || "baseline"
@@ -72,9 +137,81 @@ function CatchmentContent() {
   const [circleRadius, setCircleRadius] = useState(10) // km
   const [mapStyleOption, setMapStyleOption] = useState<MapStyleOption>("streets")
   const [mounted, setMounted] = useState(false)
+  
+  // Source region (from dashboard context)
+  const [sourceRegion, setSourceRegion] = useState<RegionMetadata | null>(null)
+  const [sourcePolygon, setSourcePolygon] = useState<Feature<Geometry> | null>(null)
+  const [showSourceOutline, setShowSourceOutline] = useState(false)
+  const outlineFadeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Track mount state for hydration
   useEffect(() => setMounted(true), [])
+  
+  // Load source region from URL param or localStorage
+  useEffect(() => {
+    let cancelled = false
+    
+    const loadSourceRegion = async () => {
+      try {
+        const regionCode = regionParam || (typeof window !== "undefined" ? localStorage.getItem(REGION_KEY) : null)
+        if (!regionCode || regionCode === "UK") return // Skip UK level - too zoomed out
+        
+        // Fetch region metadata (has bbox and level)
+        const indexRes = await fetch("/processed/region-index.json")
+        if (!indexRes.ok) return
+        
+        const index = await indexRes.json()
+        if (cancelled) return
+        
+        const meta = index?.[regionCode]
+        if (!meta?.bbox || !meta?.level) return
+        
+        setSourceRegion({
+          code: regionCode,
+          name: meta.name || regionCode,
+          level: meta.level as RegionLevel,
+          bbox: meta.bbox,
+        })
+        
+        // Fetch the polygon geometry from the appropriate GeoJSON
+        const level = meta.level as RegionLevel
+        const geoPath = `/boundaries/${level}.geojson`
+        const geoRes = await fetch(geoPath)
+        if (!geoRes.ok || cancelled) return
+        
+        const geoData: FeatureCollection = await geoRes.json()
+        if (cancelled || !geoData?.features) return
+        
+        // Find the matching feature
+        const propMap = PROPERTY_MAP[level]
+        if (!propMap) return
+        
+        // For ITL1, we need to map UK* codes to TL* codes
+        const matchCode = level === "ITL1" ? (UK_TO_TL[regionCode] || regionCode) : regionCode
+        
+        const feature = geoData.features.find((f) => {
+          const featureCode = (f.properties as any)?.[propMap.code]
+          return featureCode === matchCode || featureCode === regionCode
+        })
+        
+        if (feature && !cancelled) {
+          setSourcePolygon(feature as Feature<Geometry>)
+          setShowSourceOutline(true)
+        }
+      } catch (error) {
+        // Silently fail - this is just a nice-to-have feature
+        if (process.env.NODE_ENV === "development") {
+          console.warn("Failed to load source region:", error)
+        }
+      }
+    }
+    
+    loadSourceRegion()
+    
+    return () => {
+      cancelled = true
+    }
+  }, [regionParam])
 
   // Compute the actual map style URL
   const mapStyleUrl = (() => {
@@ -117,6 +254,24 @@ function CatchmentContent() {
 
   // Map ready state
   const [isMapReady, setIsMapReady] = useState(false)
+  
+  // Callback when map fits to source region - start fade-out timer
+  const handleFitComplete = useCallback(() => {
+    if (showSourceOutline) {
+      outlineFadeTimeoutRef.current = setTimeout(() => {
+        setShowSourceOutline(false)
+      }, 1500)
+    }
+  }, [showSourceOutline])
+  
+  // Cleanup fade timer on unmount
+  useEffect(() => {
+    return () => {
+      if (outlineFadeTimeoutRef.current) {
+        clearTimeout(outlineFadeTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // Resizable sidebar
   const [sidebarWidth, setSidebarWidth] = useState(320) // Default 320px (w-80)
@@ -180,14 +335,15 @@ function CatchmentContent() {
     [setMode]
   )
 
-  // Update URL when year/scenario changes
+  // Update URL when year/scenario changes (preserve region param)
   useEffect(() => {
     const params = new URLSearchParams()
+    if (regionParam) params.set("region", regionParam)
     if (year !== 2024) params.set("year", String(year))
     if (scenario !== "baseline") params.set("scenario", scenario)
     const qs = params.toString()
     router.replace(qs ? `?${qs}` : "/catchment", { scroll: false })
-  }, [year, scenario, router])
+  }, [year, scenario, regionParam, router])
 
   // Get the drawn polygon for visualization (if any)
   const drawnPolygon = geofenceState.geofence?.polygon
@@ -380,6 +536,15 @@ function CatchmentContent() {
             mapStyle={mapStyleUrl}
             onLoad={() => setIsMapReady(true)}
           >
+            {/* Fit to source region on load */}
+            {isMapReady && sourceRegion && (
+              <FitToSourceRegion
+                mapId={MAP_ID}
+                sourceRegion={sourceRegion}
+                onFitComplete={handleFitComplete}
+              />
+            )}
+
             {/* Mapbox Draw control for polygon/circle drawing */}
             {isMapReady && (
               <MapboxDrawControl
@@ -389,6 +554,26 @@ function CatchmentContent() {
                 onDrawComplete={handleDrawComplete}
                 onDrawCancel={() => setMode("none")}
               />
+            )}
+
+            {/* Source region outline (fades out after 1.5s) - "you came from here" hint */}
+            {sourcePolygon && showSourceOutline && (
+              <Source
+                id="source-region-outline"
+                type="geojson"
+                data={sourcePolygon}
+              >
+                <Layer
+                  id="source-region-outline-line"
+                  type="line"
+                  paint={{
+                    "line-color": "#6366f1",
+                    "line-width": 2.5,
+                    "line-dasharray": [3, 2],
+                    "line-opacity": 0.7,
+                  }}
+                />
+              </Source>
             )}
 
             {/* Drawn geofence visualization (backup layer in case draw control doesn't show it) */}

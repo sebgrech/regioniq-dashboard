@@ -71,11 +71,17 @@ function MapControls({
   setIsFullscreen,
   mapId,
   shareUrl,
+  selectedRegion,
+  year,
+  scenario,
 }: {
   isFullscreen: boolean
   setIsFullscreen: (v: boolean) => void
   mapId: string
   shareUrl: string
+  selectedRegion?: string
+  year?: number
+  scenario?: string
 }) {
   const maps = useMap() as any
   const map = maps?.[mapId] ?? maps?.default ?? maps?.current
@@ -216,7 +222,7 @@ function MapControls({
       {/* Catchment Analysis Button */}
       <Tooltip>
         <TooltipTrigger asChild>
-          <Link href="/catchment">
+          <Link href={`/catchment${selectedRegion ? `?region=${selectedRegion}${year ? `&year=${year}` : ""}${scenario && scenario !== "baseline" ? `&scenario=${scenario}` : ""}` : ""}`}>
             <Button
               variant="secondary"
               size="sm"
@@ -1068,8 +1074,7 @@ function MapContainerInner({
       }
           >
             {/* Map loading skeleton - pulsing UK outline (branded loading state) */}
-            {/* Show loading until BOTH mapbox is ready AND choropleth data has loaded */}
-            {(!mapLoaded || !choroplethStats) && (
+            {!mapLoaded && (
               <div className="absolute inset-0 z-10 bg-background/80 backdrop-blur-sm flex items-center justify-center">
                 <div className="flex flex-col items-center gap-4">
                   {/* Animated UK silhouette SVG */}
@@ -1309,6 +1314,9 @@ function MapContainerInner({
                 setIsFullscreen={setIsFullscreen}
                 mapId={mapId}
                 shareUrl={shareUrl}
+                selectedRegion={selectedRegion}
+                year={year}
+                scenario={scenario}
               />
             </Map>
 

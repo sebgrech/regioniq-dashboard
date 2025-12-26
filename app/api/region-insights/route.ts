@@ -339,18 +339,6 @@ function generateVerdictSentence(
   persistenceSuffix: string = "",
   placeContextPrefix: string | null = null
 ): string {
-  const truncateAtWord = (s: string, maxChars: number) => {
-    if (s.length <= maxChars) return s
-    // Prefer breaking on whitespace (avoid mid-word cutoffs like "hir")
-    const window = s.slice(0, maxChars + 1)
-    const lastSpace = window.lastIndexOf(" ")
-    const cutoff = lastSpace > Math.floor(maxChars * 0.6) ? lastSpace : maxChars
-    return s
-      .slice(0, cutoff)
-      .replace(/[\s,.;:!?-]+$/g, "")
-      .concat("…")
-  }
-
   const character = characterConclusions[0] || ""
   const pressure = pressureSlackConclusions[0] || ""
   
@@ -412,8 +400,8 @@ function generateVerdictSentence(
     }
   }
   
-  // Truncate core sentence (word-safe) to avoid mid-word cutoffs in UI
-  return truncateAtWord(coreSentence, 160)
+  // Truncate core sentence to 120 chars max
+  return coreSentence.slice(0, 120)
 }
 
 /**
