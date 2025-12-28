@@ -67,11 +67,11 @@ function DashboardContent() {
   // ----- Persisted readiness for skipping the Supabase test gate -----
   const READY_KEY = "riq:sb-ready"
   const REGION_KEY = "riq:last-region"
-  // Only show Supabase test if explicitly requested via ?setup=1
   const [showSupabaseTest, setShowSupabaseTest] = useState<boolean>(() => {
     if (typeof window === "undefined") return false
     const forceSetup = (searchParams?.get("setup") ?? "0") === "1"
-    return forceSetup // Hidden by default, only show when ?setup=1
+    if (forceSetup) return true
+    return localStorage.getItem(READY_KEY) !== "1"
   })
   // -------------------------------------------------------------------
 
@@ -589,6 +589,7 @@ function DashboardContent() {
           year={year}
           onRegionChange={handleRegionChange}
           onYearChange={handleYearChange}
+          userEmail={(user as any)?.email}
         />
       )}
 

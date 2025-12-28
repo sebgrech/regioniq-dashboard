@@ -53,6 +53,7 @@ export const config = {
     "/data/:path*",
     "/metric/:path*",
     "/analysis/:path*",
+    "/admin/:path*",
   ],
 }
 

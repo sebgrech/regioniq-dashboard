@@ -88,6 +88,25 @@ export default function MetricDetailContent({ id }: { id: string }) {
 
   // Track active tab for conditional UI rendering
   const [activeTab, setActiveTab] = useState("overview")
+  const [user, setUser] = useState<{ email?: string } | null>(null)
+
+  // Load current user for admin controls
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/auth/me", { cache: "no-store" as RequestCache })
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return
+        setUser(data?.user ?? null)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setUser(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const regionConfig = REGIONS.find((r) => r.code === region)
   const [mapLevel, setMapLevel] = useState<RegionLevel>((regionConfig?.level as RegionLevel) ?? "ITL1")
@@ -144,7 +163,7 @@ export default function MetricDetailContent({ id }: { id: string }) {
           </p>
           <Button asChild>
             <Link
-              href={`/dashboard?region=${region}&year=${year}${scenario !== "baseline" ? `&scenario=${scenario}` : ""}`}
+              href={`/?region=${region}&year=${year}${scenario !== "baseline" ? `&scenario=${scenario}` : ""}`}
             >
               Return to Dashboard
             </Link>
@@ -442,6 +461,7 @@ export default function MetricDetailContent({ id }: { id: string }) {
         activeTab={activeTab}
         scenario={scenario}
         onScenarioChange={handleScenarioChange}
+        userEmail={user?.email}
       />
 
       {/* Header */}
