@@ -32,7 +32,7 @@ import {
 import { ExportableTimeseries } from "@/components/exportable-timeseries"
 import { MapScaffold } from "@/components/map-scaffold"
 import { DashboardControls } from "@/components/dashboard-controls"
-import { MetricDataTab } from "@/components/data" // 👈 NEW
+import { DataExplorer } from "@/components/data-explorer"
 import { METRICS, REGIONS, YEARS, type Scenario } from "@/lib/metrics.config"
 import { PoliticalSummary } from "@/components/political-summary"
 import { getAvailableYears } from "@/lib/elections"
@@ -1106,9 +1106,9 @@ export default function MetricDetailContent({ id }: { id: string }) {
             </TabsContent>
           )}
 
-          {/* ✅ Data (NEW) */}
-          <TabsContent value="data" className="space-y-8">
-            <MetricDataTab
+          {/* ✅ Data - uses same DataExplorer as /data page */}
+          <TabsContent value="data" className="space-y-6">
+            <DataExplorer
               metricId={dbMetricId}
               region={region}
               year={year}

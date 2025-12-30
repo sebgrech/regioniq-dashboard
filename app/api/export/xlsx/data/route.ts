@@ -20,6 +20,7 @@ const BodySchema = z.object({
   metrics: z.array(z.string()).optional(),
   regions: z.array(z.string()).optional(),
   scenario: z.enum(["baseline", "upside", "downside"]).optional(),
+  scenarios: z.array(z.enum(["baseline", "upside", "downside"])).optional(), // Multi-scenario support
   selectedYears: z.array(z.number()).optional(),
 })
 
@@ -100,27 +101,6 @@ async function loadRegionIndex(): Promise<Record<string, { name?: string }>> {
   }
 }
 
-function buildScenarioYearMatrix(canonicalRows: Record<string, any>[]) {
-  const years = Array.from(new Set(canonicalRows.map((r) => r.Year).filter((y) => typeof y === "number"))).sort(
-    (a: any, b: any) => Number(a) - Number(b),
-  ) as number[]
-  const header = ["Scenario \\ Year", ...years.map(String)]
-  const scenOrder = ["Baseline", "Upside", "Downside"]
-  const rows: Record<string, any>[] = []
-  for (const scen of scenOrder) {
-    const row: Record<string, any> = { "Scenario \\ Year": scen }
-    for (const y of years) row[String(y)] = null
-    for (const r of canonicalRows) {
-      if (r.Scenario !== scen) continue
-      const y = r.Year
-      if (typeof y !== "number") continue
-      row[String(y)] = r.Value ?? null
-    }
-    rows.push(row)
-  }
-  return { header, rows }
-}
-
 export async function POST(req: NextRequest) {
   try {
     const body = BodySchema.parse(await req.json())
@@ -136,6 +116,8 @@ export async function POST(req: NextRequest) {
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const dataApiBase = (process.env.DATA_API_BASE_URL ?? process.env.NEXT_PUBLIC_DATA_API_BASE_URL ?? "").replace(/\/$/, "")
+    // Canonical public URL for exports (distinct from internal Fly URL used for API calls)
+    const canonicalApiBase = (process.env.CANONICAL_API_URL ?? "https://api.regioniq.io").replace(/\/$/, "")
 
     // Patch NI jobs export requests:
     // - include `emp_total_jobs_ni` alongside `emp_total_jobs`
@@ -217,7 +199,7 @@ export async function POST(req: NextRequest) {
 
       const metricValues = selectionItems(getDim(query, "metric")) ?? body.metrics ?? METRICS.map((m) => m.id)
       const regionValues = selectionItems(getDim(query, "region")) ?? body.regions ?? REGIONS.map((r) => r.code)
-      const scenarioValuesRaw = selectionItems(getDim(query, "scenario")) ?? (body.scenario ? [body.scenario] : ["baseline"])
+      const scenarioValuesRaw = selectionItems(getDim(query, "scenario")) ?? body.scenarios ?? (body.scenario ? [body.scenario] : ["baseline"])
       const scenarioValues = scenarioValuesRaw.filter((s): s is Scenario =>
         ["baseline", "upside", "downside"].includes(String(s) as any)
       )
@@ -373,6 +355,8 @@ export async function POST(req: NextRequest) {
       const meta = json?.meta ?? {}
       // Fetch vintage from /version endpoint (source of truth for weekly publish label)
       const vintage = meta.vintage ?? (await getForecastVintage())
+      // Use canonical public URL for exports (not internal Fly URL)
+      const canonicalUrl = `${canonicalApiBase}/api/v1/observations/query`
       const wb = await buildTimeseriesWorkbook({
         metricLabel: mLabel,
         regionLabel: rLabel,
@@ -384,7 +368,7 @@ export async function POST(req: NextRequest) {
         vintage,
         status: meta.status,
         citation: meta.citation,
-        url: meta.url,
+        url: canonicalUrl,
         accessedAt: meta.accessed_at,
         canonicalRows,
         matrixHeader: matrix.header,
@@ -456,7 +440,8 @@ export async function POST(req: NextRequest) {
       ["Published (weekly)", fallbackVintage],
       ["Status", String(json?.meta?.status ?? "")],
       ["Citation", String(json?.meta?.citation ?? "")],
-      ["URL", String(json?.meta?.url ?? "")],
+      // Use canonical public URL for exports (not internal Fly URL)
+      ["URL", `${canonicalApiBase}/api/v1/observations/query`],
     ].filter(([, v]) => String(v ?? "").trim().length > 0) as any
 
     info.getRow(startRow).values = ["Item", "Value"]

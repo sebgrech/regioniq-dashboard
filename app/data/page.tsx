@@ -37,8 +37,8 @@ function DataPageContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      {/* Header - matches Catchment/Analysis page layout */}
+      <header className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
         <div className="w-full px-6 py-2 flex items-center">
           {/* Logo */}
           <div className="relative h-12 w-12 flex-shrink-0">
@@ -58,28 +58,25 @@ function DataPageContent() {
             />
           </div>
 
-          <div className="flex items-center gap-4 ml-4">
-            <Button variant="ghost" size="sm" asChild className="h-8 px-2 text-muted-foreground hover:text-foreground">
+          <div className="flex items-center gap-3 ml-3">
+            <Button variant="ghost" size="sm" asChild className="h-8 px-3">
               <Link href={`/dashboard?region=${region}&year=${year}${scenario !== "baseline" ? `&scenario=${scenario}` : ""}`}>
-                <ArrowLeft className="h-4 w-4 mr-1.5" />
+                <ArrowLeft className="h-4 w-4 mr-2" />
                 Dashboard
               </Link>
             </Button>
 
-            <div className="h-6 w-px bg-border" />
+            <div className="h-8 w-px bg-border" />
 
-            <div className="flex items-center gap-2.5">
-              <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center">
-                <Database className="h-3.5 w-3.5 text-primary" />
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Database className="h-4 w-4 text-primary" />
               </div>
-              <div>
-                <h1 className="text-sm font-semibold leading-none">Data Explorer</h1>
-                <p className="text-xs text-muted-foreground mt-0.5">Query & export raw data</p>
-              </div>
+              <h1 className="text-lg font-semibold">Data Explorer</h1>
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-6 py-6">

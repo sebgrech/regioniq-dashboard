@@ -113,6 +113,9 @@ export async function POST(req: NextRequest) {
     const meta = api?.meta ?? {}
     // Fetch vintage from /version endpoint (source of truth for weekly publish label)
     const vintage = meta.vintage ?? (await getForecastVintage())
+    // Canonical public URL for exports (not internal Fly URL)
+    const canonicalApiBase = (process.env.CANONICAL_API_URL ?? "https://api.regioniq.io").replace(/\/$/, "")
+    const canonicalUrl = `${canonicalApiBase}/api/v1/observations/query`
     const wb = await buildCompareWorkbook({
       metricLabel: metric.title,
       scenarioLabel,
@@ -124,7 +127,7 @@ export async function POST(req: NextRequest) {
       vintage,
       status: meta.status,
       citation: meta.citation,
-      url: meta.url,
+      url: canonicalUrl,
       accessedAt: meta.accessed_at,
       canonicalRows,
       matrixHeader: matrix.header,

@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState, useRef, useTransition } from "react"
-import { Download, RefreshCw, Code2, AlertCircle, Loader2, Check } from "lucide-react"
+import { Download, RefreshCw, Code2, AlertCircle, Loader2, Check, FileText, FileSpreadsheet, Link2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { LoadingOverlay, FadeUp } from "@/components/ui/animate"
@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils"
 import { exportCSV } from "@/lib/export"
 import { isoDateStamp, downloadBlob } from "@/lib/export/download"
 import { dataTypeLabel, scenarioLabel, sourceLabel } from "@/lib/export/canonical"
+import { useToast } from "@/hooks/use-toast"
 
 import { MetricPicker } from "./MetricPicker"
 import { RegionPicker } from "./RegionPicker"
@@ -50,6 +51,8 @@ export function DataExplorer({
   scenario,
   className,
 }: DataExplorerProps) {
+  const { toast } = useToast()
+
   // State
   const [metrics, setMetrics] = useState<string[]>([metricId])
   const [regions, setRegions] = useState<string[]>(() => {
@@ -304,28 +307,37 @@ export function DataExplorer({
   const handleExportXlsx = async () => {
     const stamp = isoDateStamp()
     const xlsxName = `${filenameBase}_${stamp}.xlsx`
-    const res = await fetch("/api/export/xlsx/data", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        requestBody,
-        metrics,
-        regions,
-        scenarios: selectedScenarios,
-        selectedYears,
-      }),
-    })
-    if (!res.ok) {
-      if (res.status === 401) {
-        const here = window.location.pathname + window.location.search
-        window.location.href = `/login?returnTo=${encodeURIComponent(here)}`
-        return
+    try {
+      const res = await fetch("/api/export/xlsx/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestBody,
+          metrics,
+          regions,
+          scenarios: selectedScenarios,
+          selectedYears,
+        }),
+      })
+      if (!res.ok) {
+        if (res.status === 401) {
+          const here = window.location.pathname + window.location.search
+          window.location.href = `/login?returnTo=${encodeURIComponent(here)}`
+          return
+        }
+        const msg = await res.text()
+        throw new Error(msg || "Server export failed")
       }
-      const msg = await res.text()
-      throw new Error(msg || "Server export failed")
+      const blob = await res.blob()
+      downloadBlob(blob, xlsxName)
+      toast({ title: "Export complete", description: `Downloaded ${xlsxName}` })
+    } catch (err: any) {
+      toast({
+        title: "Excel export failed",
+        description: err?.message || "Unable to export Excel file",
+        variant: "destructive",
+      })
     }
-    const blob = await res.blob()
-    downloadBlob(blob, xlsxName)
   }
 
   const unit = useMemo(() => (result?.data?.[0]?.unit as string | undefined) ?? "", [result])
@@ -422,9 +434,11 @@ export function DataExplorer({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="animate-fade-in-scale">
               <DropdownMenuItem onClick={handleExportCsv}>
+                <FileText className="h-4 w-4 mr-2" />
                 Export CSV
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleExportXlsx}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
                 Export Excel
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -435,7 +449,10 @@ export function DataExplorer({
                     Copied!
                   </>
                 ) : (
-                  "Copy share link"
+                  <>
+                    <Link2 className="h-4 w-4 mr-2" />
+                    Copy share link
+                  </>
                 )}
               </DropdownMenuItem>
             </DropdownMenuContent>

@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useEffect, useMemo, Suspense, useRef } from "react"
@@ -50,7 +51,7 @@ function DashboardContent() {
   const router = useRouter()
   const { toast } = useToast()
   const [isMapFullscreen, setIsMapFullscreen] = useState(false)
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<any | undefined>(undefined)  // undefined = loading, null = no user
   const [tourOpen, setTourOpen] = useState(false)
   
   // Micro-confetti for #1 celebrations
@@ -64,14 +65,14 @@ function DashboardContent() {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
-  // ----- Persisted readiness for skipping the Supabase test gate -----
+  // ----- Dev-only Supabase test gate (opt-in via ?setup=1) -----
   const READY_KEY = "riq:sb-ready"
   const REGION_KEY = "riq:last-region"
   const [showSupabaseTest, setShowSupabaseTest] = useState<boolean>(() => {
     if (typeof window === "undefined") return false
+    // Only show test UI when explicitly requested via ?setup=1
     const forceSetup = (searchParams?.get("setup") ?? "0") === "1"
-    if (forceSetup) return true
-    return localStorage.getItem(READY_KEY) !== "1"
+    return forceSetup
   })
   // -------------------------------------------------------------------
 
@@ -257,56 +258,59 @@ function DashboardContent() {
     if (showSupabaseTest) testConnection()
   }, [showSupabaseTest])
 
-  // Fetch dashboard data
+  // Fetch dashboard data (wait for auth to settle first)
   useEffect(() => {
-    if (!showSupabaseTest) {
-      const loadData = async () => {
-        setDashboardData((prev) => ({ ...prev, isLoading: true }))
-        try {
-          // Fetch main dashboard metrics
-          const mainMetricsPromises = METRICS.filter((m) => m.showInDashboard !== false).map(async (m) => ({
-            metricId: m.id,
-            data: await fetchSeries({ metricId: m.id, region, scenario }),
-          }))
-          
-          // Also fetch related metrics (e.g., employment_rate_pct, unemployment_rate_pct for Employment card)
-          const relatedMetricsToFetch = new Set<string>()
-          METRICS.filter((m) => m.showInDashboard !== false).forEach((m) => {
-            if (m.relatedMetrics) {
-              m.relatedMetrics.forEach((rmId) => relatedMetricsToFetch.add(rmId))
-            }
-          })
-          
-          const relatedMetricsPromises = Array.from(relatedMetricsToFetch).map(async (metricId) => ({
-            metricId,
-            data: await fetchSeries({ metricId, region, scenario }),
-          }))
-          
-          const [mainMetricsData, relatedMetricsData] = await Promise.all([
-            Promise.all(mainMetricsPromises),
-            Promise.all(relatedMetricsPromises),
-          ])
-          
-          const allMetricsData = [...mainMetricsData, ...relatedMetricsData]
-          setDashboardData({ allMetricsData, isLoading: false })
+    // Don't fetch if showing Supabase test UI
+    if (showSupabaseTest) return
+    // Wait for auth to settle (user === undefined means still loading)
+    if (user === undefined) return
 
-          toast({
-            title: "✅ Dashboard Loaded",
-            description: "All metrics loaded from Supabase!",
-          })
-        } catch (error) {
-          console.error("Failed to load dashboard data:", error)
-          toast({
-            title: "Error loading data",
-            description: "Failed to fetch dashboard data. Please try again.",
-            variant: "destructive",
-          })
-          setDashboardData((prev) => ({ ...prev, isLoading: false }))
-        }
+    const loadData = async () => {
+      setDashboardData((prev) => ({ ...prev, isLoading: true }))
+      try {
+        // Fetch main dashboard metrics
+        const mainMetricsPromises = METRICS.filter((m) => m.showInDashboard !== false).map(async (m) => ({
+          metricId: m.id,
+          data: await fetchSeries({ metricId: m.id, region, scenario }),
+        }))
+        
+        // Also fetch related metrics (e.g., employment_rate_pct, unemployment_rate_pct for Employment card)
+        const relatedMetricsToFetch = new Set<string>()
+        METRICS.filter((m) => m.showInDashboard !== false).forEach((m) => {
+          if (m.relatedMetrics) {
+            m.relatedMetrics.forEach((rmId) => relatedMetricsToFetch.add(rmId))
+          }
+        })
+        
+        const relatedMetricsPromises = Array.from(relatedMetricsToFetch).map(async (metricId) => ({
+          metricId,
+          data: await fetchSeries({ metricId, region, scenario }),
+        }))
+        
+        const [mainMetricsData, relatedMetricsData] = await Promise.all([
+          Promise.all(mainMetricsPromises),
+          Promise.all(relatedMetricsPromises),
+        ])
+        
+        const allMetricsData = [...mainMetricsData, ...relatedMetricsData]
+        setDashboardData({ allMetricsData, isLoading: false })
+
+        toast({
+          title: "✅ Dashboard Loaded",
+          description: "All metrics loaded from Supabase!",
+        })
+      } catch (error) {
+        console.error("Failed to load dashboard data:", error)
+        toast({
+          title: "Error loading data",
+          description: "Failed to fetch dashboard data. Please try again.",
+          variant: "destructive",
+        })
+        setDashboardData((prev) => ({ ...prev, isLoading: false }))
       }
-      loadData()
     }
-  }, [region, scenario, toast, showSupabaseTest])
+    loadData()
+  }, [region, scenario, toast, showSupabaseTest, user])
 
   // Helpers
   const updateURL = (updates: Record<string, string | number | null>) => {
@@ -622,33 +626,37 @@ function DashboardContent() {
               const positiveCount = metricCardsData.filter(m => m.changeValue > 0).length
               const negativeCount = metricCardsData.filter(m => m.changeValue < 0).length
               const totalCount = metricCardsData.length
+              // Use past tense for historical data (before 2024), present for forecasts
+              const isHistorical = year < 2024
+              const growVerb = isHistorical ? "grew" : "growing"
+              const declineVerb = isHistorical ? "declined" : "declining"
               
               if (positiveCount === totalCount) {
                 return (
                   <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
                     <TrendingUp className="h-3 w-3" />
-                    All metrics growing
+                    All metrics {growVerb}
                   </div>
                 )
               } else if (negativeCount === totalCount) {
                 return (
                   <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
                     <TrendingDown className="h-3 w-3" />
-                    All metrics declining
+                    All metrics {declineVerb}
                   </div>
                 )
               } else if (positiveCount > negativeCount) {
                 return (
                   <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
                     <TrendingUp className="h-3 w-3" />
-                    {positiveCount}/{totalCount} growing
+                    {positiveCount}/{totalCount} {growVerb}
                   </div>
                 )
               } else if (negativeCount > positiveCount) {
                 return (
                   <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                     <TrendingDown className="h-3 w-3" />
-                    {negativeCount}/{totalCount} declining
+                    {negativeCount}/{totalCount} {declineVerb}
                   </div>
                 )
               } else {

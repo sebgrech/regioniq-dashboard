@@ -149,7 +149,7 @@ export function RegionPicker({
           />
         </div>
       </PopoverTrigger>
-      <PopoverContent className="w-[380px] p-0" align="start">
+      <PopoverContent className="w-[380px] p-0" align="start" side="bottom">
         {/* Search */}
         <div className="p-3 border-b">
           <div className="relative">
