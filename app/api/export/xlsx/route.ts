@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server"
 import { METRICS, REGIONS, type Scenario } from "@/lib/metrics.config"
 import { buildScenarioYearMatrix, computeInfo, normalizeUnits } from "@/lib/export/server-timeseries"
 import { buildTimeseriesWorkbook } from "@/lib/export/server-workbook"
-import { postObservationsQuery } from "@/lib/export/data-api-client"
+import { getForecastVintage, postObservationsQuery } from "@/lib/export/data-api-client"
 import { sourceLabel } from "@/lib/export/canonical"
 import { jobsMetricIdForRegion, jobsRegionCodeForQuery, remapJobsRegionCodeForOutput } from "@/lib/export/ni-jobs"
 
@@ -87,6 +87,8 @@ export async function POST(req: NextRequest) {
     })
 
     const meta = api?.meta ?? {}
+    // Fetch vintage from /version endpoint (source of truth for weekly publish label)
+    const vintage = meta.vintage ?? (await getForecastVintage())
     const wb = await buildTimeseriesWorkbook({
       metricLabel: metric.title,
       regionLabel: region.name,
@@ -95,8 +97,7 @@ export async function POST(req: NextRequest) {
       scenarios: info.scenarios,
       coverage: info.coverage,
       sources: info.sources,
-      generated: meta.generated_at ?? info.generated,
-      vintage: meta.vintage,
+      vintage,
       status: meta.status,
       citation: meta.citation,
       url: meta.url,

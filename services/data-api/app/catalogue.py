@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -8,18 +9,20 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+# ⚠️ FORECAST_VINTAGE is release-controlled: only update via env var on weekly publish
+# Format: "2026-W03" (ISO week). Do NOT compute from dates or use quarter-based defaults.
+FORECAST_VINTAGE = os.environ.get("FORECAST_VINTAGE", "unreleased")
+
 
 @dataclass(frozen=True)
 class Lifecycle:
     vintage: str
-    generated_at: str
     source: str
     status: str  # final|provisional|experimental
 
 
 DEFAULT_LIFECYCLE = Lifecycle(
-    vintage="2025Q4",
-    generated_at="2025-12-15T00:00:00Z",
+    vintage=FORECAST_VINTAGE,
     source="RegionIQ Forecast Engine v1",
     status="provisional",
 )

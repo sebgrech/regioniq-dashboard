@@ -9,6 +9,7 @@ import { scenarioLabel, dataTypeLabel, sourceLabel } from "@/lib/export/canonica
 import { buildScenarioYearMatrix, computeInfo, normalizeUnits } from "@/lib/export/server-timeseries"
 import { buildTimeseriesWorkbook } from "@/lib/export/server-workbook"
 import { isNIRegionCode, jobsRegionCodeForQuery, remapJobsRegionCodeForOutput } from "@/lib/export/ni-jobs"
+import { getForecastVintage } from "@/lib/export/data-api-client"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -292,7 +293,7 @@ export async function POST(req: NextRequest) {
         meta: {
           dataset: "regional_observations",
           source: "supabase_v1_fallback",
-          generated_at: new Date().toISOString(),
+          // generated_at intentionally removed: per-run timestamps undermine weekly publish contract
         },
         data: records,
       }
@@ -337,7 +338,6 @@ export async function POST(req: NextRequest) {
     const sourcesSet = new Set<string>()
     for (const r of canonicalRows) if (r.Source) sourcesSet.add(String(r.Source))
     const sources = Array.from(sourcesSet).join("; ")
-    const generated = new Date().toISOString()
 
     const metricsSel = body.metrics?.length
       ? body.metrics
@@ -371,6 +371,8 @@ export async function POST(req: NextRequest) {
       })
 
       const meta = json?.meta ?? {}
+      // Fetch vintage from /version endpoint (source of truth for weekly publish label)
+      const vintage = meta.vintage ?? (await getForecastVintage())
       const wb = await buildTimeseriesWorkbook({
         metricLabel: mLabel,
         regionLabel: rLabel,
@@ -379,8 +381,7 @@ export async function POST(req: NextRequest) {
         scenarios: info.scenarios,
         coverage: info.coverage,
         sources: info.sources,
-        generated: meta.generated_at ?? info.generated,
-        vintage: meta.vintage,
+        vintage,
         status: meta.status,
         citation: meta.citation,
         url: meta.url,
@@ -432,7 +433,11 @@ export async function POST(req: NextRequest) {
       info.addImage(imageId, { tl: { col: 3.15, row: 0.15 }, ext: { width: targetW, height: targetH } })
     } catch {}
 
+    // Fetch vintage from /version endpoint for fallback multi-metric exports
+    const fallbackVintage = json?.meta?.vintage ?? (await getForecastVintage())
+
     const startRow = 6
+    // ⚠️ Export metadata: "Published (weekly)" replaces per-request "Generated" timestamps
     const kv: Array<[string, string]> = [
       [
         "Metric",
@@ -447,9 +452,9 @@ export async function POST(req: NextRequest) {
       ["Scenario", scenarioLabel(scenarioSel)],
       ["Data coverage", coverage],
       ["Source(s)", sources],
-      ["Vintage", String(json?.meta?.vintage ?? "")],
+      ["Vintage", fallbackVintage],
+      ["Published (weekly)", fallbackVintage],
       ["Status", String(json?.meta?.status ?? "")],
-      ["Generated", generated],
       ["Citation", String(json?.meta?.citation ?? "")],
       ["URL", String(json?.meta?.url ?? "")],
     ].filter(([, v]) => String(v ?? "").trim().length > 0) as any

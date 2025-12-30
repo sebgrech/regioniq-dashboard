@@ -24,9 +24,11 @@ export interface ChoroplethData {
 }
 
 // Generate metadata
+// Note: version/vintage should come from the Data API /version endpoint, not hard-coded here.
+// This function provides fallback metadata for client-side Supabase queries.
 function generateMetadata(): DataMetadata {
   return {
-    version: "2024-Q4",
+    version: "v1",  // API version, not forecast vintage
     lastUpdated: new Date().toISOString(),
     modelRun: "Latest ONS Regional Forecast",
     source: "ONS Regional Accounts via Supabase",

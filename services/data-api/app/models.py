@@ -89,7 +89,7 @@ class ObservationRecord(BaseModel):
 
 class ResponseMeta(BaseModel):
     vintage: str
-    generated_at: str
+    # generated_at intentionally removed: per-run timestamps undermine the weekly publish contract
     source: str
     status: Literal["final", "provisional", "experimental"]
     estimated_records: int
@@ -109,7 +109,7 @@ class QueryResponse(BaseModel):
 
 class SchemaResponse(BaseModel):
     version: str
-    generated_at: str
+    # generated_at intentionally removed: per-run timestamps undermine the weekly publish contract
     vintage: str
     source: str
     status: Literal["final", "provisional", "experimental"]

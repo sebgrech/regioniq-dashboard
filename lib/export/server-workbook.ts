@@ -37,7 +37,6 @@ export async function buildTimeseriesWorkbook(params: {
   scenarios: string
   coverage: string
   sources: string
-  generated: string
   vintage?: string
   status?: string
   citation?: string
@@ -55,7 +54,6 @@ export async function buildTimeseriesWorkbook(params: {
     scenarios,
     coverage,
     sources,
-    generated,
     vintage,
     status,
     citation,
@@ -106,6 +104,8 @@ export async function buildTimeseriesWorkbook(params: {
   }
 
   const startRow = 6
+  // ⚠️ Export metadata: "Published (weekly)" replaces per-request "Generated" timestamps
+  // to align with the weekly publish contract. Vintage comes from Data API /version.
   const kv = [
     ["Metric", metricLabel],
     ["Region", regionLabel],
@@ -115,8 +115,8 @@ export async function buildTimeseriesWorkbook(params: {
     ["Data coverage", coverage],
     ["Source(s)", sources],
     ...(vintage ? [["Vintage", vintage]] : []),
+    ...(vintage ? [["Published (weekly)", vintage]] : []),
     ...(status ? [["Status", status]] : []),
-    ["Generated", generated],
     ...(accessedAt ? [["Accessed", accessedAt]] : []),
     ...(citation ? [["Citation", citation]] : []),
     ...(url ? [["URL", url]] : []),

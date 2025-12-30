@@ -12,7 +12,9 @@ from app.routes import observations as observations_routes
 # Environment and build metadata
 ENV = os.environ.get("ENV", "development")
 GIT_SHA = os.environ.get("GIT_SHA", "dev")
-CURRENT_VINTAGE = os.environ.get("FORECAST_VINTAGE", "2024-Q4")
+# ⚠️ FORECAST_VINTAGE is release-controlled: only update via env var on weekly publish
+# Format: "2026-W03" (ISO week). Do NOT compute from dates or update on daily runs.
+FORECAST_VINTAGE = os.environ.get("FORECAST_VINTAGE", "unreleased")
 
 app = FastAPI(
     title="RegionIQ Data API",
@@ -46,7 +48,7 @@ def version():
     return {
         "service": "RegionIQ Data API",
         "api_version": "v1",
-        "forecast_vintage": CURRENT_VINTAGE,
+        "forecast_vintage": FORECAST_VINTAGE,
         "build": GIT_SHA,
         "env": ENV,
     }

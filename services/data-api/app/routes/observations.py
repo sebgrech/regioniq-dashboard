@@ -271,7 +271,6 @@ def observations_query(req: QueryRequest, request: Request, user=Depends(get_cur
 
     meta = ResponseMeta(
         vintage=DEFAULT_LIFECYCLE.vintage,
-        generated_at=DEFAULT_LIFECYCLE.generated_at,
         source=DEFAULT_LIFECYCLE.source,
         status=DEFAULT_LIFECYCLE.status,  # type: ignore[arg-type]
         estimated_records=estimated,

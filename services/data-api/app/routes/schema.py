@@ -66,7 +66,6 @@ def get_schema() -> SchemaResponse:
 
     return SchemaResponse(
         version="v1",
-        generated_at=now,
         vintage=DEFAULT_LIFECYCLE.vintage,
         source=DEFAULT_LIFECYCLE.source,
         status=DEFAULT_LIFECYCLE.status,  # type: ignore[arg-type]

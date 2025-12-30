@@ -135,6 +135,11 @@ export function buildScenarioYearMatrix(params: {
   return { header, rows: matrix }
 }
 
+/**
+ * Compute export info metadata from canonical rows.
+ * Note: "generated" (per-request timestamp) is intentionally removed to align with
+ * the weekly publish contract. Use vintage from Data API /version instead.
+ */
 export function computeInfo(params: {
   canonicalRows: Record<string, any>[]
   metricLabel: string
@@ -145,7 +150,6 @@ export function computeInfo(params: {
   coverage: string
   scenarios: string
   sources: string
-  generated: string
 } {
   const { canonicalRows } = params
   const years = canonicalRows.map((r) => r.Year).filter((y) => typeof y === "number") as number[]
@@ -181,7 +185,6 @@ export function computeInfo(params: {
     coverage: minYear && maxYear ? `${minYear}–${maxYear}` : "",
     scenarios: Array.from(scenSet).join(", "),
     sources: sourcesLabel,
-    generated: new Date().toISOString(),
   }
 }
 

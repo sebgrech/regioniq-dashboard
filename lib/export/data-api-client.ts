@@ -28,6 +28,22 @@ export function getDataApiBase(): string {
   return base
 }
 
+/**
+ * Fetch the current forecast vintage from the Data API /version endpoint.
+ * This is the only source of truth for the weekly publish label.
+ */
+export async function getForecastVintage(): Promise<string> {
+  try {
+    const base = getDataApiBase()
+    const res = await fetch(`${base}/version`, { cache: "no-store" })
+    if (!res.ok) return "unreleased"
+    const json = await res.json()
+    return json.forecast_vintage ?? "unreleased"
+  } catch {
+    return "unreleased"
+  }
+}
+
 export async function postObservationsQuery(params: {
   accessToken: string
   requestBody: any

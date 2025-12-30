@@ -29,7 +29,6 @@ export async function buildCompareWorkbook(params: {
   units: string
   coverage: string
   sources: string
-  generated: string
   vintage?: string
   status?: string
   citation?: string
@@ -47,7 +46,6 @@ export async function buildCompareWorkbook(params: {
     units,
     coverage,
     sources,
-    generated,
     vintage,
     status,
     citation,
@@ -96,6 +94,8 @@ export async function buildCompareWorkbook(params: {
 
   const startRow = 6
   const regionsStr = regionNames.join(", ")
+  // ⚠️ Export metadata: "Published (weekly)" replaces per-request "Generated" timestamps
+  // to align with the weekly publish contract. Vintage comes from Data API /version.
   const kv = [
     ["Metric", metricLabel],
     ["Regions", regionsStr],
@@ -105,8 +105,8 @@ export async function buildCompareWorkbook(params: {
     ["Data coverage", coverage],
     ["Source(s)", sources],
     ...(vintage ? [["Vintage", vintage]] : []),
+    ...(vintage ? [["Published (weekly)", vintage]] : []),
     ...(status ? [["Status", status]] : []),
-    ["Generated", generated],
     ...(accessedAt ? [["Accessed", accessedAt]] : []),
     ...(citation ? [["Citation", citation]] : []),
     ...(url ? [["URL", url]] : []),
