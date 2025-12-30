@@ -371,13 +371,11 @@ function FullscreenToolbar({
   scenario,
   onYearChange,
   onScenarioChange,
-  onExport,
 }: {
   year: number
   scenario: Scenario
   onYearChange?: (year: number) => void
   onScenarioChange?: (scenario: Scenario) => void
-  onExport?: () => void
 }) {
   // Calculate the position of the year label
   const getYearLabelPosition = () => {
@@ -470,12 +468,6 @@ function FullscreenToolbar({
               <Clock className="h-3 w-3" />
               <span>Updated 2 min ago</span>
             </div>
-            {onExport && (
-              <Button variant="outline" size="sm" onClick={onExport} className="bg-transparent">
-                <Download className="h-4 w-4 mr-1" />
-                Export
-              </Button>
-            )}
           </div>
         </div>
       </div>
@@ -1041,11 +1033,12 @@ function MapContainerInner({
       `Active level ${level} is not interactive: ${fillLayerId(level as any)} missing from INTERACTIVE_LAYER_IDS`
     )
     console.assert(
-      INTERACTIVE_LAYER_IDS.length === 4 &&
-        INTERACTIVE_LAYER_IDS[0] === "itl1-fill" &&
-        INTERACTIVE_LAYER_IDS[1] === "itl2-fill" &&
-        INTERACTIVE_LAYER_IDS[2] === "itl3-fill" &&
-        INTERACTIVE_LAYER_IDS[3] === "lad-fill",
+      INTERACTIVE_LAYER_IDS.length === 5 &&
+        INTERACTIVE_LAYER_IDS[0] === "uk-fill" &&
+        INTERACTIVE_LAYER_IDS[1] === "itl1-fill" &&
+        INTERACTIVE_LAYER_IDS[2] === "itl2-fill" &&
+        INTERACTIVE_LAYER_IDS[3] === "itl3-fill" &&
+        INTERACTIVE_LAYER_IDS[4] === "lad-fill",
       `INTERACTIVE_LAYER_IDS was changed; this commonly reintroduces interactivity gating bugs.`
     )
   }
@@ -1328,7 +1321,6 @@ function MapContainerInner({
             scenario={scenario as Scenario}
             onYearChange={onYearChange}
             onScenarioChange={onScenarioChange}
-            onExport={onExport}
           />
           <FullscreenControls
             currentMetric={metric}

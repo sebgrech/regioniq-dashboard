@@ -381,27 +381,12 @@ function generateVerdictSentence(
   // Prepend place context if available (use colon, not em dash)
   if (placeContextPrefix) {
     const withContext = `${placeContextPrefix}: ${coreSentence.charAt(0).toLowerCase()}${coreSentence.slice(1)}`
-    // Check length (allow up to 140 chars for context-enhanced verdicts)
-    if (withContext.length <= 140) {
-      return withContext
-    }
-    // Try without persistence suffix
-    const coreWithoutPersistence = coreSentence.replace(persistenceSuffix, "")
-    const withContextNoPersistence = `${placeContextPrefix}: ${coreWithoutPersistence.charAt(0).toLowerCase()}${coreWithoutPersistence.slice(1)}`
-    if (withContextNoPersistence.length <= 140) {
-      return withContextNoPersistence
-    }
-    // Fall back to just context + main claim
-    if (mainClaim) {
-      const shortVersion = `${placeContextPrefix}: ${mainClaim.charAt(0).toLowerCase()}${mainClaim.slice(1)}`
-      if (shortVersion.length <= 140) {
-        return shortVersion
-      }
-    }
+    // Prefer always showing a full, untruncated sentence (wrapping is OK in UI)
+    return withContext
   }
   
-  // Truncate core sentence to 120 chars max
-  return coreSentence.slice(0, 120)
+  // Prefer always showing a full, untruncated sentence (wrapping is OK in UI)
+  return coreSentence
 }
 
 /**
