@@ -59,22 +59,9 @@ export function DashboardControls({
   
   // Check what type of year is selected
   const isHistoricalYear = year < YEARS.forecastStart
-  const isPresetYear = year === LAST_HISTORICAL || FORECAST_PRESETS.includes(year)
-  
-  // Generate all years for the dropdown
-  const historicalYears = Array.from(
-    { length: YEARS.forecastStart - YEARS.min },
-    (_, i) => YEARS.forecastStart - 1 - i // Descending order: 2023, 2022, 2021...
-  )
-  const forecastYears = Array.from(
-    { length: YEARS.max - YEARS.forecastStart + 1 },
-    (_, i) => YEARS.forecastStart + i // Ascending order: 2024, 2025, 2026...
-  )
-  
-  // Prepare grouped year lists:
-  // - historicalYearsAsc: oldest -> newest actuals (so scrolling flows naturally)
-  // - forecastYearsAsc: nearest forecast -> furthest
-  const historicalYearsAsc = Array.from(
+  const yearTag = isHistoricalYear ? "Actuals" : "Forecast"
+
+  const actualYearsAsc = Array.from(
     { length: YEARS.forecastStart - YEARS.min },
     (_, i) => YEARS.min + i
   )
@@ -82,15 +69,13 @@ export function DashboardControls({
     { length: YEARS.max - YEARS.forecastStart + 1 },
     (_, i) => YEARS.forecastStart + i
   )
-  // Combined continuous list: historical (oldest→newest) then forecasts (nearest→furthest)
-  const combinedYears = [...historicalYearsAsc, ...forecastYearsAsc]
 
   return (
     <div id="tour-topbar" className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div className="w-full px-6 py-4 flex items-center justify-between">
         
         {/* Left cluster: Logo + Region + Year (flows left-to-right in reading order) */}
-        <div className="flex items-center gap-4 min-w-0">
+        <div className="flex flex-wrap items-center gap-4 min-w-0">
           {/* Logo */}
           <div className="relative h-16 w-16 flex-shrink-0">
             {/* Light mode logo */}
@@ -112,7 +97,7 @@ export function DashboardControls({
           </div>
 
           {/* Region Picker */}
-          <div id="tour-indicator-search" className="min-w-0">
+          <div id="tour-indicator-search" className="min-w-0 flex-1 basis-[240px]">
           <RegionSearch
             value={region}
             onValueChange={onRegionChange}
@@ -120,106 +105,113 @@ export function DashboardControls({
           />
           </div>
 
-          {/* Year Selector - flows naturally after region */}
-            <div 
+          {/* Year Selector (Stripe/Linear): one primary control + optional wide-screen presets */}
+          <div
             ref={yearSelectorRef}
-              id="tour-year-selector"
-              className={cn(
-              "flex items-center gap-1.5 transition-all duration-500 ease-in-out",
-              hideYearSelector 
-                ? "opacity-0 scale-95 max-w-0 overflow-hidden pointer-events-none" 
+            id="tour-year-selector"
+            className={cn(
+              "flex items-center gap-2 transition-all duration-500 ease-in-out",
+              "w-full sm:w-auto sm:flex-none",
+              hideYearSelector
+                ? "opacity-0 scale-95 max-w-0 overflow-hidden pointer-events-none"
                 : "opacity-100 scale-100"
             )}
           >
-            {/* Historical: show the last actual data year prominently */}
-            <Button
-              variant={year === LAST_HISTORICAL ? "default" : "outline"}
-              size="sm"
-              onClick={() => onYearChange(LAST_HISTORICAL)}
-              className="h-8 px-3 text-sm"
-            >
-              {LAST_HISTORICAL}
-              <span className="ml-1.5 text-xs opacity-70">(Last actual year — all indicators)</span>
-            </Button>
-            
-            {/* Visual separator between historical and forecast */}
-            <div className="h-5 w-px bg-border mx-1" />
-            
-            {/* Forecast presets */}
-            {FORECAST_PRESETS.map((presetYear) => (
+            {/* Optional presets (desktop only) */}
+            <div className="hidden lg:flex items-center gap-1.5">
               <Button
-                key={presetYear}
-                variant={year === presetYear ? "default" : "ghost"}
+                variant={year === LAST_HISTORICAL ? "default" : "ghost"}
                 size="sm"
-                onClick={() => onYearChange(presetYear)}
+                onClick={() => onYearChange(LAST_HISTORICAL)}
                 className={cn(
                   "h-8 px-3 text-sm",
-                  year === presetYear 
-                    ? "bg-blue-600 hover:bg-blue-700 text-white" 
-                    : "text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                  year === LAST_HISTORICAL ? "" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                {presetYear}
+                {LAST_HISTORICAL}
+                <span className="ml-1.5 text-xs opacity-70">(Actuals)</span>
               </Button>
-            ))}
-            
-            {/* Dropdown for all other years */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+              {FORECAST_PRESETS.map((presetYear) => (
                 <Button
-                  variant={isPresetYear ? "ghost" : "default"}
+                  key={presetYear}
+                  variant={year === presetYear ? "default" : "ghost"}
                   size="sm"
+                  onClick={() => onYearChange(presetYear)}
                   className={cn(
-                    "h-8 px-2 text-sm",
-                    !isPresetYear && (isHistoricalYear 
-                      ? "" 
-                      : "bg-blue-600 hover:bg-blue-700 text-white")
+                    "h-8 px-3 text-sm",
+                    year === presetYear
+                      ? "bg-blue-600 hover:bg-blue-700 text-white"
+                      : "text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30"
                   )}
                 >
-                  {isPresetYear ? "All" : year}
-                  <ChevronDown className="ml-1 h-3 w-3" />
+                  {presetYear}
+                </Button>
+              ))}
+            </div>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 px-3 text-sm">
+                  Year: {year}
+                  <span
+                    className={cn(
+                      "ml-2 text-xs font-medium",
+                      isHistoricalYear ? "text-muted-foreground" : "text-blue-600 dark:text-blue-400"
+                    )}
+                  >
+                    {yearTag}
+                  </span>
+                  <ChevronDown className="ml-2 h-3 w-3 opacity-70" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto w-40">
-                {/* Continuous list: Historical (Actuals) first, then Forecasts */}
+              <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto w-44">
                 <DropdownMenuLabel className="text-xs text-muted-foreground font-medium">
-                  Historical (Actuals)
+                  Presets
                 </DropdownMenuLabel>
-                {combinedYears.map((y) => {
-                  // Insert a lightweight inline label when forecasts start to guide the user,
-                  // but keep it inside the same scrolling flow so it feels continuous.
-                  if (y === YEARS.forecastStart) {
-                    return (
-                      <div key={y}>
-                        <DropdownMenuLabel className="text-xs text-blue-600 dark:text-blue-400 font-medium">
-                          Forecasts
-                        </DropdownMenuLabel>
-                        <DropdownMenuItem
-                          onClick={() => onYearChange(y)}
-                          className="cursor-pointer text-blue-600 dark:text-blue-400"
-                        >
-                          {year === y && <Check className="mr-2 h-3 w-3" />}
-                          <span className={year === y ? "" : "ml-5"}>{y}</span>
-                        </DropdownMenuItem>
-                      </div>
-                    )
-                  }
+                <DropdownMenuItem onClick={() => onYearChange(LAST_HISTORICAL)} className="cursor-pointer">
+                  {year === LAST_HISTORICAL && <Check className="mr-2 h-3 w-3" />}
+                  <span className={year === LAST_HISTORICAL ? "" : "ml-5"}>{LAST_HISTORICAL}</span>
+                  <span className="ml-2 text-xs opacity-70">(Actuals)</span>
+                </DropdownMenuItem>
+                {FORECAST_PRESETS.map((y) => (
+                  <DropdownMenuItem
+                    key={y}
+                    onClick={() => onYearChange(y)}
+                    className="cursor-pointer text-blue-600 dark:text-blue-400"
+                  >
+                    {year === y && <Check className="mr-2 h-3 w-3" />}
+                    <span className={year === y ? "" : "ml-5"}>{y}</span>
+                    <span className="ml-2 text-xs opacity-70">(Forecast)</span>
+                  </DropdownMenuItem>
+                ))}
 
-                  // Regular year item (historical)
-                  return (
-                    <DropdownMenuItem
-                      key={y}
-                      onClick={() => onYearChange(y)}
-                      className={cn(
-                        "cursor-pointer",
-                        y >= YEARS.forecastStart && "text-blue-600 dark:text-blue-400"
-                      )}
-                    >
-                      {year === y && <Check className="mr-2 h-3 w-3" />}
-                      <span className={year === y ? "" : "ml-5"}>{y}</span>
-                    </DropdownMenuItem>
-                  )
-                })}
+                <DropdownMenuSeparator />
+
+                <DropdownMenuLabel className="text-xs text-muted-foreground font-medium">
+                  Actuals
+                </DropdownMenuLabel>
+                {actualYearsAsc.map((y) => (
+                  <DropdownMenuItem key={y} onClick={() => onYearChange(y)} className="cursor-pointer">
+                    {year === y && <Check className="mr-2 h-3 w-3" />}
+                    <span className={year === y ? "" : "ml-5"}>{y}</span>
+                  </DropdownMenuItem>
+                ))}
+
+                <DropdownMenuSeparator />
+
+                <DropdownMenuLabel className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                  Forecast
+                </DropdownMenuLabel>
+                {forecastYearsAsc.map((y) => (
+                  <DropdownMenuItem
+                    key={y}
+                    onClick={() => onYearChange(y)}
+                    className="cursor-pointer text-blue-600 dark:text-blue-400"
+                  >
+                    {year === y && <Check className="mr-2 h-3 w-3" />}
+                    <span className={year === y ? "" : "ml-5"}>{y}</span>
+                  </DropdownMenuItem>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
