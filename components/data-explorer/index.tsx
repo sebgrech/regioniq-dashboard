@@ -308,28 +308,28 @@ export function DataExplorer({
     const stamp = isoDateStamp()
     const xlsxName = `${filenameBase}_${stamp}.xlsx`
     try {
-      const res = await fetch("/api/export/xlsx/data", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          requestBody,
-          metrics,
-          regions,
-          scenarios: selectedScenarios,
-          selectedYears,
-        }),
-      })
-      if (!res.ok) {
-        if (res.status === 401) {
-          const here = window.location.pathname + window.location.search
-          window.location.href = `/login?returnTo=${encodeURIComponent(here)}`
-          return
-        }
-        const msg = await res.text()
-        throw new Error(msg || "Server export failed")
+    const res = await fetch("/api/export/xlsx/data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestBody,
+        metrics,
+        regions,
+        scenarios: selectedScenarios,
+        selectedYears,
+      }),
+    })
+    if (!res.ok) {
+      if (res.status === 401) {
+        const here = window.location.pathname + window.location.search
+        window.location.href = `/login?returnTo=${encodeURIComponent(here)}`
+        return
       }
-      const blob = await res.blob()
-      downloadBlob(blob, xlsxName)
+      const msg = await res.text()
+      throw new Error(msg || "Server export failed")
+    }
+    const blob = await res.blob()
+    downloadBlob(blob, xlsxName)
       toast({ title: "Export complete", description: `Downloaded ${xlsxName}` })
     } catch (err: any) {
       toast({

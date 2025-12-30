@@ -129,9 +129,17 @@ function DashboardContent() {
   const clearQS = (keys: string[]) => {
     if (typeof window === "undefined") return
     const params = new URLSearchParams(window.location.search)
-    keys.forEach((k) => params.delete(k))
+    let changed = false
+    keys.forEach((k) => {
+      if (params.has(k)) {
+        params.delete(k)
+        changed = true
+      }
+    })
+    // Only navigate if we actually removed something
+    if (!changed) return
     const qs = params.toString()
-    router.replace(qs ? `?${qs}` : ".", { scroll: false })
+    router.replace(qs ? `?${qs}` : window.location.pathname, { scroll: false })
   }
 
   const markTourSeen = () => {
@@ -265,51 +273,51 @@ function DashboardContent() {
     // Wait for auth to settle (user === undefined means still loading)
     if (user === undefined) return
 
-    const loadData = async () => {
-      setDashboardData((prev) => ({ ...prev, isLoading: true }))
-      try {
-        // Fetch main dashboard metrics
-        const mainMetricsPromises = METRICS.filter((m) => m.showInDashboard !== false).map(async (m) => ({
-          metricId: m.id,
-          data: await fetchSeries({ metricId: m.id, region, scenario }),
-        }))
-        
-        // Also fetch related metrics (e.g., employment_rate_pct, unemployment_rate_pct for Employment card)
-        const relatedMetricsToFetch = new Set<string>()
-        METRICS.filter((m) => m.showInDashboard !== false).forEach((m) => {
-          if (m.relatedMetrics) {
-            m.relatedMetrics.forEach((rmId) => relatedMetricsToFetch.add(rmId))
-          }
-        })
-        
-        const relatedMetricsPromises = Array.from(relatedMetricsToFetch).map(async (metricId) => ({
-          metricId,
-          data: await fetchSeries({ metricId, region, scenario }),
-        }))
-        
-        const [mainMetricsData, relatedMetricsData] = await Promise.all([
-          Promise.all(mainMetricsPromises),
-          Promise.all(relatedMetricsPromises),
-        ])
-        
-        const allMetricsData = [...mainMetricsData, ...relatedMetricsData]
-        setDashboardData({ allMetricsData, isLoading: false })
+      const loadData = async () => {
+        setDashboardData((prev) => ({ ...prev, isLoading: true }))
+        try {
+          // Fetch main dashboard metrics
+          const mainMetricsPromises = METRICS.filter((m) => m.showInDashboard !== false).map(async (m) => ({
+            metricId: m.id,
+            data: await fetchSeries({ metricId: m.id, region, scenario }),
+          }))
+          
+          // Also fetch related metrics (e.g., employment_rate_pct, unemployment_rate_pct for Employment card)
+          const relatedMetricsToFetch = new Set<string>()
+          METRICS.filter((m) => m.showInDashboard !== false).forEach((m) => {
+            if (m.relatedMetrics) {
+              m.relatedMetrics.forEach((rmId) => relatedMetricsToFetch.add(rmId))
+            }
+          })
+          
+          const relatedMetricsPromises = Array.from(relatedMetricsToFetch).map(async (metricId) => ({
+            metricId,
+            data: await fetchSeries({ metricId, region, scenario }),
+          }))
+          
+          const [mainMetricsData, relatedMetricsData] = await Promise.all([
+            Promise.all(mainMetricsPromises),
+            Promise.all(relatedMetricsPromises),
+          ])
+          
+          const allMetricsData = [...mainMetricsData, ...relatedMetricsData]
+          setDashboardData({ allMetricsData, isLoading: false })
 
-        toast({
-          title: "✅ Dashboard Loaded",
-          description: "All metrics loaded from Supabase!",
-        })
-      } catch (error) {
-        console.error("Failed to load dashboard data:", error)
-        toast({
-          title: "Error loading data",
-          description: "Failed to fetch dashboard data. Please try again.",
-          variant: "destructive",
-        })
-        setDashboardData((prev) => ({ ...prev, isLoading: false }))
+          toast({
+            title: "✅ Dashboard Loaded",
+            description: "All metrics loaded from Supabase!",
+          })
+        } catch (error) {
+          console.error("Failed to load dashboard data:", error)
+          toast({
+            title: "Error loading data",
+            description: "Failed to fetch dashboard data. Please try again.",
+            variant: "destructive",
+          })
+          setDashboardData((prev) => ({ ...prev, isLoading: false }))
+        }
       }
-    }
-    loadData()
+      loadData()
   }, [region, scenario, toast, showSupabaseTest, user])
 
   // Helpers

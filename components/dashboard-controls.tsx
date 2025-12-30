@@ -117,15 +117,17 @@ export function DashboardControls({
                 : "opacity-100 scale-100"
             )}
           >
-            {/* Optional presets (desktop only) */}
+            {/* Optional presets (desktop only) - outline style for clarity */}
             <div className="hidden lg:flex items-center gap-1.5">
               <Button
-                variant={year === LAST_HISTORICAL ? "default" : "ghost"}
+                variant="ghost"
                 size="sm"
                 onClick={() => onYearChange(LAST_HISTORICAL)}
                 className={cn(
                   "h-8 px-3 text-sm",
-                  year === LAST_HISTORICAL ? "" : "text-muted-foreground hover:text-foreground"
+                  year === LAST_HISTORICAL 
+                    ? "border-2 border-primary text-foreground" 
+                    : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 {LAST_HISTORICAL}
@@ -134,13 +136,13 @@ export function DashboardControls({
               {FORECAST_PRESETS.map((presetYear) => (
                 <Button
                   key={presetYear}
-                  variant={year === presetYear ? "default" : "ghost"}
+                  variant="ghost"
                   size="sm"
                   onClick={() => onYearChange(presetYear)}
                   className={cn(
                     "h-8 px-3 text-sm",
                     year === presetYear
-                      ? "bg-blue-600 hover:bg-blue-700 text-white"
+                      ? "border-2 border-blue-500 text-blue-600 dark:text-blue-400"
                       : "text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30"
                   )}
                 >
