@@ -2,12 +2,23 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+interface CardProps extends React.ComponentProps<"div"> {
+  interactive?: boolean
+}
+
+function Card({ className, interactive = false, ...props }: CardProps) {
   return (
     <div
       data-slot="card"
       className={cn(
         "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm",
+        // Interactive cards get Stripe-style hover lift
+        interactive && [
+          "transition-[transform,box-shadow,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          "hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/20",
+          "active:translate-y-0 active:scale-[0.995] active:duration-[50ms]",
+          "cursor-pointer"
+        ],
         className
       )}
       {...props}

@@ -6,8 +6,8 @@ import Link from "next/link"
 import Image from "next/image"
 import { ArrowLeft, Loader2, Database } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { MetricDataTab } from "@/components/data"
-import { METRICS, REGIONS, type Scenario } from "@/lib/metrics.config"
+import { DataExplorer } from "@/components/data-explorer"
+import { METRICS, type Scenario } from "@/lib/metrics.config"
 import { getSearchParam, getSearchParamNumber } from "@/lib/utils"
 
 // Map UI metric ids -> Supabase metric_id
@@ -30,7 +30,6 @@ function DataPageContent() {
   // Allow pre-selecting a metric via URL, default to GVA as primary economic indicator
   const metricParam = getSearchParam(searchParams, "metric", "nominal_gva_mn_gbp")
 
-  const selectedRegion = REGIONS.find((r) => r.code === region)
   const selectedMetric = METRICS.find((m) => m.id === metricParam)
 
   // Map to database metric ID
@@ -38,8 +37,8 @@ function DataPageContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header - matches DashboardControls layout */}
-      <div className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+      {/* Header */}
+      <div className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="w-full px-6 py-2 flex items-center">
           {/* Logo */}
           <div className="relative h-12 w-12 flex-shrink-0">
@@ -60,28 +59,31 @@ function DataPageContent() {
           </div>
 
           <div className="flex items-center gap-4 ml-4">
-            <Button variant="ghost" size="sm" asChild className="h-8 px-3">
+            <Button variant="ghost" size="sm" asChild className="h-8 px-2 text-muted-foreground hover:text-foreground">
               <Link href={`/dashboard?region=${region}&year=${year}${scenario !== "baseline" ? `&scenario=${scenario}` : ""}`}>
-                <ArrowLeft className="h-5 w-5 mr-2" />
-                Back to Dashboard
+                <ArrowLeft className="h-4 w-4 mr-1.5" />
+                Dashboard
               </Link>
             </Button>
 
-            <div className="h-10 w-px bg-border" />
+            <div className="h-6 w-px bg-border" />
 
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Database className="h-4 w-4 text-primary" />
+            <div className="flex items-center gap-2.5">
+              <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center">
+                <Database className="h-3.5 w-3.5 text-primary" />
               </div>
-              <h1 className="text-lg font-semibold">Data Explorer</h1>
+              <div>
+                <h1 className="text-sm font-semibold leading-none">Data Explorer</h1>
+                <p className="text-xs text-muted-foreground mt-0.5">Query & export raw data</p>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-8">
-        <MetricDataTab
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        <DataExplorer
           metricId={dbMetricId}
           region={region}
           regions={regionsParam || undefined}
@@ -99,9 +101,9 @@ export default function DataPage() {
     <Suspense
       fallback={
         <div className="min-h-screen bg-background flex items-center justify-center">
-          <div className="flex items-center gap-2">
-            <Loader2 className="h-6 w-6 animate-spin" />
-            <span>Loading Data...</span>
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <span className="text-sm text-muted-foreground">Loading Data Explorer...</span>
           </div>
         </div>
       }

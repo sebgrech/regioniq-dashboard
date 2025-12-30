@@ -200,14 +200,20 @@ export function MetricCard({
 
   const cardContent = (
     <Card
+      interactive
       className={cn(
-        "relative transition-all duration-300 cursor-pointer group",
+        "relative cursor-pointer group",
+        // Stripe-grade transitions using CSS variables
+        "transition-[transform,box-shadow,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]",
         // Very subtle glassmorphism - barely noticeable
         "backdrop-blur-[2px] bg-card/98 dark:bg-card/96",
         "border-border/60 dark:border-border/50",
-        "hover:shadow-lg hover:shadow-primary/10 hover:border-primary/20",
+        // Hover: lift + glow
+        "hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/10 hover:border-primary/20",
         "hover:bg-card/99 dark:hover:bg-card/97",
-        isHovered && "shadow-lg shadow-primary/10 border-primary/20",
+        // Active: press down
+        "active:translate-y-0 active:scale-[0.99] active:duration-[50ms]",
+        isHovered && "shadow-xl shadow-primary/10 border-primary/20 -translate-y-1",
         // Allow overflow for expanding panel when it has related metrics
         hasRelatedMetrics ? "overflow-visible" : "overflow-hidden",
         className,
