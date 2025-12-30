@@ -1,3 +1,9 @@
+/**
+ * ⚠️ Export metadata schema is v1 and must remain backward-compatible.
+ * Do not rename or reorder fields in canonicalRows or the Info sheet; only append.
+ * External consumers may parse these exports programmatically.
+ */
+
 import path from "path"
 import { readFile } from "fs/promises"
 import ExcelJS from "exceljs"

@@ -202,6 +202,7 @@ export async function POST(req: NextRequest) {
         }
       })()
 
+      // Server-side fetch to Data API (bypasses CORS by design)
       const res = await fetch(`${dataApiBase}/api/v1/observations/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
