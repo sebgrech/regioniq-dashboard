@@ -4,6 +4,27 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* ═══════════════════════════════════════════════════════════════════════════
+     MOTION SYSTEM - Linear/Stripe-grade unified animation tokens
+     ═══════════════════════════════════════════════════════════════════════════ */
+
+  /* Durations - consistent timing across all UI */
+  --duration-instant: 50ms;
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 400ms;
+  --duration-slower: 600ms;
+
+  /* Easing curves - the "feel" of the UI */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);      /* Primary - snappy, responsive */
+  --ease-out-cubic: cubic-bezier(0.33, 1, 0.68, 1);    /* Softer deceleration */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);       /* Symmetric, for toggles */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);    /* Bouncy, for delight moments */
+  --ease-bounce: cubic-bezier(0.34, 1.3, 0.64, 1);     /* Subtle bounce */
+
+  /* Stagger delays for list animations */
+  --stagger-interval: 30ms;
+
   --background: oklch(0.98 0 0); /* #f8fafc - Light background */
   --foreground: oklch(0.22 0.01 258); /* #1f2937 - Primary text */
   --card: oklch(1 0 0); /* #ffffff - Card background */
@@ -290,3 +311,322 @@
 .stagger-3 { animation-delay: 100ms; }
 .stagger-4 { animation-delay: 150ms; }
 .stagger-5 { animation-delay: 200ms; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ELITE UI ANIMATIONS - Linear/Stripe-grade micro-interactions
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Fade up - primary entrance animation (Linear style) */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fadeUp var(--duration-base) var(--ease-out-expo) both;
+}
+
+/* Fade in scale - for modals and popovers */
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in-scale {
+  animation: fadeInScale var(--duration-base) var(--ease-out-expo) both;
+}
+
+/* Slide in from bottom - for toasts, drawers */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in-up {
+  animation: slideInUp var(--duration-slow) var(--ease-out-expo) both;
+}
+
+/* Content reveal - skeleton to content transition */
+@keyframes contentReveal {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.animate-content-reveal {
+  animation: contentReveal var(--duration-slow) var(--ease-out-cubic) both;
+}
+
+/* Stagger children - apply to parent, children auto-stagger */
+.stagger-children > * {
+  animation: fadeUp var(--duration-base) var(--ease-out-expo) both;
+}
+.stagger-children > *:nth-child(1) { animation-delay: calc(var(--stagger-interval) * 0); }
+.stagger-children > *:nth-child(2) { animation-delay: calc(var(--stagger-interval) * 1); }
+.stagger-children > *:nth-child(3) { animation-delay: calc(var(--stagger-interval) * 2); }
+.stagger-children > *:nth-child(4) { animation-delay: calc(var(--stagger-interval) * 3); }
+.stagger-children > *:nth-child(5) { animation-delay: calc(var(--stagger-interval) * 4); }
+.stagger-children > *:nth-child(6) { animation-delay: calc(var(--stagger-interval) * 5); }
+.stagger-children > *:nth-child(7) { animation-delay: calc(var(--stagger-interval) * 6); }
+.stagger-children > *:nth-child(8) { animation-delay: calc(var(--stagger-interval) * 7); }
+.stagger-children > *:nth-child(9) { animation-delay: calc(var(--stagger-interval) * 8); }
+.stagger-children > *:nth-child(10) { animation-delay: calc(var(--stagger-interval) * 9); }
+.stagger-children > *:nth-child(n+11) { animation-delay: calc(var(--stagger-interval) * 10); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MICRO-INTERACTIONS - Interactive element polish
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Interactive lift - for cards, buttons with hover lift effect */
+.interactive-lift {
+  transition:
+    transform var(--duration-fast) var(--ease-out-expo),
+    box-shadow var(--duration-fast) var(--ease-out-expo);
+}
+
+.interactive-lift:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 4px 12px -2px oklch(0 0 0 / 0.08),
+    0 2px 4px -1px oklch(0 0 0 / 0.04);
+}
+
+.interactive-lift:active {
+  transform: translateY(0);
+  transition-duration: var(--duration-instant);
+}
+
+/* Interactive scale - for buttons, icons */
+.interactive-scale {
+  transition: transform var(--duration-fast) var(--ease-out-expo);
+}
+
+.interactive-scale:hover {
+  transform: scale(1.02);
+}
+
+.interactive-scale:active {
+  transform: scale(0.98);
+  transition-duration: var(--duration-instant);
+}
+
+/* Interactive glow - subtle border glow on hover */
+.interactive-glow {
+  transition:
+    box-shadow var(--duration-fast) var(--ease-out-cubic),
+    border-color var(--duration-fast) var(--ease-out-cubic);
+}
+
+.interactive-glow:hover {
+  box-shadow: 0 0 0 3px oklch(var(--primary) / 0.1);
+  border-color: oklch(var(--primary) / 0.3);
+}
+
+/* Button press - Stripe-style button feedback */
+.btn-press {
+  transition:
+    transform var(--duration-fast) var(--ease-out-expo),
+    box-shadow var(--duration-fast) var(--ease-out-expo),
+    background-color var(--duration-fast) var(--ease-out-cubic);
+}
+
+.btn-press:hover {
+  transform: translateY(-1px);
+}
+
+.btn-press:active {
+  transform: translateY(1px) scale(0.98);
+  transition-duration: var(--duration-instant);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SKELETON SYSTEM - Layout-matching loading states
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Enhanced shimmer with smooth gradient */
+@keyframes shimmerWave {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-wave {
+  background: linear-gradient(
+    90deg,
+    oklch(var(--muted) / 1) 0%,
+    oklch(var(--muted) / 0.4) 20%,
+    oklch(var(--muted) / 0.4) 40%,
+    oklch(var(--muted) / 1) 60%,
+    oklch(var(--muted) / 1) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmerWave 2s var(--ease-in-out) infinite;
+}
+
+/* Skeleton pulse - subtle opacity pulse */
+@keyframes skeletonPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.skeleton-pulse {
+  animation: skeletonPulse 2s var(--ease-in-out) infinite;
+}
+
+/* Skeleton shapes for common layouts */
+.skeleton-text {
+  height: 1em;
+  border-radius: 4px;
+}
+
+.skeleton-title {
+  height: 1.5em;
+  width: 60%;
+  border-radius: 4px;
+}
+
+.skeleton-avatar {
+  border-radius: 9999px;
+  aspect-ratio: 1;
+}
+
+.skeleton-card {
+  border-radius: var(--radius);
+}
+
+.skeleton-chart {
+  border-radius: var(--radius);
+  min-height: 200px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   OPTIMISTIC UI - Loading overlays and transitions
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Loading overlay - dims content while updating */
+.loading-overlay {
+  position: relative;
+}
+
+.loading-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: oklch(var(--background) / 0.6);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-out-cubic);
+}
+
+.loading-overlay[data-loading="true"]::after {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Crossfade transition for content swaps */
+.crossfade-enter {
+  animation: fadeIn var(--duration-base) var(--ease-out-cubic) both;
+}
+
+.crossfade-exit {
+  animation: fadeIn var(--duration-fast) var(--ease-out-cubic) reverse both;
+}
+
+/* Subtle loading spinner position */
+.loading-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+}
+
+/* Content dim while loading - keeps old content visible but muted */
+.content-loading {
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-out-cubic);
+}
+
+/* Error shake animation */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+.animate-shake {
+  animation: shake 0.5s var(--ease-out-cubic);
+}
+
+/* Success pop animation */
+@keyframes successPop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.animate-success {
+  animation: successPop 0.3s var(--ease-spring);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PAGE TRANSITIONS - Route change animations
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Page enter animation */
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-enter {
+  animation: pageEnter var(--duration-slow) var(--ease-out-expo) both;
+}
+
+/* Reduce motion - respect user preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
