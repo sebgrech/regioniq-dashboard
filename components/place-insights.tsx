@@ -292,11 +292,21 @@ export function PlaceInsights({
   const structureSignals = ui.signals.filter(s => STRUCTURE_SIGNALS.includes(s.id))
   const capacitySignals = ui.signals.filter(s => CAPACITY_SIGNALS.includes(s.id))
   
-  // Build rationale from existing conclusions (max 220 chars)
-  const rationale = [
+  function truncateOnWord(text: string, maxChars: number) {
+    const t = text.trim()
+    if (t.length <= maxChars) return t
+    const sliced = t.slice(0, Math.max(0, maxChars - 1))
+    // Drop the partial last word (avoid "hir" from "hiring")
+    const wordSafe = sliced.replace(/\s+\S*$/, "").trim()
+    return ((wordSafe || sliced).trim() + "…").trim()
+  }
+
+  // Build rationale from existing conclusions (max 220 chars, word-safe)
+  const rationaleRaw = [
     ...data.placeCharacter.conclusions.slice(0, 1),
-    ...data.pressureAndSlack.conclusions.slice(0, 1)
-  ].join(" ").slice(0, 220)
+    ...data.pressureAndSlack.conclusions.slice(0, 1),
+  ].join(" ")
+  const rationale = truncateOnWord(rationaleRaw, 220)
   
   // Expanded layout for standalone pages
   if (expanded) {
