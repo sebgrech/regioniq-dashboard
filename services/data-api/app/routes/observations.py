@@ -266,7 +266,8 @@ def observations_query(req: QueryRequest, request: Request, user=Depends(get_cur
                 break
 
     accessed_at = _now_z()
-    url = str(request.url)
+    # Normalize to HTTPS (Fly.io proxy may forward as HTTP internally)
+    url = str(request.url).replace("http://", "https://")
     citation = f"RegionIQ Data API ({DEFAULT_LIFECYCLE.vintage}). Accessed {accessed_at}. Source: {DEFAULT_LIFECYCLE.source}."
 
     meta = ResponseMeta(
