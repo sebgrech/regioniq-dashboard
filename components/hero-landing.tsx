@@ -77,7 +77,7 @@ export default function LandingPage() {
   // Show a minimal bridge screen while we redirect to /auth/fragment.
   if (hasAuthHashTokens) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0B0F14] text-white">
+      <div className="min-h-screen flex items-center justify-center bg-[hsl(220,48%,9%)] text-white">
         <div className="text-sm text-white/60">Signing you in…</div>
       </div>
     )
@@ -176,18 +176,67 @@ export default function LandingPage() {
   }
 
   return (
-    <div ref={containerRef} className="min-h-screen bg-[#0B0F14] text-white">
-      <div className="relative grid min-h-screen grid-cols-1 lg:grid-cols-2">
+    <div ref={containerRef} className="relative min-h-screen bg-[hsl(220,48%,9%)] text-white overflow-hidden">
+      {/* Aurora Borealis animated background - FULL WIDTH */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        {/* Aurora gradients with slow, smooth animations */}
+        <div className="absolute inset-0 opacity-40">
+          <div className="absolute top-0 -left-1/4 w-[150%] h-full bg-gradient-to-br from-purple-500/30 via-transparent to-transparent blur-3xl animate-aurora-slow-1" />
+          <div className="absolute top-0 left-1/3 w-full h-full bg-gradient-to-br from-blue-500/30 via-cyan-500/20 to-transparent blur-3xl animate-aurora-slow-2" />
+          <div className="absolute top-0 -right-1/4 w-full h-full bg-gradient-to-br from-green-500/20 via-blue-500/20 to-transparent blur-3xl animate-aurora-slow-3" />
+          <div className="absolute bottom-0 -left-1/4 w-[150%] h-2/3 bg-gradient-to-t from-purple-600/20 via-transparent to-transparent blur-2xl animate-aurora-slow-4" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-full blur-3xl animate-aurora-pulse" style={{ background: 'radial-gradient(circle, rgba(34,211,238,0.1) 0%, transparent 70%)' }} />
+        </div>
+        
+        {/* Subtle light streaks - full width */}
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute top-0 left-[10%] w-px h-full bg-gradient-to-b from-transparent via-cyan-400/50 to-transparent animate-streak-1" />
+          <div className="absolute top-0 left-[30%] w-px h-full bg-gradient-to-b from-transparent via-purple-400/50 to-transparent animate-streak-2" />
+          <div className="absolute top-0 left-1/2 w-px h-full bg-gradient-to-b from-transparent via-blue-400/50 to-transparent animate-streak-3" />
+          <div className="absolute top-0 left-[70%] w-px h-full bg-gradient-to-b from-transparent via-cyan-400/50 to-transparent animate-streak-1" />
+          <div className="absolute top-0 left-[90%] w-px h-full bg-gradient-to-b from-transparent via-purple-400/50 to-transparent animate-streak-2" />
+        </div>
+        
+        {/* Animated floating particles */}
+        <div className="absolute inset-0">
+          <div className="absolute top-[10%] left-[5%] w-1.5 h-1.5 bg-white/60 rounded-full animate-particle-float-1" />
+          <div className="absolute top-[25%] left-[12%] w-1 h-1 bg-cyan-400/50 rounded-full animate-particle-float-3" />
+          <div className="absolute top-[45%] left-[8%] w-2 h-2 bg-white/40 rounded-full animate-particle-float-5" />
+          <div className="absolute top-[65%] left-[15%] w-1 h-1 bg-purple-400/50 rounded-full animate-particle-float-2" />
+          <div className="absolute top-[80%] left-[20%] w-1.5 h-1.5 bg-blue-400/60 rounded-full animate-particle-float-4" />
+          
+          {/* Center-left particles */}
+          <div className="absolute top-[15%] left-[25%] w-1 h-1 bg-white/50 rounded-full animate-particle-float-2" />
+          <div className="absolute top-[35%] left-[30%] w-1.5 h-1.5 bg-cyan-400/60 rounded-full animate-particle-float-6" />
+          <div className="absolute top-[55%] left-[35%] w-1 h-1 bg-white/70 rounded-full animate-particle-float-7" />
+          <div className="absolute top-[75%] left-[28%] w-2 h-2 bg-purple-300/50 rounded-full animate-particle-float-1" />
+          
+          {/* Center particles */}
+          <div className="absolute top-[20%] left-[45%] w-1.5 h-1.5 bg-white/60 rounded-full animate-particle-float-8" />
+          <div className="absolute top-[40%] left-[50%] w-1 h-1 bg-blue-400/50 rounded-full animate-particle-float-3" />
+          <div className="absolute top-[60%] left-[48%] w-2 h-2 bg-cyan-300/60 rounded-full animate-particle-float-5" />
+          <div className="absolute top-[85%] left-[52%] w-1 h-1 bg-white/50 rounded-full animate-particle-float-4" />
+          
+          {/* Center-right particles */}
+          <div className="absolute top-[12%] left-[65%] w-1 h-1 bg-purple-400/50 rounded-full animate-particle-float-2" />
+          <div className="absolute top-[30%] left-[70%] w-1.5 h-1.5 bg-white/70 rounded-full animate-particle-float-7" />
+          <div className="absolute top-[50%] left-[68%] w-1 h-1 bg-cyan-400/60 rounded-full animate-particle-float-6" />
+          <div className="absolute top-[70%] left-[72%] w-2 h-2 bg-blue-300/50 rounded-full animate-particle-float-1" />
+          
+          {/* Right side particles */}
+          <div className="absolute top-[18%] left-[85%] w-1.5 h-1.5 bg-white/50 rounded-full animate-particle-float-3" />
+          <div className="absolute top-[38%] left-[90%] w-1 h-1 bg-purple-300/50 rounded-full animate-particle-float-8" />
+          <div className="absolute top-[58%] left-[88%] w-2 h-2 bg-cyan-400/60 rounded-full animate-particle-float-5" />
+          <div className="absolute top-[78%] left-[92%] w-1 h-1 bg-white/60 rounded-full animate-particle-float-4" />
+          <div className="absolute top-[90%] left-[95%] w-1.5 h-1.5 bg-blue-400/50 rounded-full animate-particle-float-2" />
+        </div>
+      </div>
+
+      <div className="relative z-10 grid min-h-screen grid-cols-1 lg:grid-cols-2">
         {/* LEFT PANEL (visual) */}
         <div
-          className="relative overflow-hidden border-b border-white/5 lg:border-b-0 lg:border-r-0"
+          className="relative overflow-hidden"
         >
-          {/* Divider (Linear-style hairline + gentle glow) */}
-          <div className="hidden lg:block absolute right-0 top-0 h-full w-px pointer-events-none">
-            {/* Stripe-like: one crisp hairline, no glow */}
-            <div className="absolute inset-0 bg-gradient-to-b from-white/0 via-white/10 to-white/0" />
-          </div>
-
           {/* Ambient light (monochrome) */}
           <div
             className="absolute inset-0 pointer-events-none"
@@ -230,28 +279,71 @@ export default function LandingPage() {
 
               {ANCHORS.map((a, idx) => {
                 // Pinpoint sizing: keep dots small and crisp.
-                const dotR = Math.max(0.65, a.size / 9) // scale px-ish -> viewBox-ish
-                const ringStart = dotR + 1.2
-                const ringEnd = ringStart + (6.5 + (idx % 3) * 1.25)
-                const dur = 3.4 + [0.0, 0.18, -0.12, 0.1, -0.05][idx % 5]
+                const dotR = Math.max(0.8, a.size / 8) // slightly larger center dot
+                const ringStart = dotR + 0.8
+                const ringEnd = ringStart + (8 + (idx % 3) * 2) // larger expansion
+                const dur = 3.0 + [0.0, 0.2, -0.15, 0.15, -0.1][idx % 5]
+                const ringStagger = dur / 3 // stagger between rings
+                
+                // Slow drift animation parameters - each dot moves differently
+                const driftDur = 25 + (idx * 5) // 25-55 seconds per cycle
+                const driftX = [3, -2, 2.5, -3, 2, -2.5][idx % 6] // horizontal drift range
+                const driftY = [2, -3, 1.5, -2, 3, -1.5][idx % 6] // vertical drift range
+                
                 return (
-                  <g key={idx} transform={`translate(${a.x} ${a.y})`}>
-                    <circle r={dotR} fill="rgba(255,255,255,0.70)" stroke="rgba(255,255,255,0.14)" strokeWidth="0.22" />
-                    <circle r={ringStart} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="0.22">
+                  <g key={idx}>
+                    {/* Wrapper with slow drift animation */}
+                    <g>
+                      {!reducedMotion ? (
+                        <animateTransform
+                          attributeName="transform"
+                          type="translate"
+                          values={`${a.x} ${a.y}; ${a.x + driftX} ${a.y + driftY}; ${a.x - driftX * 0.5} ${a.y - driftY * 0.7}; ${a.x + driftX * 0.7} ${a.y - driftY * 0.5}; ${a.x} ${a.y}`}
+                          dur={`${driftDur}s`}
+                          repeatCount="indefinite"
+                          calcMode="spline"
+                          keySplines="0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1"
+                        />
+                      ) : (
+                        <animateTransform
+                          attributeName="transform"
+                          type="translate"
+                          values={`${a.x} ${a.y}`}
+                          dur="0s"
+                        />
+                      )}
+                      
+                      {/* Center dot with glow */}
+                      <circle r={dotR * 3} fill="rgba(139,92,246,0.2)" /> {/* Outer purple glow */}
+                      <circle r={dotR * 2} fill="rgba(34,211,238,0.25)" /> {/* Inner cyan glow */}
+                      <circle r={dotR} fill="rgba(255,255,255,1)" stroke="rgba(139,92,246,0.5)" strokeWidth="0.35" /> {/* Bright center */}
+                      
+                      {/* Multiple radiating rings with staggered timing */}
                       {!reducedMotion ? (
                         <>
-                          <animate attributeName="r" values={`${ringStart};${ringEnd}`} dur={`${dur}s`} begin={`${a.delay}s`} repeatCount="indefinite" />
-                          <animate
-                            attributeName="opacity"
-                            values="0;0.28;0.08;0"
-                            keyTimes="0;0.12;0.72;1"
-                            dur={`${dur}s`}
-                            begin={`${a.delay}s`}
-                            repeatCount="indefinite"
-                          />
+                          {/* Ring 1 */}
+                          <circle r={ringStart} fill="none" stroke="rgba(139,92,246,0.4)" strokeWidth="0.25">
+                            <animate attributeName="r" values={`${ringStart};${ringEnd}`} dur={`${dur}s`} begin={`${a.delay}s`} repeatCount="indefinite" />
+                            <animate attributeName="opacity" values="0.5;0.3;0.1;0" keyTimes="0;0.3;0.7;1" dur={`${dur}s`} begin={`${a.delay}s`} repeatCount="indefinite" />
+                            <animate attributeName="stroke-width" values="0.25;0.15;0.05" dur={`${dur}s`} begin={`${a.delay}s`} repeatCount="indefinite" />
+                          </circle>
+                          
+                          {/* Ring 2 - staggered */}
+                          <circle r={ringStart} fill="none" stroke="rgba(34,211,238,0.35)" strokeWidth="0.2">
+                            <animate attributeName="r" values={`${ringStart};${ringEnd}`} dur={`${dur}s`} begin={`${a.delay + ringStagger}s`} repeatCount="indefinite" />
+                            <animate attributeName="opacity" values="0.4;0.25;0.08;0" keyTimes="0;0.3;0.7;1" dur={`${dur}s`} begin={`${a.delay + ringStagger}s`} repeatCount="indefinite" />
+                            <animate attributeName="stroke-width" values="0.2;0.12;0.04" dur={`${dur}s`} begin={`${a.delay + ringStagger}s`} repeatCount="indefinite" />
+                          </circle>
+                          
+                          {/* Ring 3 - more staggered */}
+                          <circle r={ringStart} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="0.18">
+                            <animate attributeName="r" values={`${ringStart};${ringEnd}`} dur={`${dur}s`} begin={`${a.delay + ringStagger * 2}s`} repeatCount="indefinite" />
+                            <animate attributeName="opacity" values="0.35;0.2;0.05;0" keyTimes="0;0.3;0.7;1" dur={`${dur}s`} begin={`${a.delay + ringStagger * 2}s`} repeatCount="indefinite" />
+                            <animate attributeName="stroke-width" values="0.18;0.1;0.03" dur={`${dur}s`} begin={`${a.delay + ringStagger * 2}s`} repeatCount="indefinite" />
+                          </circle>
                         </>
                       ) : null}
-                    </circle>
+                    </g>
                   </g>
                 )
               })}
@@ -273,9 +365,10 @@ export default function LandingPage() {
             className="absolute inset-0 pointer-events-none"
             style={{
               background:
-                "radial-gradient(ellipse at center, rgba(11,15,20,0) 0%, rgba(11,15,20,0.44) 72%, rgba(11,15,20,0.76) 100%)",
+                "radial-gradient(ellipse at center, hsla(220,48%,9%,0) 0%, hsla(220,48%,9%,0.44) 72%, hsla(220,48%,9%,0.76) 100%)",
             }}
           />
+
         </div>
 
         {/* RIGHT PANEL (auth placeholder) */}
@@ -311,7 +404,7 @@ export default function LandingPage() {
                 alt=""
                 aria-hidden="true"
                 draggable={false}
-                className="absolute left-1/2 top-1/2 w-[860px] max-w-none opacity-[0.045] select-none"
+                className="absolute left-1/2 top-1/2 w-[860px] max-w-none opacity-[0.22] select-none"
                 style={{
                   // Off-center placement reads more premium than a dead-centered watermark.
                   // Parallax applies on top, but we keep a stable baseline composition.
@@ -323,15 +416,6 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Edge fade into the form side */}
-          <div
-            className="absolute inset-y-0 left-0 w-24 pointer-events-none hidden lg:block"
-            style={{
-              background:
-                "linear-gradient(to right, rgba(11,15,20,0.92), rgba(11,15,20,0))",
-            }}
-          />
-
           <div
             className="relative z-10 w-full max-w-[420px]"
             style={{
@@ -339,86 +423,115 @@ export default function LandingPage() {
               transition: "transform 120ms ease-out",
             }}
           >
-            {/* Context header (Linear-style) */}
-            <div
-              className={[
-                "mb-6 space-y-2",
-                "transition-all duration-700",
-                loaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2",
-              ].join(" ")}
-            >
-              <div className="text-[12px] tracking-[0.18em] uppercase text-white/50">RegionIQ</div>
+            {/* Context header (Linear-style) with staggered animations */}
+            <div className="mb-6 space-y-2">
               <div
-                className="text-[32px] leading-[1.05] font-semibold tracking-tight text-white"
-                style={{ fontFamily: "var(--font-plus-jakarta-sans), system-ui, sans-serif" }}
+                className={[
+                  "text-[32px] leading-[1.05] font-semibold tracking-tight text-white",
+                  "transition-all duration-700 ease-out",
+                  loaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3",
+                ].join(" ")}
+                style={{ 
+                  fontFamily: "var(--font-plus-jakarta-sans), system-ui, sans-serif",
+                  transitionDelay: "60ms",
+                }}
               >
                 Sign in
               </div>
-              <div className="text-[13px] leading-relaxed text-white/45">
-                Access regional intelligence, faster.
+              <div 
+                className={[
+                  "text-[13px] leading-relaxed text-white/45",
+                  "transition-all duration-700 ease-out",
+                  loaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3",
+                ].join(" ")}
+                style={{ transitionDelay: "120ms" }}
+              >
+                Access economic intelligence, faster.
               </div>
             </div>
 
-            {/* Auth card */}
+            {/* Auth card with gradient border glow */}
             <div
               className={[
-                "rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-xl p-6",
-                "transition-all duration-700",
-                loaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2",
+                "relative rounded-2xl p-6 backdrop-blur-xl",
+                "transition-all duration-700 ease-out",
+                loaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3",
               ].join(" ")}
-              style={{ transitionDelay: "90ms" }}
+              style={{ transitionDelay: "180ms" }}
             >
-              <form onSubmit={onSubmitLogin} className="space-y-4">
-                <input
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Email"
-                  className={[
-                    "h-12 w-full rounded-xl px-4",
-                    "bg-[#0B0F14]/40 border border-white/10",
-                    "text-white/90 placeholder:text-white/30",
-                    "focus:outline-none focus:ring-2 focus:ring-white/15",
-                  ].join(" ")}
-                  autoComplete="email"
-                  type="email"
-                  required
-                />
+              {/* Gradient border glow effect */}
+              <div 
+                className="absolute -inset-[1px] rounded-2xl opacity-60"
+                style={{
+                  background: "linear-gradient(135deg, rgba(139,92,246,0.3) 0%, rgba(34,211,238,0.2) 50%, rgba(139,92,246,0.3) 100%)",
+                }}
+              />
+              <div className="absolute inset-0 rounded-2xl bg-white/[0.04]" />
+              
+              {/* Card content */}
+              <div className="relative z-10">
+                <form onSubmit={onSubmitLogin} className="space-y-4">
+                  <input
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Email"
+                    className={[
+                      "h-12 w-full rounded-xl px-4",
+                      "bg-[hsl(220,48%,9%)]/60 border border-white/10",
+                      "text-white/90 placeholder:text-white/30",
+                      "focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500/50",
+                      "transition-all duration-200",
+                    ].join(" ")}
+                    autoComplete="email"
+                    type="email"
+                    required
+                  />
 
-                <input
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Password"
-                  className={[
-                    "h-12 w-full rounded-xl px-4",
-                    "bg-[#0B0F14]/40 border border-white/10",
-                    "text-white/90 placeholder:text-white/30",
-                    "focus:outline-none focus:ring-2 focus:ring-white/15",
-                  ].join(" ")}
-                  autoComplete="current-password"
-                  type="password"
-                  required
-                />
+                  <input
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Password"
+                    className={[
+                      "h-12 w-full rounded-xl px-4",
+                      "bg-[hsl(220,48%,9%)]/60 border border-white/10",
+                      "text-white/90 placeholder:text-white/30",
+                      "focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500/50",
+                      "transition-all duration-200",
+                    ].join(" ")}
+                    autoComplete="current-password"
+                    type="password"
+                    required
+                  />
 
-                {authError ? <div className="text-[13px] text-red-300/90">{authError}</div> : null}
+                  {authError ? <div className="text-[13px] text-red-300/90">{authError}</div> : null}
 
-                <button
-                  type="submit"
-                  disabled={authLoading || !email || !password}
-                  className={[
-                    "group w-full h-12 rounded-xl px-4",
-                    "bg-white text-[#0B0F14] font-medium",
-                    "transition-all duration-200",
-                    "hover:bg-white/90 active:scale-[0.99]",
-                    "disabled:opacity-40 disabled:pointer-events-none",
-                    "flex items-center justify-center gap-2",
-                  ].join(" ")}
-                >
-                  {authLoading ? "Signing in…" : "Sign in"}
-                  {!authLoading ? (
-                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                  ) : null}
-                </button>
-              </form>
+                  {/* Button with shimmer effect */}
+                  <button
+                    type="submit"
+                    disabled={authLoading || !email || !password}
+                    className={[
+                      "group relative w-full h-12 rounded-xl px-4 overflow-hidden",
+                      "bg-white text-[hsl(220,48%,9%)] font-medium",
+                      "transition-all duration-200",
+                      "hover:shadow-lg hover:shadow-white/10 active:scale-[0.99]",
+                      "disabled:opacity-40 disabled:pointer-events-none",
+                      "flex items-center justify-center gap-2",
+                    ].join(" ")}
+                  >
+                    {/* Shimmer overlay */}
+                    <div 
+                      className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"
+                      style={{
+                        background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%)",
+                      }}
+                    />
+                    <span className="relative z-10">{authLoading ? "Signing in…" : "Sign in"}</span>
+                    {!authLoading ? (
+                      <ArrowRight className="relative z-10 h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                    ) : null}
+                  </button>
+                </form>
+              </div>
             </div>
 
             {/* Ultra-min footer */}
@@ -429,6 +542,17 @@ export default function LandingPage() {
         </div>
 
         <style jsx>{``}</style>
+      </div>
+
+      {/* Full-screen Aurora overlay on TOP of everything */}
+      <div className="absolute inset-0 pointer-events-none z-30">
+        <div className="absolute inset-0 opacity-30">
+          {/* Center blend aurora that crosses the entire screen */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[150%] h-full bg-gradient-to-r from-transparent via-purple-500/20 to-transparent blur-3xl animate-aurora-slow-2" />
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[120%] h-2/3 bg-gradient-to-r from-transparent via-cyan-500/15 to-transparent blur-2xl animate-aurora-slow-3" />
+          {/* Extra center glow to unify left and right */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[80%] blur-3xl animate-aurora-pulse" style={{ background: 'radial-gradient(circle, rgba(59,130,246,0.1) 0%, transparent 70%)' }} />
+        </div>
       </div>
     </div>
   )
