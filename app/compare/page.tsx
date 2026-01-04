@@ -29,6 +29,9 @@ import { withDataToast } from "@/lib/with-toast"
 import {
   LineChart,
   Line,
+  BarChart,
+  Bar,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -54,8 +57,17 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
   const [xDomain, setXDomain] = useState<[number, number] | null>(null)
   const [yDomain, setYDomain] = useState<[number, number] | null>(null)
   
-  // Palette
-  const colors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"]
+  // Premium SaaS color palette (Linear/Stripe inspired)
+  const colors = [
+    "#6366f1", // Indigo - primary
+    "#0ea5e9", // Sky blue
+    "#14b8a6", // Teal
+    "#f97316", // Orange
+    "#ec4899", // Pink
+    "#8b5cf6", // Violet
+    "#06b6d4", // Cyan
+    "#84cc16", // Lime
+  ]
 
   // Visibility state for regions
   const [visible, setVisible] = useState<boolean[]>(() => regions.map(() => true))
@@ -249,14 +261,14 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
     const seen = new Set<number>() // avoid dup same region from hist/fcst overlap (shouldn't occur, but safe)
 
     return (
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 min-w-[200px]">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="font-medium text-gray-900 dark:text-gray-100">{label}</span>
-          <Badge variant={rowType === "historical" ? "secondary" : "outline"} className="text-xs">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2 min-w-[180px]">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="font-medium text-gray-900 dark:text-gray-100 text-sm">{label}</span>
+          <Badge variant={rowType === "historical" ? "secondary" : "outline"} className="text-[10px] px-1.5 py-0">
             {rowType === "historical" ? "Historical" : "Forecast"}
           </Badge>
         </div>
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           {payload
             .filter((e: any) => e.value != null)
             .map((entry: any, i: number) => {
@@ -266,12 +278,12 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
               if (idx >= 0) seen.add(idx)
               const regionName = idx >= 0 ? (regions[idx]?.regionName ?? `Region ${idx + 1}`) : entry.dataKey
               return (
-                <div key={i} className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">{regionName}</span>
+                <div key={i} className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
+                    <span className="text-xs text-gray-600 dark:text-gray-400">{regionName}</span>
                   </div>
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                     {formatValue(entry.value, unit)}
                   </span>
                 </div>
@@ -331,9 +343,9 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
       </CardHeader>
 
       <CardContent>
-        <div className="h-[640px] w-full">
+        <div className="h-[420px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 50, right: 30, left: 20, bottom: 5 }}>
+            <LineChart data={chartData} margin={{ top: 30, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid
                 stroke={gridStroke}
                 strokeOpacity={0.4}
@@ -595,6 +607,7 @@ function CompareContent() {
   // -------- Data state --------
   const [comparisonData, setComparisonData] = useState<ComparisonData>({})
   const [isLoading, setIsLoading] = useState(false)
+  const [barChartYear, setBarChartYear] = useState<number>(year)
 
   // Do we already have data for all regions for the current metric+scenario?
   const hasAllData = useMemo(
@@ -771,6 +784,73 @@ function CompareContent() {
     [chartExportRows],
   )
 
+  // -------- Bar Chart Data --------
+  // Premium SaaS color palette (Linear/Stripe inspired) - matches line chart
+  const barColors = [
+    "#6366f1", // Indigo - primary
+    "#0ea5e9", // Sky blue
+    "#14b8a6", // Teal
+    "#f97316", // Orange
+    "#ec4899", // Pink
+    "#8b5cf6", // Violet
+    "#06b6d4", // Cyan
+    "#84cc16", // Lime
+  ]
+
+  // Available years for the slider
+  const availableYears = useMemo(() => {
+    const years = new Set<number>()
+    chartRegions.forEach((region) => {
+      region.data.forEach((d: any) => {
+        const y = d.year ?? d.period
+        if (y != null) years.add(y)
+      })
+    })
+    return Array.from(years).sort((a, b) => a - b)
+  }, [chartRegions])
+
+  // Bar chart data for static year comparison
+  const barChartData = useMemo(() => {
+    return chartRegions
+      .map((region) => {
+        const yearData = region.data.find(
+          (d: any) => (d.year ?? d.period) === barChartYear
+        )
+        return {
+          regionCode: region.regionCode,
+          regionName: region.regionName,
+          value: yearData?.value ?? null,
+          dataType: yearData?.type ?? (yearData as any)?.data_type ?? "forecast",
+        }
+      })
+      .filter((d) => d.value !== null)
+      .sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
+  }, [chartRegions, barChartYear])
+
+  // Bar chart export rows
+  const barChartExportRows = useMemo(() => {
+    const unit = selectedMetric?.unit || ""
+    return barChartData.map((d) => ({
+      Metric: selectedMetric?.title || metric,
+      Region: d.regionName,
+      "Region Code": d.regionCode,
+      Year: barChartYear,
+      Scenario: scenarioLabel(scenario),
+      Value: d.value,
+      Units: unit,
+      "Data Type": dataTypeLabel(d.dataType),
+    }))
+  }, [barChartData, barChartYear, metric, scenario, selectedMetric?.title, selectedMetric?.unit])
+
+  const barChartExportCsvRows = useMemo(
+    () =>
+      barChartExportRows.map((r) => ({
+        ...r,
+        Value: typeof r.Value === "number" ? Math.round(r.Value) : r.Value,
+      })),
+    [barChartExportRows],
+  )
+
   // URL to open this comparison in the Data Explorer with prefilled selections
   const dataExplorerUrl = useMemo(() => {
     const params = new URLSearchParams()
@@ -918,8 +998,8 @@ function CompareContent() {
                   }}
                 >
                   <ChartTimeseriesCompare
-                    title={`${selectedMetric?.title ?? "Metric"} Comparison`}
-                    description="Compare trends across selected regions"
+                    title={`${selectedMetric?.title ?? "Metric"} Over Time`}
+                    description="Historical trends and forecast trajectories"
                     regions={chartRegions}
                     unit={selectedMetric?.unit || ""}
                     metricId={metric}
@@ -927,6 +1007,138 @@ function CompareContent() {
                   />
                 </ExportableChartCard>
             </ErrorBoundaryWrapper>
+
+          {/* Static Year Bar Chart */}
+          <ErrorBoundaryWrapper name="bar chart comparison">
+            <ExportableChartCard
+              rows={barChartExportRows}
+              csvRows={barChartExportCsvRows}
+              filenameBase={`regioniq_${metric}_${barChartYear}_comparison_${scenario}`}
+              isLoading={!hasAllData && isLoading}
+            >
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>{selectedMetric?.title ?? "Metric"} Snapshot</CardTitle>
+                      <CardDescription>
+                        Point-in-time ranking by region
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {barChartYear > YEARS.forecastStart && (
+                        <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                          Forecast
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-sm font-mono font-semibold">
+                        {barChartYear}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Year Slider */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-foreground">
+                        Select Year
+                      </label>
+                    </div>
+                    <input
+                      type="range"
+                      min={availableYears[0] ?? YEARS.min}
+                      max={availableYears[availableYears.length - 1] ?? YEARS.max}
+                      value={barChartYear}
+                      onChange={(e) => setBarChartYear(Number(e.target.value))}
+                      className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground font-mono">
+                      <span>2010</span>
+                      <span>2020</span>
+                      <span className="text-primary font-medium">2024</span>
+                      <span>2030</span>
+                      <span>2040</span>
+                      <span>2050</span>
+                    </div>
+                  </div>
+
+                  {/* Bar Chart */}
+                  {barChartData.length > 0 ? (
+                    <div 
+                      className="w-full"
+                      style={{ height: Math.max(120, Math.min(500, barChartData.length * 50 + 40)) }}
+                    >
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={barChartData}
+                          layout="vertical"
+                          margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
+                          barSize={32}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" opacity={0.3} horizontal={true} vertical={false} />
+                          <XAxis
+                            type="number"
+                            tickFormatter={(v) => formatValue(v, selectedMetric?.unit || "")}
+                            tick={{ fontSize: 12, fill: "#6b7280" }}
+                            axisLine={{ stroke: "#e5e7eb" }}
+                            tickLine={{ stroke: "#e5e7eb" }}
+                          />
+                          <YAxis
+                            type="category"
+                            dataKey="regionName"
+                            width={180}
+                            tick={{ fontSize: 14, fill: "#374151", fontWeight: 500 }}
+                            axisLine={false}
+                            tickLine={false}
+                          />
+                          <Tooltip
+                            cursor={{ fill: "transparent" }}
+                            content={({ active, payload, label }) => {
+                              if (!active || !payload || !payload.length) return null
+                              const entry = payload[0]
+                              const dataPoint = barChartData.find(d => d.regionName === label)
+                              return (
+                                <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2 min-w-[180px]">
+                                  <div className="flex items-center gap-2 mb-1.5">
+                                    <span className="font-medium text-gray-900 dark:text-gray-100 text-sm">{label}</span>
+                                    <Badge variant={dataPoint?.dataType === "historical" ? "secondary" : "outline"} className="text-[10px] px-1.5 py-0">
+                                      {dataPoint?.dataType === "historical" ? "Historical" : "Forecast"}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-1.5">
+                                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry?.color as string }} />
+                                      <span className="text-xs text-gray-500 dark:text-gray-400">{barChartYear}</span>
+                                    </div>
+                                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                      {formatValue(entry?.value as number, selectedMetric?.unit || "")}
+                                    </span>
+                                  </div>
+                                </div>
+                              )
+                            }}
+                          />
+                          <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                            {barChartData.map((entry, index) => (
+                              <Cell
+                                key={`cell-${entry.regionCode}`}
+                                fill={barColors[index % barColors.length]}
+                              />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="h-[400px] flex items-center justify-center text-muted-foreground">
+                      No data available for {barChartYear}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </ExportableChartCard>
+          </ErrorBoundaryWrapper>
 
           {/* Compare Copilot - HIDDEN FOR V1: Component exists but is not rendered
               To re-enable, uncomment the section below:

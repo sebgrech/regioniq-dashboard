@@ -311,19 +311,20 @@ export const ChartTimeseries = memo(function ChartTimeseries({
     const data = payload[0]?.payload as Row
     const rowType = data?.type
     const dataQuality = data?.data_quality
+    const dq = String(dataQuality ?? "").toLowerCase()
     
     // Determine quality label and color
     let qualityLabel = ''
     let qualityColor = ''
     
-    if (dataQuality === 'interpolated') {
-      qualityLabel = 'Estimated (Interpolated)'
+    if (dq === "interpolated" || dq === "estimate" || dq === "estimated") {
+      qualityLabel = dq === "interpolated" ? "Estimated (Interpolated)" : "Estimated"
       qualityColor = '#f59e0b' // amber
-    } else if (dataQuality === 'NISRA') {
-      qualityLabel = 'NISRA'
+    } else if (dq === "nisra") {
+      qualityLabel = "NISRA"
       qualityColor = '#8b5cf6' // violet
-    } else if (dataQuality === 'ONS') {
-      qualityLabel = 'ONS'
+    } else if (dq === "ons") {
+      qualityLabel = "ONS"
       qualityColor = '#10b981' // green
     }
     
