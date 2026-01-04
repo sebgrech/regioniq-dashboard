@@ -302,11 +302,6 @@ function DashboardContent() {
           
           const allMetricsData = [...mainMetricsData, ...relatedMetricsData]
           setDashboardData({ allMetricsData, isLoading: false })
-
-          toast({
-            title: "✅ Dashboard Loaded",
-            description: "All metrics loaded from Supabase!",
-          })
         } catch (error) {
           console.error("Failed to load dashboard data:", error)
           toast({
