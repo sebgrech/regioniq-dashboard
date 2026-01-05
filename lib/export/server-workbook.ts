@@ -168,10 +168,11 @@ export async function buildTimeseriesWorkbook(params: {
     ts.getColumn(c).numFmt = "#,##0"
   }
 
-  // Forecast/historical cue by year-columns (TEXT ONLY):
+  // Forecast/historical styling:
   // - Year headers remain bold/black
-  // - Forecast values are darker grey text for clear separation
-  const forecastFont = { color: { argb: "FF7A7A7A" } }
+  // - Forecast values use indigo for clear visual separation (matches UI)
+  const forecastFont = { color: { argb: "FF6366F1" } } // Indigo-500
+  const historicalFont = { color: { argb: "FF374151" } } // Gray-700
 
   for (let c = 2; c <= ts.columnCount; c++) {
     const headerVal = String(ts.getRow(1).getCell(c).value ?? "")
@@ -188,10 +189,11 @@ export async function buildTimeseriesWorkbook(params: {
   // Baseline/Upside/Downside occupy rows 2-4; leave a gap and put the key starting at row 6.
   const keyStartRow = 6
   ts.getCell(`A${keyStartRow}`).value = "Key"
-  ts.getCell(`A${keyStartRow}`).font = { bold: true }
+  ts.getCell(`A${keyStartRow}`).font = { bold: true, size: 10 }
   ts.getCell(`A${keyStartRow + 1}`).value = "Historical (ONS)"
+  ts.getCell(`A${keyStartRow + 1}`).font = { size: 10, ...historicalFont }
   ts.getCell(`A${keyStartRow + 2}`).value = "Forecast (RegionIQ)"
-  ts.getCell(`A${keyStartRow + 2}`).font = forecastFont
+  ts.getCell(`A${keyStartRow + 2}`).font = { size: 10, ...forecastFont }
   // Units (one row gap under the key)
   ts.getCell(`A${keyStartRow + 4}`).value = `Units: ${units}`
 

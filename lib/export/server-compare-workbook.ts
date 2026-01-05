@@ -147,8 +147,10 @@ export async function buildCompareWorkbook(params: {
   ts.getRow(1).font = { bold: true }
   for (let c = 2; c <= ts.columnCount; c++) ts.getColumn(c).numFmt = "#,##0"
 
-  // Forecast cue on values only (text color) — darker for clear separation
-  const forecastFont = { color: { argb: "FF7A7A7A" } }
+  // Forecast/historical styling:
+  // - Forecast values use indigo for clear visual separation (matches UI)
+  const forecastFont = { color: { argb: "FF6366F1" } } // Indigo-500
+  const historicalFont = { color: { argb: "FF374151" } } // Gray-700
   const forecastStart = YEARS.forecastStart
   for (let c = 2; c <= ts.columnCount; c++) {
     const headerVal = String(ts.getRow(1).getCell(c).value ?? "")
@@ -163,10 +165,11 @@ export async function buildCompareWorkbook(params: {
   // Key on the left below table
   const keyStartRow = matrixRows.length + 3
   ts.getCell(`A${keyStartRow}`).value = "Key"
-  ts.getCell(`A${keyStartRow}`).font = { bold: true }
+  ts.getCell(`A${keyStartRow}`).font = { bold: true, size: 10 }
   ts.getCell(`A${keyStartRow + 1}`).value = "Historical (ONS)"
+  ts.getCell(`A${keyStartRow + 1}`).font = { size: 10, ...historicalFont }
   ts.getCell(`A${keyStartRow + 2}`).value = "Forecast (RegionIQ)"
-  ts.getCell(`A${keyStartRow + 2}`).font = forecastFont
+  ts.getCell(`A${keyStartRow + 2}`).font = { size: 10, ...forecastFont }
   // Units (one row gap under the key)
   ts.getCell(`A${keyStartRow + 4}`).value = `Units: ${units}`
 

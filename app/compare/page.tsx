@@ -10,6 +10,13 @@ import { ArrowLeft, Loader2, X, ZoomIn, ZoomOut, RotateCcw, GitCompareArrows, Da
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { RegionPicker } from "@/components/region-picker"
 // DataTable removed - using Data Explorer link instead
 // import { DataTable } from "@/components/data-table"
@@ -44,7 +51,19 @@ import {
 import { formatValue } from "@/lib/data-service"
 import { YEARS } from "@/lib/metrics.config"
 
-const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, isLoading, className }: any) => {
+const ChartTimeseriesCompare = ({ 
+  title, 
+  description, 
+  regions, 
+  unit, 
+  metricId, 
+  isLoading, 
+  className,
+  isIndexed,
+  onIndexedChange,
+  baseYear,
+  onBaseYearChange,
+}: any) => {
   const { theme } = useTheme()
   const isDarkMode = theme === "dark"
   const gridStroke = isDarkMode ? "#333333" : "#E5E7EB"
@@ -147,17 +166,68 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
     return Array.from(yearMap.values()).sort((a, b) => a.year - b.year)
   }, [regions, lastHistoricalYear])
 
+  // Available years for index base year dropdown
+  const availableBaseYears = useMemo(() => {
+    if (!chartData.length) return []
+    return chartData.map(d => d.year).sort((a, b) => a - b)
+  }, [chartData])
+
+  // Default to first year when indexed mode is enabled
+  useEffect(() => {
+    if (isIndexed && baseYear === null && availableBaseYears.length) {
+      onBaseYearChange?.(availableBaseYears[0])
+    }
+  }, [isIndexed, baseYear, availableBaseYears, onBaseYearChange])
+
+  // Compute indexed data (rebase all values to 100 at selected base year)
+  const indexedChartData = useMemo(() => {
+    if (!chartData.length || !regions?.length || baseYear === null) return chartData
+    
+    // Find base values at the selected base year
+    const baseRow = chartData.find(row => row.year === baseYear)
+    if (!baseRow) return chartData
+    
+    const baseValues: Record<string, number> = {}
+    for (let idx = 0; idx < regions.length; idx++) {
+      const histVal = baseRow[`region${idx}_hist`]
+      const fcstVal = baseRow[`region${idx}_fcst`]
+      const val = histVal ?? fcstVal
+      if (val != null && val !== 0) {
+        baseValues[`region${idx}`] = val
+      }
+    }
+    
+    // Rebase all values to 100 at selected year
+    return chartData.map(row => {
+      const newRow: any = { year: row.year, type: row.type }
+      for (let idx = 0; idx < regions.length; idx++) {
+        const base = baseValues[`region${idx}`]
+        if (!base) continue
+        
+        const histVal = row[`region${idx}_hist`]
+        const fcstVal = row[`region${idx}_fcst`]
+        
+        if (histVal != null) newRow[`region${idx}_hist`] = (histVal / base) * 100
+        if (fcstVal != null) newRow[`region${idx}_fcst`] = (fcstVal / base) * 100
+      }
+      return newRow
+    })
+  }, [chartData, regions, baseYear])
+
+  // Use indexed or absolute data based on toggle
+  const displayData = isIndexed ? indexedChartData : chartData
+
   // Calculate data ranges for zoom
   const xRange = useMemo(() => {
-    if (!chartData.length) return [0, 0]
-    const years = chartData.map(d => d.year)
+    if (!displayData.length) return [0, 0]
+    const years = displayData.map(d => d.year)
     return [Math.min(...years), Math.max(...years)]
-  }, [chartData])
+  }, [displayData])
 
   const yRange = useMemo(() => {
     let min = Number.POSITIVE_INFINITY
     let max = Number.NEGATIVE_INFINITY
-    for (const row of chartData as any[]) {
+    for (const row of displayData as any[]) {
       for (const [k, v] of Object.entries(row)) {
         if (k === "year" || k === "type") continue
         if (typeof v !== "number" || !Number.isFinite(v)) continue
@@ -169,7 +239,7 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
     // Avoid negative lower bounds when the whole series is non-negative
     if (min >= 0) min = Math.max(0, min)
     return [min, max] as [number, number]
-  }, [chartData])
+  }, [displayData])
   
   // Zoom handlers
   const handleZoomIn = useCallback(() => {
@@ -246,13 +316,13 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
   
   const handleBrushChange = useCallback((data: { startIndex?: number; endIndex?: number }) => {
     if (data.startIndex != null && data.endIndex != null) {
-      const startYear = chartData[data.startIndex]?.year
-      const endYear = chartData[data.endIndex]?.year
+      const startYear = displayData[data.startIndex]?.year
+      const endYear = displayData[data.endIndex]?.year
       if (startYear != null && endYear != null) {
         setXDomain([startYear, endYear])
       }
     }
-  }, [chartData])
+  }, [displayData])
 
   // 3) Custom tooltip (deduces region name from key "region{idx}_hist|_fcst")
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -267,6 +337,11 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
           <Badge variant={rowType === "historical" ? "secondary" : "outline"} className="text-[10px] px-1.5 py-0">
             {rowType === "historical" ? "Historical" : "Forecast"}
           </Badge>
+          {isIndexed && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-indigo-600 border-indigo-300">
+              Indexed
+            </Badge>
+          )}
         </div>
         <div className="space-y-0.5">
           {payload
@@ -284,7 +359,7 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
                     <span className="text-xs text-gray-600 dark:text-gray-400">{regionName}</span>
                   </div>
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                    {formatValue(entry.value, unit)}
+                    {isIndexed ? entry.value.toFixed(1) : formatValue(entry.value, unit)}
                   </span>
                 </div>
               )
@@ -327,25 +402,79 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
     )
   }
 
-  const yearMin = Math.min(...chartData.map((d: any) => d.year))
-  const yearMax = Math.max(...chartData.map((d: any) => d.year))
+  const yearMin = Math.min(...displayData.map((d: any) => d.year))
+  const yearMax = Math.max(...displayData.map((d: any) => d.year))
 
   return (
     <Card className={className}>
       <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <span>{title}</span>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <CardTitle>{title}</CardTitle>
+            {description && <CardDescription>{description}</CardDescription>}
+          </div>
+          <div className="flex items-center gap-3">
+            {/* View mode toggle - segmented control style */}
+            <div className="flex items-center rounded-lg border bg-muted/30 p-0.5">
+              <button
+                type="button"
+                onClick={() => onIndexedChange?.(false)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  !isIndexed 
+                    ? "bg-white dark:bg-gray-800 shadow-sm text-gray-900 dark:text-gray-100" 
+                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                }`}
+              >
+                Absolute
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isIndexed && availableBaseYears.length) {
+                    onBaseYearChange?.(availableBaseYears[0])
+                  }
+                  onIndexedChange?.(true)
+                }}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  isIndexed 
+                    ? "bg-white dark:bg-gray-800 shadow-sm text-gray-900 dark:text-gray-100" 
+                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                }`}
+              >
+                Indexed
+              </button>
+            </div>
+            
+            {/* Base year selector (only visible when indexed) */}
+            {isIndexed && (
+              <Select
+                value={baseYear ? String(baseYear) : undefined}
+                onValueChange={(v) => onBaseYearChange?.(Number(v))}
+              >
+                <SelectTrigger className="w-[110px] h-8 text-xs">
+                  <SelectValue placeholder="Base year" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableBaseYears.map(year => (
+                    <SelectItem key={year} value={String(year)} className="text-xs">
+                      {year} = 100
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            
           <Badge variant="outline" className="text-xs">
             {yearMin}-{yearMax}
           </Badge>
-        </CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
+          </div>
+        </div>
       </CardHeader>
 
       <CardContent>
         <div className="h-[420px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 30, right: 30, left: 20, bottom: 5 }}>
+            <LineChart data={displayData} margin={{ top: 30, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid
                 stroke={gridStroke}
                 strokeOpacity={0.4}
@@ -383,9 +512,26 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
                 tick={{ fontSize: 12, fill: "#6b7280" }}
                 tickLine={{ stroke: "#e5e7eb" }}
                 axisLine={{ stroke: "#e5e7eb" }}
-                tickFormatter={(v) => formatValue(v, unit)}
+                tickFormatter={(v) => isIndexed ? v.toFixed(0) : formatValue(v, unit)}
+                label={isIndexed ? { 
+                  value: `Index (${baseYear}=100)`, 
+                  angle: -90, 
+                  position: "insideLeft",
+                  style: { fontSize: 11, fill: "#6b7280" },
+                  offset: 10
+                } : undefined}
               />
               <Tooltip content={<CustomTooltip />} />
+              
+              {/* Reference line at 100 when indexed */}
+              {isIndexed && (
+                <ReferenceLine
+                  y={100}
+                  stroke="#6366f1"
+                  strokeDasharray="4 4"
+                  strokeOpacity={0.6}
+                />
+              )}
 
               {/* Forecast divider on LAST historical year */}
               {lastHistoricalYear != null && (
@@ -472,8 +618,8 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
                 stroke={isDarkMode ? "#4b5563" : "#9ca3af"}
                 fill={isDarkMode ? "#1f2937" : "#f3f4f6"}
                 onChange={handleBrushChange}
-                startIndex={xDomain ? chartData.findIndex(d => d.year >= xDomain[0]) : undefined}
-                endIndex={xDomain ? chartData.findIndex(d => d.year >= xDomain[1]) : undefined}
+                startIndex={xDomain ? displayData.findIndex(d => d.year >= xDomain[0]) : undefined}
+                endIndex={xDomain ? displayData.findIndex(d => d.year >= xDomain[1]) : undefined}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -608,6 +754,10 @@ function CompareContent() {
   const [comparisonData, setComparisonData] = useState<ComparisonData>({})
   const [isLoading, setIsLoading] = useState(false)
   const [barChartYear, setBarChartYear] = useState<number>(year)
+  
+  // Indexed chart state (lifted to page level for exports)
+  const [isIndexed, setIsIndexed] = useState(false)
+  const [indexBaseYear, setIndexBaseYear] = useState<number | null>(null)
 
   // Do we already have data for all regions for the current metric+scenario?
   const hasAllData = useMemo(
@@ -803,6 +953,56 @@ function CompareContent() {
         Value: typeof (r as any).Value === "number" ? Math.round((r as any).Value) : (r as any).Value,
       })),
     [chartExportRows],
+  )
+
+  // Compute indexed export rows (rebase to 100 at selected base year)
+  const indexedExportRows = useMemo(() => {
+    if (!isIndexed || indexBaseYear === null || !chartRegions.length) return []
+    
+    // Find base values for each region at the base year
+    const baseValues: Record<string, number> = {}
+    for (const r of chartRegions) {
+      const basePoint = (r.data ?? []).find((pt: any) => (pt.year ?? pt.period) === indexBaseYear)
+      if (basePoint?.value != null && basePoint.value !== 0) {
+        baseValues[r.regionCode] = basePoint.value
+      }
+    }
+    
+    return chartRegions.flatMap((r) =>
+      (r.data ?? []).map((pt: any) => {
+        const rawValue = pt?.value ?? pt?.val ?? pt?.y
+        const base = baseValues[r.regionCode]
+        const indexedValue = base && rawValue != null ? (rawValue / base) * 100 : null
+        return {
+          Metric: `${selectedMetric?.title || metric} (Indexed)`,
+          Region: r.regionName,
+          "Region Code": r.regionCode,
+          Year: pt?.year ?? pt?.period,
+          Scenario: scenarioLabel(scenario),
+          Value: indexedValue != null ? Math.round(indexedValue * 10) / 10 : null,
+          Units: `Index (${indexBaseYear}=100)`,
+          "Data Type": dataTypeLabel(pt?.type ?? pt?.data_type),
+          Source: sourceLabel({ dataType: pt?.type ?? pt?.data_type, dataQuality: pt?.data_quality }),
+        }
+      }),
+    )
+  }, [isIndexed, indexBaseYear, chartRegions, metric, scenario, selectedMetric?.title])
+
+  // Combined export rows: absolute + indexed (when indexed mode is on)
+  const combinedExportRows = useMemo(() => {
+    if (isIndexed && indexedExportRows.length > 0) {
+      return [...chartExportRows, ...indexedExportRows]
+    }
+    return chartExportRows
+  }, [isIndexed, chartExportRows, indexedExportRows])
+
+  const combinedExportCsvRows = useMemo(
+    () =>
+      combinedExportRows.map((r) => ({
+        ...r,
+        Value: typeof (r as any).Value === "number" ? Math.round((r as any).Value * 10) / 10 : (r as any).Value,
+      })),
+    [combinedExportRows],
   )
 
   // -------- Bar Chart Data --------
@@ -1020,9 +1220,9 @@ function CompareContent() {
           {/* Chart - Full width now that Copilot is hidden */}
             <ErrorBoundaryWrapper name="comparison chart">
                 <ExportableChartCard
-                  rows={chartExportRows}
-                  csvRows={chartExportCsvRows}
-                  filenameBase={`regioniq_${metric}_comparison_${scenario}`}
+                  rows={combinedExportRows}
+                  csvRows={combinedExportCsvRows}
+                  filenameBase={`regioniq_${metric}_comparison_${scenario}${isIndexed ? "_indexed" : ""}`}
                   isLoading={!hasAllData && isLoading}
                   serverXlsxRequest={{
                     metricId: metric,
@@ -1037,6 +1237,10 @@ function CompareContent() {
                     unit={selectedMetric?.unit || ""}
                     metricId={metric}
                     isLoading={!hasAllData && isLoading}
+                    isIndexed={isIndexed}
+                    onIndexedChange={setIsIndexed}
+                    baseYear={indexBaseYear}
+                    onBaseYearChange={setIndexBaseYear}
                   />
                 </ExportableChartCard>
             </ErrorBoundaryWrapper>
@@ -1177,8 +1381,8 @@ function CompareContent() {
                   )}
                 </CardContent>
               </Card>
-            </ExportableChartCard>
-          </ErrorBoundaryWrapper>
+                </ExportableChartCard>
+            </ErrorBoundaryWrapper>
 
           {/* Compare Copilot - HIDDEN FOR V1: Component exists but is not rendered
               To re-enable, uncomment the section below:
