@@ -156,6 +156,7 @@ def observations_query(req: QueryRequest, request: Request, user=Depends(get_cur
         )
     token = user["token"]
     tables = {
+        "UK": "macro_latest_all",
         "ITL1": "itl1_latest_all",
         "ITL2": "itl2_latest_all",
         "ITL3": "itl3_latest_all",
@@ -166,9 +167,15 @@ def observations_query(req: QueryRequest, request: Request, user=Depends(get_cur
         # Accept UI ITL1 codes (UK*) by translating to DB ITL1 codes (E120*/S920*/W920*/N920*).
         if code.startswith("UK") and len(code) == 3 and code in UK_TO_E_CODE:
             return UK_TO_E_CODE[code]
+        # UK national level uses K02000001 in database
+        if code == "UK":
+            return "K02000001"
         return code
 
     def infer_level(db_code: str) -> str:
+        # UK national level
+        if db_code == "K02000001":
+            return "UK"
         if db_code.startswith(("E120", "S920", "W920", "N920")):
             return "ITL1"
         if db_code.startswith("TL"):
@@ -176,7 +183,7 @@ def observations_query(req: QueryRequest, request: Request, user=Depends(get_cur
         return "LAD"
 
     # Group region codes by level/table
-    by_level: dict[str, list[str]] = {"ITL1": [], "ITL2": [], "ITL3": [], "LAD": []}
+    by_level: dict[str, list[str]] = {"UK": [], "ITL1": [], "ITL2": [], "ITL3": [], "LAD": []}
     for rc in region_codes:
         db = to_db_code(rc)
         lvl = infer_level(db)
@@ -197,7 +204,10 @@ def observations_query(req: QueryRequest, request: Request, user=Depends(get_cur
 
         # Chunk regions to keep URL manageable
         region_chunks = [codes[i : i + 100] for i in range(0, len(codes), 100)]
-        metric_chunks = [metric_ids[i : i + 50] for i in range(0, len(metric_ids), 50)]
+        
+        # For UK level, metric IDs need uk_ prefix (e.g., uk_population_total)
+        query_metric_ids = [f"uk_{m}" for m in metric_ids] if lvl == "UK" else metric_ids
+        metric_chunks = [query_metric_ids[i : i + 50] for i in range(0, len(query_metric_ids), 50)]
 
         for rchunk in region_chunks:
             r_in = ",".join(rchunk)
@@ -233,10 +243,15 @@ def observations_query(req: QueryRequest, request: Request, user=Depends(get_cur
                     for row in rows:
                         for scenario in scenario_sel:
                             measure = _choose_measure_for_scenario(scenario, explicit_measure)
+                            # For UK level: strip uk_ prefix from metric_id, return "UK" as region_code
+                            raw_metric_id = row.get("metric_id") or ""
+                            display_metric_id = raw_metric_id[3:] if lvl == "UK" and raw_metric_id.startswith("uk_") else raw_metric_id
+                            raw_region_code = row.get("region_code") or ""
+                            display_region_code = "UK" if raw_region_code == "K02000001" else E_CODE_TO_UK.get(raw_region_code, raw_region_code)
                             records.append(
                                 ObservationRecord(
-                                    metric_id=row.get("metric_id"),
-                                    region_code=E_CODE_TO_UK.get(row.get("region_code"), row.get("region_code")),
+                                    metric_id=display_metric_id,
+                                    region_code=display_region_code,
                                     geo_schema="UK_ITL_2025",
                                     level=lvl,
                                     time_period=row.get("period"),

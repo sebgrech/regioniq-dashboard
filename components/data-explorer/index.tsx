@@ -182,6 +182,43 @@ export function DataExplorer({
     throw new Error(`Non-JSON response (HTTP ${res.status}). ${snippet ? `Body: ${snippet}` : ""}`.trim())
   }
 
+  // Helper to query UK data directly from Supabase
+  const queryUkData = useCallback(async () => {
+    const ukMetricIds = metrics.map(m => `uk_${m}`)
+    const allData: any[] = []
+    
+    // Calculate year range (same logic as API: if 2 years, treat as from...to range)
+    const yearMin = Math.min(...selectedYears)
+    const yearMax = Math.max(...selectedYears)
+    
+    for (const metricId of ukMetricIds) {
+      const { data, error } = await supabase
+        .from("macro_latest_all")
+        .select("metric_id, region_code, period, value, data_type, ci_lower, ci_upper, unit")
+        .eq("metric_id", metricId)
+        .eq("region_code", "K02000001")
+        .gte("period", yearMin)
+        .lte("period", yearMax)
+      
+      if (error) throw new Error(error.message)
+      if (data) {
+        // Transform to match API response format
+        const transformed = data.map(row => ({
+          metric_id: row.metric_id.replace(/^uk_/, ""), // Remove uk_ prefix for display
+          region_code: "UK",
+          time_period: row.period,
+          value: row.value,
+          data_type: row.data_type,
+          scenario: "baseline", // UK data is baseline only
+          unit: row.unit ?? METRICS.find(m => `uk_${m.id}` === row.metric_id)?.unit ?? "",
+        }))
+        allData.push(...transformed)
+      }
+    }
+    
+    return { data: allData }
+  }, [metrics, selectedYears])
+
   const run = useCallback(async () => {
     if (metrics.length === 0 || regions.length === 0 || selectedYears.length === 0) {
       setResult(null)
@@ -191,19 +228,50 @@ export function DataExplorer({
     setLoading(true)
     setError(null)
     try {
-      const token = await getAccessToken()
-      if (!token) throw new Error("Not authenticated")
-      const res = await fetchWithTimeout(
-        dataUrl,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-          body: JSON.stringify(requestBody),
-        },
-        20_000
-      )
-      const json = await fetchJsonOrThrow(res)
-      setResult(json)
+      // Check if UK is selected - query Supabase directly for UK data
+      const hasUk = regions.includes("UK")
+      const nonUkRegions = regions.filter(r => r !== "UK")
+      
+      let allResults: any[] = []
+      
+      // Query UK data directly from Supabase
+      if (hasUk) {
+        const ukResult = await queryUkData()
+        if (ukResult.data) {
+          allResults.push(...ukResult.data)
+        }
+      }
+      
+      // Query non-UK regions via Data API
+      if (nonUkRegions.length > 0) {
+        const token = await getAccessToken()
+        if (!token) throw new Error("Not authenticated")
+        
+        const nonUkRequestBody = {
+          ...requestBody,
+          query: requestBody.query.map(q => 
+            q.code === "region" 
+              ? { ...q, selection: { filter: "item", values: nonUkRegions } }
+              : q
+          )
+        }
+        
+        const res = await fetchWithTimeout(
+          dataUrl,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+            body: JSON.stringify(nonUkRequestBody),
+          },
+          20_000
+        )
+        const json = await fetchJsonOrThrow(res)
+        if (json?.data) {
+          allResults.push(...json.data)
+        }
+      }
+      
+      setResult({ data: allResults })
     } catch (e: any) {
       if (e?.name === "AbortError") {
         setError("Request timed out (20s). Try selecting fewer regions/years.")
@@ -222,7 +290,7 @@ export function DataExplorer({
       setLoading(false)
       setInitialLoad(false)
     }
-  }, [metrics, regions, selectedYears, requestBody])
+  }, [metrics, regions, selectedYears, requestBody, queryUkData])
 
   // Auto-query with debounce
   useEffect(() => {

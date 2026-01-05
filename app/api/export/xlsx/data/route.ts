@@ -24,9 +24,10 @@ const BodySchema = z.object({
   selectedYears: z.array(z.number()).optional(),
 })
 
-type RegionLevel = "ITL1" | "ITL2" | "ITL3" | "LAD"
+type RegionLevel = "UK" | "ITL1" | "ITL2" | "ITL3" | "LAD"
 
 const TABLE_BY_LEVEL: Record<RegionLevel, string> = {
+  UK: "macro_latest_all",
   ITL1: "itl1_latest_all",
   ITL2: "itl2_latest_all",
   ITL3: "itl3_latest_all",
@@ -211,7 +212,7 @@ export async function POST(req: NextRequest) {
       const metricIdsCapped = metricValues.slice(0, 50)
       const regionCodesCapped = regionValues.slice(0, 500)
 
-      const levels = (selectionItems(getDim(query, "level")) as RegionLevel[] | null) ?? (["ITL1", "ITL2", "ITL3", "LAD"] as RegionLevel[])
+      const levels = (selectionItems(getDim(query, "level")) as RegionLevel[] | null) ?? (["UK", "ITL1", "ITL2", "ITL3", "LAD"] as RegionLevel[])
       const byLevel = new Map<RegionLevel, string[]>()
       for (const code of regionCodesCapped) {
         const r = REGIONS.find((x) => x.code === code || x.dbCode === code)
@@ -229,13 +230,18 @@ export async function POST(req: NextRequest) {
         if (!table) continue
         if (!dbCodes.length) continue
 
+        // For UK, use uk_ prefixed metric IDs
+        const queryMetricIds = lvl === "UK" 
+          ? metricIdsCapped.map(m => `uk_${m}`)
+          : metricIdsCapped
+
         const q = supabase
           .from(table)
           .select(
             "region_code, region_name, region_level, metric_id, period, value, ci_lower, ci_upper, unit, freq, data_type, vintage, forecast_run_date, forecast_version, is_calculated"
           )
           .in("region_code", dbCodes)
-          .in("metric_id", metricIdsCapped)
+          .in("metric_id", queryMetricIds)
           .order("metric_id", { ascending: true })
           .order("region_code", { ascending: true })
           .order("period", { ascending: true })
@@ -256,8 +262,12 @@ export async function POST(req: NextRequest) {
         for (const row of data ?? []) {
           for (const scenario of (scenarioValues.length ? scenarioValues : (["baseline"] as Scenario[]))) {
             const measure = chooseMeasureForScenario(scenario)
+            // For UK, strip uk_ prefix from metric_id for display
+            const displayMetricId = lvl === "UK" && row.metric_id?.startsWith("uk_")
+              ? row.metric_id.replace(/^uk_/, "")
+              : row.metric_id
             records.push({
-              metric_id: row.metric_id,
+              metric_id: displayMetricId,
               region_code: REGIONS.find((x) => x.dbCode === row.region_code)?.code ?? row.region_code,
               region_db: row.region_code,
               level: lvl,
@@ -467,6 +477,123 @@ export async function POST(req: NextRequest) {
     data.getRow(1).font = { bold: true }
     data.getColumn("Year").numFmt = "0"
     data.getColumn("Value").numFmt = "#,##0"
+
+    // ---------------- Time Series (pivoted view) ----------------
+    // Create a pivot table: rows = Metric + Region + Scenario, columns = Years
+    const tsYears = Array.from(new Set(canonicalRows.map((r) => r.Year)))
+      .filter((y): y is number => typeof y === "number")
+      .sort((a, b) => a - b)
+    
+    if (tsYears.length > 0) {
+      const ts = wb.addWorksheet("Time Series", {
+        views: [{ state: "frozen", xSplit: 4, ySplit: 1, topLeftCell: "E2" }],
+      })
+
+      // Build header: Metric | Region | Scenario | Units | Year1 | Year2 | ...
+      const tsHeader = ["Metric", "Region", "Scenario", "Units", ...tsYears.map(String)]
+      ts.columns = tsHeader.map((h, idx) => ({
+        header: h,
+        key: h,
+        width: idx === 0 ? 28 : idx === 1 ? 26 : idx === 2 ? 11 : idx === 3 ? 14 : 11,
+      }))
+
+      // Group data by Metric + Region + Scenario, tracking both values and data types
+      const pivotMap = new Map<string, Record<number, number | null>>()
+      const dataTypeMap = new Map<string, Record<number, string>>()  // Track data type per cell
+      const rowMeta = new Map<string, { metric: string; region: string; regionCode: string; scenario: string; units: string }>()
+      
+      for (const row of canonicalRows) {
+        const key = `${row.Metric}|${row["Region Code"]}|${row.Scenario}`
+        if (!pivotMap.has(key)) {
+          pivotMap.set(key, {})
+          dataTypeMap.set(key, {})
+          rowMeta.set(key, { 
+            metric: row.Metric, 
+            region: row.Region, 
+            regionCode: row["Region Code"],
+            scenario: row.Scenario,
+            units: row.Units || ""
+          })
+        }
+        const yearData = pivotMap.get(key)!
+        const dtData = dataTypeMap.get(key)!
+        if (typeof row.Year === "number") {
+          yearData[row.Year] = row.Value
+          dtData[row.Year] = row["Data Type"] || ""
+        }
+      }
+
+      // Sort: Metric → Region → Scenario (Baseline, Upside, Downside)
+      const scenarioOrder: Record<string, number> = { Baseline: 0, Upside: 1, Downside: 2 }
+      const sortedKeys = Array.from(pivotMap.keys()).sort((a, b) => {
+        const [mA, rA, sA] = a.split("|")
+        const [mB, rB, sB] = b.split("|")
+        if (mA !== mB) return mA.localeCompare(mB)
+        if (rA !== rB) return rA.localeCompare(rB)
+        return (scenarioOrder[sA] ?? 99) - (scenarioOrder[sB] ?? 99)
+      })
+
+      // Track which cells are forecasts for styling (row index -> year -> isForecast)
+      const forecastCells = new Map<number, Set<number>>()
+      let rowIndex = 2  // Start from row 2 (after header)
+
+      // Add rows to Time Series sheet
+      for (const key of sortedKeys) {
+        const meta = rowMeta.get(key)!
+        const yearValues = pivotMap.get(key)!
+        const yearDataTypes = dataTypeMap.get(key)!
+        const rowData: Record<string, any> = {
+          Metric: meta.metric,
+          Region: meta.region,
+          Scenario: meta.scenario,
+          Units: meta.units,
+        }
+        
+        const forecastYearsForRow = new Set<number>()
+        for (const yr of tsYears) {
+          rowData[String(yr)] = yearValues[yr] ?? null
+          // Check actual data type for this specific cell
+          const dt = yearDataTypes[yr] || ""
+          if (dt.toLowerCase() === "forecast") {
+            forecastYearsForRow.add(yr)
+          }
+        }
+        forecastCells.set(rowIndex, forecastYearsForRow)
+        ts.addRow(rowData)
+        rowIndex++
+      }
+
+      // Style header row
+      ts.getRow(1).font = { bold: true }
+      ts.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } }
+      
+      // Format year columns as numbers (start from column 5 after Metric, Region, Scenario, Units)
+      for (let c = 5; c <= ts.columnCount; c++) {
+        ts.getColumn(c).numFmt = "#,##0"
+      }
+
+      // Apply forecast styling per cell based on actual data type
+      const forecastFont = { color: { argb: "FF6366F1" } }
+      
+      for (const [rowIdx, forecastYears] of forecastCells.entries()) {
+        for (let c = 5; c <= ts.columnCount; c++) {
+          const headerVal = String(ts.getRow(1).getCell(c).value ?? "")
+          const yr = Number(headerVal)
+          if (forecastYears.has(yr)) {
+            ts.getRow(rowIdx).getCell(c).font = forecastFont
+          }
+        }
+      }
+
+      // Add key at the bottom
+      const keyStartRow = ts.rowCount + 3
+      ts.getCell(`A${keyStartRow}`).value = "Key"
+      ts.getCell(`A${keyStartRow}`).font = { bold: true, size: 10 }
+      ts.getCell(`A${keyStartRow + 1}`).value = "Historical (ONS)"
+      ts.getCell(`A${keyStartRow + 1}`).font = { size: 10, color: { argb: "FF374151" } }
+      ts.getCell(`A${keyStartRow + 2}`).value = "Forecast (RegionIQ)"
+      ts.getCell(`A${keyStartRow + 2}`).font = { size: 10, ...forecastFont }
+    }
 
     const out = await wb.xlsx.writeBuffer()
     const buffer = Buffer.isBuffer(out) ? out : Buffer.from(out as any)

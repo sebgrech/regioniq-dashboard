@@ -481,6 +481,7 @@ function CatchmentContent() {
               result={geofenceState.result}
               isCalculating={geofenceState.isCalculating}
               error={geofenceState.error}
+              geofence={geofenceState.geofence}
               compact
             />
 

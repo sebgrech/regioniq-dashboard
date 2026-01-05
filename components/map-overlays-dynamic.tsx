@@ -19,6 +19,7 @@ import {
   getMapColorForValue,
   type MapType,
   DIVERGING_GROWTH_METRICS,
+  isLowerBetterMetric,
 } from "@/lib/map-color-scale"
 
 // Supabase client (env must be set)
@@ -1111,15 +1112,19 @@ export function MapOverlaysDynamic({
     const effectiveMin = isFinite(clampMin as any) ? clampMin as number : minVal
     const effectiveMax = isFinite(clampMax as any) ? clampMax as number : maxVal
     
+    // Check if this metric should be inverted (lower is better, e.g., unemployment)
+    const shouldInvert = isLowerBetterMetric(metric)
+    
     // Pass percentiles for always-positive growth metrics to improve proportionality
-    const expr = buildMapboxColorRamp(mapType, [effectiveMin, effectiveMax], midpoint, percentiles)
+    const expr = buildMapboxColorRamp(mapType, [effectiveMin, effectiveMax], midpoint, percentiles, shouldInvert)
     console.log(`🎨 [Choropleth] Map color ramp built:`, { 
       mapType, 
       minVal: effectiveMin, 
       maxVal: effectiveMax, 
       metric,
       midpoint,
-      usesPercentiles: percentiles !== null
+      usesPercentiles: percentiles !== null,
+      inverted: shouldInvert
     })
     return expr
   }, [minVal, maxVal, clampMin, clampMax, mapMode, metric, percentiles])
@@ -1353,11 +1358,13 @@ export function MapOverlaysDynamic({
                     // Use canonical map color system for tooltip indicator
                     const mapType = getMapType(mapMode, metric)
                     const midpoint = mapType === "growth" ? 0 : undefined
+                    const shouldInvert = isLowerBetterMetric(metric)
                     indicatorColor = getMapColorForValue({
                       mapType,
                       value: hoverInfo.value,
                       domain: [minVal, maxVal],
                       midpoint,
+                      invert: shouldInvert,
                     })
                   }
                   return (

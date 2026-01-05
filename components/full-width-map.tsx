@@ -9,7 +9,7 @@ import { MapScaffold } from "@/components/map-scaffold"
 import { TrendingUp, TrendingDown, MapPin } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { PoliticalSummary } from "@/components/political-summary"
-import { getGrowthMapType, getMapColorForValue, type MapType, DIVERGING_GROWTH_METRICS } from "@/lib/map-color-scale"
+import { getGrowthMapType, getMapColorForValue, type MapType, DIVERGING_GROWTH_METRICS, isLowerBetterMetric } from "@/lib/map-color-scale"
 
 import type { RegionMetadata, RegionLevel } from "@/components/region-search"
 
@@ -113,29 +113,31 @@ export function FullWidthMap({
   
   // Generate legend colors using canonical map color system
   // This ensures legend matches the map exactly
+  const shouldInvert = isLowerBetterMetric(mapMetric)
   const rampColors = useMemo(() => {
     if (mapType === "level") {
-      // Sequential blue scale - sample at key points
+      // Sequential scale - sample at key points
+      // For inverted metrics (like unemployment), low = good (indigo), high = bad (orange)
       return [
-        getMapColorForValue({ mapType: "level", value: 0, domain: [0, 100] }), // positive-light
-        getMapColorForValue({ mapType: "level", value: 25, domain: [0, 100] }), // positive-mid
-        getMapColorForValue({ mapType: "level", value: 50, domain: [0, 100] }), // positive
-        getMapColorForValue({ mapType: "level", value: 75, domain: [0, 100] }), // positive-dark
-        getMapColorForValue({ mapType: "level", value: 100, domain: [0, 100] }), // positive-dark
+        getMapColorForValue({ mapType: "level", value: 0, domain: [0, 100], invert: shouldInvert }),
+        getMapColorForValue({ mapType: "level", value: 25, domain: [0, 100], invert: shouldInvert }),
+        getMapColorForValue({ mapType: "level", value: 50, domain: [0, 100], invert: shouldInvert }),
+        getMapColorForValue({ mapType: "level", value: 75, domain: [0, 100], invert: shouldInvert }),
+        getMapColorForValue({ mapType: "level", value: 100, domain: [0, 100], invert: shouldInvert }),
       ]
     } else {
       // Diverging scale - sample across negative → neutral → positive
       return [
-        getMapColorForValue({ mapType: "growth", value: -50, domain: [-50, 50], midpoint: 0 }), // negative-dark
-        getMapColorForValue({ mapType: "growth", value: -25, domain: [-50, 50], midpoint: 0 }), // negative-mid
-        getMapColorForValue({ mapType: "growth", value: -10, domain: [-50, 50], midpoint: 0 }), // negative-light
-        getMapColorForValue({ mapType: "growth", value: 0, domain: [-50, 50], midpoint: 0 }), // neutral
-        getMapColorForValue({ mapType: "growth", value: 10, domain: [-50, 50], midpoint: 0 }), // positive-light
-        getMapColorForValue({ mapType: "growth", value: 25, domain: [-50, 50], midpoint: 0 }), // positive-mid
-        getMapColorForValue({ mapType: "growth", value: 50, domain: [-50, 50], midpoint: 0 }), // positive-dark
+        getMapColorForValue({ mapType: "growth", value: -50, domain: [-50, 50], midpoint: 0, invert: shouldInvert }),
+        getMapColorForValue({ mapType: "growth", value: -25, domain: [-50, 50], midpoint: 0, invert: shouldInvert }),
+        getMapColorForValue({ mapType: "growth", value: -10, domain: [-50, 50], midpoint: 0, invert: shouldInvert }),
+        getMapColorForValue({ mapType: "growth", value: 0, domain: [-50, 50], midpoint: 0, invert: shouldInvert }),
+        getMapColorForValue({ mapType: "growth", value: 10, domain: [-50, 50], midpoint: 0, invert: shouldInvert }),
+        getMapColorForValue({ mapType: "growth", value: 25, domain: [-50, 50], midpoint: 0, invert: shouldInvert }),
+        getMapColorForValue({ mapType: "growth", value: 50, domain: [-50, 50], midpoint: 0, invert: shouldInvert }),
       ]
     }
-  }, [mapType])
+  }, [mapType, shouldInvert])
   const levels: RegionLevel[] = ["ITL1", "ITL2", "ITL3", "LAD"]
 
   // Fetch ranking data (both value and growth)
@@ -637,6 +639,12 @@ export function FullWidthMap({
                       </>
                     )
                   })()
+                ) : shouldInvert ? (
+                  // Inverted metrics: lower value = better (indigo), higher = worse (orange)
+                  <>
+                    <span>Better</span>
+                    <span>Worse</span>
+                  </>
                 ) : (
                   <>
                     <span>Lower</span>

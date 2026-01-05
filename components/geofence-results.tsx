@@ -18,6 +18,8 @@ import {
   Info,
   Download,
   Loader2,
+  FileText,
+  FileSpreadsheet,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -34,10 +36,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import type { GeofenceResult, LADContribution } from "@/lib/geofence"
+import type { GeofenceResult, LADContribution, Geofence } from "@/lib/geofence"
 import { formatGeofenceResult } from "@/lib/geofence"
+import { exportCatchmentCSV, exportCatchmentXLSX } from "@/lib/geofence/export"
 
 interface GeofenceResultsProps {
   /** The geofence calculation result */
@@ -48,8 +57,8 @@ interface GeofenceResultsProps {
   error?: string | null
   /** Custom class name */
   className?: string
-  /** Callback to export results */
-  onExport?: () => void
+  /** The geofence used (for export metadata) */
+  geofence?: Geofence | null
   /** Compact mode (less padding, smaller text) */
   compact?: boolean
 }
@@ -175,10 +184,28 @@ export function GeofenceResults({
   isCalculating = false,
   error,
   className,
-  onExport,
+  geofence,
   compact = false,
 }: GeofenceResultsProps) {
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+
+  const handleExportCSV = () => {
+    if (!result) return
+    exportCatchmentCSV({ result, geofence })
+  }
+
+  const handleExportXLSX = async () => {
+    if (!result) return
+    setIsExporting(true)
+    try {
+      await exportCatchmentXLSX({ result, geofence })
+    } catch (err) {
+      console.error("Export failed:", err)
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   // Loading state
   if (isCalculating) {
@@ -246,21 +273,42 @@ export function GeofenceResults({
 
   return (
     <Card className={className}>
-      <CardHeader className={cn("pb-2", compact ? "p-4" : undefined)}>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <MapPin className="h-5 w-5 text-primary" />
-            Catchment Analysis
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">
+      <CardHeader className={cn("py-2 px-4", compact ? "py-2 px-4" : undefined)}>
+        <div className="flex flex-col gap-1.5">
+          {/* Top row: Title */}
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-xl font-semibold">
+              <MapPin className="h-5 w-5 text-primary" />
+              Catchment Analysis
+            </CardTitle>
+          </div>
+          {/* Bottom row: Badge + Export */}
+          <div className="flex items-center justify-between gap-2">
+            <Badge variant="secondary" className="shrink-0 text-xs">
               {result.year} • {result.scenario}
             </Badge>
-            {onExport && (
-              <Button variant="ghost" size="sm" onClick={onExport}>
-                <Download className="h-4 w-4" />
-              </Button>
-            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={isExporting} className="shrink-0 h-7 px-2">
+                  {isExporting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  <span className="ml-1.5 text-xs">Export</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleExportCSV}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Export CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportXLSX}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Export Excel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </CardHeader>

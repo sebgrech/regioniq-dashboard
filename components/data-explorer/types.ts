@@ -2,7 +2,7 @@ import type { Scenario } from "@/lib/metrics.config"
 
 export type RegionIndexEntry = {
   name: string
-  level: "ITL1" | "ITL2" | "ITL3" | "LAD"
+  level: "UK" | "ITL1" | "ITL2" | "ITL3" | "LAD"
   bbox?: [number, number, number, number]
 }
 
@@ -36,6 +36,7 @@ export interface FilterPillProps {
 }
 
 export const LEVEL_LABEL: Record<string, string> = {
+  UK: "United Kingdom",
   ITL1: "ITL1",
   ITL2: "ITL2",
   ITL3: "ITL3",

@@ -413,7 +413,7 @@ const ChartTimeseriesCompare = ({ title, description, regions, unit, metricId, i
 
               {/* Render each region as 2 lines: solid historical + dashed forecast (legend only on hist) */}
               {regions.map((region: any, index: number) => {
-                const color = colors[index % colors.length]
+                const color = region.color || colors[index % colors.length]
                 const kHist = `region${index}_hist`
                 const kFcst = `region${index}_fcst`
                 const isVisible = visible[index]
@@ -742,20 +742,41 @@ function CompareContent() {
     [handleRegionsChange, selectedRegions],
   )
 
+  // Stable color palette for regions (same as line chart and bar chart)
+  const regionColors = useMemo(() => [
+    "#6366f1", // Indigo
+    "#0ea5e9", // Sky blue
+    "#14b8a6", // Teal
+    "#f97316", // Orange
+    "#ec4899", // Pink
+    "#8b5cf6", // Violet
+    "#06b6d4", // Cyan
+    "#84cc16", // Lime
+  ], [])
+
+  // Map each region to a stable color index (based on selection order)
+  const regionColorMap = useMemo(() => {
+    const map = new Map<string, string>()
+    allDisplayRegions.forEach((regionCode, index) => {
+      map.set(regionCode, regionColors[index % regionColors.length])
+    })
+    return map
+  }, [allDisplayRegions, regionColors])
+
   // Prepare data for the new ChartTimeseriesCompare component
   const chartRegions = useMemo(
     () =>
-      allDisplayRegions.map((regionCode, index) => {
+      allDisplayRegions.map((regionCode) => {
         const region = REGIONS.find((r) => r.code === regionCode)
         const data = comparisonData[regionCode]?.[metric] || []
         return {
           regionCode,
           regionName: region?.name || regionCode,
           data,
-          color: `hsl(var(--chart-${(index % 5) + 1}))`,
+          color: regionColorMap.get(regionCode) || regionColors[0],
         }
       }),
-    [allDisplayRegions, comparisonData, metric],
+    [allDisplayRegions, comparisonData, metric, regionColorMap, regionColors],
   )
 
   const chartExportRows = useMemo(() => {
@@ -785,17 +806,6 @@ function CompareContent() {
   )
 
   // -------- Bar Chart Data --------
-  // Premium SaaS color palette (Linear/Stripe inspired) - matches line chart
-  const barColors = [
-    "#6366f1", // Indigo - primary
-    "#0ea5e9", // Sky blue
-    "#14b8a6", // Teal
-    "#f97316", // Orange
-    "#ec4899", // Pink
-    "#8b5cf6", // Violet
-    "#06b6d4", // Cyan
-    "#84cc16", // Lime
-  ]
 
   // Available years for the slider
   const availableYears = useMemo(() => {
@@ -809,6 +819,19 @@ function CompareContent() {
     return Array.from(years).sort((a, b) => a - b)
   }, [chartRegions])
 
+  // Compute last historical year for bar chart (same logic as line chart)
+  const barLastHistoricalYear = useMemo(() => {
+    const histYears: number[] = []
+    for (const r of chartRegions) {
+      for (const pt of r.data ?? []) {
+        const year = ((pt as any).year ?? (pt as any).period) as number
+        const t = ((pt as any).type ?? (pt as any).data_type) as string | undefined
+        if (year != null && t === "historical") histYears.push(year)
+      }
+    }
+    return histYears.length ? Math.max(...histYears) : null
+  }, [chartRegions])
+
   // Bar chart data for static year comparison
   const barChartData = useMemo(() => {
     return chartRegions
@@ -816,16 +839,26 @@ function CompareContent() {
         const yearData = region.data.find(
           (d: any) => (d.year ?? d.period) === barChartYear
         )
+        
+        // Determine data type properly (same logic as line chart)
+        // Use explicit type if available, otherwise infer from last historical year
+        const explicitType = yearData?.type ?? (yearData as any)?.data_type
+        const inferredType = explicitType 
+          ? explicitType 
+          : (barLastHistoricalYear != null && barChartYear <= barLastHistoricalYear)
+            ? "historical"
+            : "forecast"
+        
         return {
           regionCode: region.regionCode,
           regionName: region.regionName,
           value: yearData?.value ?? null,
-          dataType: yearData?.type ?? (yearData as any)?.data_type ?? "forecast",
+          dataType: inferredType,
         }
       })
       .filter((d) => d.value !== null)
       .sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
-  }, [chartRegions, barChartYear])
+  }, [chartRegions, barChartYear, barLastHistoricalYear])
 
   // Bar chart export rows
   const barChartExportRows = useMemo(() => {
@@ -1098,6 +1131,7 @@ function CompareContent() {
                               if (!active || !payload || !payload.length) return null
                               const entry = payload[0]
                               const dataPoint = barChartData.find(d => d.regionName === label)
+                              const regionColor = dataPoint ? regionColorMap.get(dataPoint.regionCode) : regionColors[0]
                               return (
                                 <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2 min-w-[180px]">
                                   <div className="flex items-center gap-2 mb-1.5">
@@ -1108,7 +1142,7 @@ function CompareContent() {
                                   </div>
                                   <div className="flex items-center justify-between gap-3">
                                     <div className="flex items-center gap-1.5">
-                                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry?.color as string }} />
+                                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: regionColor }} />
                                       <span className="text-xs text-gray-500 dark:text-gray-400">{barChartYear}</span>
                                     </div>
                                     <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -1119,11 +1153,17 @@ function CompareContent() {
                               )
                             }}
                           />
-                          <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                            {barChartData.map((entry, index) => (
+                          <Bar 
+                            dataKey="value" 
+                            radius={[0, 4, 4, 0]}
+                            isAnimationActive={true}
+                            animationDuration={400}
+                            animationEasing="ease-out"
+                          >
+                            {barChartData.map((entry) => (
                               <Cell
                                 key={`cell-${entry.regionCode}`}
-                                fill={barColors[index % barColors.length]}
+                                fill={regionColorMap.get(entry.regionCode) || regionColors[0]}
                               />
                             ))}
                           </Bar>

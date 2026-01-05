@@ -89,10 +89,15 @@ export function RegionPicker({
     const entries = Object.entries(regionIndex)
 
     if (!q) {
-      // Show ITL1 regions when no search
+      // Show UK and ITL1 regions when no search
       return entries
-        .filter(([, v]) => v.level === "ITL1")
-        .sort((a, b) => a[1].name.localeCompare(b[1].name))
+        .filter(([, v]) => v.level === "UK" || v.level === "ITL1")
+        .sort((a, b) => {
+          // UK first, then alphabetical
+          if (a[1].level === "UK") return -1
+          if (b[1].level === "UK") return 1
+          return a[1].name.localeCompare(b[1].name)
+        })
     }
 
     return entries
@@ -132,7 +137,7 @@ export function RegionPicker({
     return groups
   }, [filteredRegions])
 
-  const levelOrder = ["ITL1", "ITL2", "ITL3", "LAD"]
+  const levelOrder = ["UK", "ITL1", "ITL2", "ITL3", "LAD"]
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
