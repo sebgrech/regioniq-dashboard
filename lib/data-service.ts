@@ -701,7 +701,8 @@ export function formatValue(value: number, unit: string, decimals = 0): string {
     if (absValue >= 1e3) {
       return `£${(value / 1e3).toFixed(decimals)}B`
     }
-    return `£${value.toLocaleString()}M`
+    // Round to whole number for clean display (68.208M → £68M)
+    return `£${Math.round(value).toLocaleString()}M`
   }
 
   // For people/jobs
