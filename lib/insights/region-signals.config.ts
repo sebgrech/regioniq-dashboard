@@ -5,7 +5,7 @@
  * Show conclusions, not ratios. Ratios only visible on expand.
  */
 
-export type SignalOutcome = "high" | "low" | "neutral" | "rising" | "falling"
+export type SignalOutcome = "high" | "low" | "neutral" | "rising" | "falling" | "extreme" | "extreme_high" | "extreme_low"
 
 export interface SignalConfig {
   id: string
@@ -22,6 +22,7 @@ export interface SignalConfig {
   
   /** Thresholds for outcome determination */
   thresholds: {
+    extreme?: number  // For extreme outliers (e.g., employment density > 3.0)
     high?: number
     low?: number
     rising?: number
@@ -30,6 +31,7 @@ export interface SignalConfig {
   
   /** IC-safe conclusions shown to users */
   conclusions: {
+    extreme?: string  // For extreme outliers
     high: string
     low: string
     neutral?: string
@@ -71,12 +73,14 @@ export const REGION_SIGNALS: SignalConfig[] = [
       metrics: ["emp_total_jobs", "population_16_64"]
     },
     thresholds: {
-      high: 1.0,  // >1.0 = more jobs than working-age residents
-      low: 0.8    // <0.8 = residential catchment
+      extreme: 3.0, // >3.0 = major employment hub (City of London, Westminster, Canary Wharf)
+      high: 1.0,    // >1.0 = more jobs than working-age residents
+      low: 0.8      // <0.8 = residential catchment
     },
     conclusions: {
-      high: "Employment destination, may support stronger weekday demand for office and services",
-      low: "Residential catchment, workforce likely exports to neighbouring employment centres",
+      extreme: "Major employment destination with extremely high job concentration",
+      high: "Employment destination supporting weekday demand for office and services",
+      low: "Residential catchment with workforce exporting to neighbouring employment centres",
       neutral: "Employment broadly matches the local working-age population"
     },
     detail: "{value} jobs per working-age resident"
@@ -95,13 +99,17 @@ export const REGION_SIGNALS: SignalConfig[] = [
       // Computed as: gdhi_per_head / (gva * 1_000_000 / population)
     },
     thresholds: {
-      high: 0.7,  // >70% = strong resident incomes relative to output
-      low: 0.5    // <50% = mismatch between output and resident purchasing power
+      extreme_high: 1.0,  // >100% = affluent commuter suburb (residents earn more than local output per head)
+      extreme_low: 0.3,   // <30% = major production/output centre (value flows out)
+      high: 0.7,          // >70% = strong resident incomes relative to output
+      low: 0.5            // <50% = mismatch between output and resident purchasing power
     },
     conclusions: {
-      high: "Resident incomes appear strong relative to local output",
-      low: "Resident incomes are low relative to local output, purchasing power may not match headline GVA",
-      neutral: "Resident incomes appear broadly aligned with local output"
+      extreme_high: "Affluent residential area — resident incomes exceed local economic output per head",
+      extreme_low: "Major output centre — economic value flows to non-resident stakeholders",
+      high: "Strong resident incomes relative to local output",
+      low: "Resident incomes are low relative to local output — purchasing power does not match headline GVA",
+      neutral: "Resident incomes broadly aligned with local output"
     },
     detail: "{value}% income-to-output ratio"
   },
@@ -124,11 +132,11 @@ export const REGION_SIGNALS: SignalConfig[] = [
       falling: -0.5
     },
     conclusions: {
-      high: "Limited spare labour capacity, hiring constraints may apply",
-      low: "Slack remains in the working-age population",
-      neutral: "Labour market capacity appears balanced",
-      rising: "Labour supply may be becoming constrained",
-      falling: "Labour capacity appears to be expanding"
+      high: "Limited spare labour capacity with hiring constraints",
+      low: "Slack in the working-age population",
+      neutral: "Labour market capacity is balanced",
+      rising: "Labour supply becoming constrained",
+      falling: "Labour capacity expanding"
     },
     detail: "Employment rate {empRate}%, unemployment {unempRate}%"
   },
@@ -146,13 +154,15 @@ export const REGION_SIGNALS: SignalConfig[] = [
       // Computed as: (gva * 1_000_000) / jobs
     },
     thresholds: {
-      high: 70000,  // >£70k per job = high value-add
-      low: 45000    // <£45k per job = volume-driven
+      extreme: 120000, // >£120k per job = finance/oil & gas/pharma cluster
+      high: 70000,     // >£70k per job = high value-add
+      low: 45000       // <£45k per job = volume-driven
     },
     conclusions: {
-      high: "High value-add economy, growth may be productivity-led",
-      low: "Volume-driven employment base, growth appears labour-led",
-      neutral: "Productivity appears broadly in line with national average"
+      extreme: "Ultra-high productivity economy — finance, energy, or specialist cluster",
+      high: "High value-add economy with productivity-led growth",
+      low: "Volume-driven employment base with labour-led growth",
+      neutral: "Productivity broadly in line with national average"
     },
     detail: "£{value} GVA per job"
   },
@@ -173,9 +183,9 @@ export const REGION_SIGNALS: SignalConfig[] = [
       low: -1.0    // Pop growth > jobs growth by 1pp+
     },
     conclusions: {
-      high: "Employment growth appears to be outpacing population, may indicate commuter inflow",
-      low: "Population growth may be outpacing jobs, residential pressure could be building",
-      neutral: "Growth appears balanced across population and employment"
+      high: "Employment growth outpacing population — commuter inflow indicator",
+      low: "Population growth outpacing jobs — residential pressure building",
+      neutral: "Growth balanced across population and employment"
     },
     detail: "Population {popGrowth}%, Employment {empGrowth}%, GVA {gvaGrowth}%"
   }
@@ -186,8 +196,25 @@ export const REGION_SIGNALS: SignalConfig[] = [
  * 
  * Archetypes are derived from signal combinations.
  * Order matters: first matching archetype wins.
+ * 
+ * IMPORTANT: "extreme" employment density regions (City of London, Westminster, etc.)
+ * should match the Major Employment Hub archetype first, before any other rules.
  */
 export const ARCHETYPE_RULES: ArchetypeRule[] = [
+  // ==========================================================================
+  // EXTREME EMPLOYMENT HUBS (must come first - these override all other rules)
+  // ==========================================================================
+  {
+    id: "major_employment_hub",
+    label: "Major Employment Hub",
+    conclusion: "A primary employment destination with job concentration far exceeding local population",
+    requiredSignals: [
+      { signalId: "employment_density", outcome: "extreme" }
+    ]
+  },
+  // ==========================================================================
+  // STANDARD ARCHETYPES
+  // ==========================================================================
   {
     id: "economic_powerhouse",
     label: "Economic Powerhouse",
@@ -200,7 +227,7 @@ export const ARCHETYPE_RULES: ArchetypeRule[] = [
   {
     id: "production_centre",
     label: "Production Centre",
-    conclusion: "Economic output centre, value may flow elsewhere",
+    conclusion: "Economic output centre with value flowing elsewhere",
     requiredSignals: [
       { signalId: "employment_density", outcome: "high" },
       { signalId: "income_capture", outcome: "low" }
@@ -218,7 +245,7 @@ export const ARCHETYPE_RULES: ArchetypeRule[] = [
   {
     id: "affluent_suburb",
     label: "Affluent Suburb",
-    conclusion: "High-income residential area, workforce likely exports elsewhere",
+    conclusion: "High-income residential area with workforce exporting elsewhere",
     requiredSignals: [
       { signalId: "income_capture", outcome: "high" }
     ],
@@ -229,7 +256,7 @@ export const ARCHETYPE_RULES: ArchetypeRule[] = [
   {
     id: "growth_corridor",
     label: "Growth Corridor",
-    conclusion: "Expansion appears employment-led",
+    conclusion: "Employment-led expansion",
     requiredSignals: [
       { signalId: "growth_composition", outcome: "high" }
     ]
@@ -237,7 +264,7 @@ export const ARCHETYPE_RULES: ArchetypeRule[] = [
   {
     id: "residential_pressure",
     label: "Residential Growth Area",
-    conclusion: "Population may be expanding faster than local employment",
+    conclusion: "Population expanding faster than local employment",
     requiredSignals: [
       { signalId: "growth_composition", outcome: "low" }
     ]
@@ -245,7 +272,7 @@ export const ARCHETYPE_RULES: ArchetypeRule[] = [
   {
     id: "tight_labour_market",
     label: "Tight Labour Market",
-    conclusion: "Limited spare labour capacity may constrain growth",
+    conclusion: "Limited spare labour capacity constraining growth",
     requiredSignals: [
       { signalId: "labour_capacity", outcome: "high" }
     ]
@@ -253,7 +280,7 @@ export const ARCHETYPE_RULES: ArchetypeRule[] = [
   {
     id: "labour_slack",
     label: "Untapped Workforce",
-    conclusion: "Available labour capacity may support expansion",
+    conclusion: "Available labour capacity supporting expansion potential",
     requiredSignals: [
       { signalId: "labour_capacity", outcome: "low" }
     ]

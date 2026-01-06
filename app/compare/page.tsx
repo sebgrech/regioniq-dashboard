@@ -1316,7 +1316,7 @@ function CompareContent() {
                           <CartesianGrid strokeDasharray="3 3" opacity={0.3} horizontal={true} vertical={false} />
                           <XAxis
                             type="number"
-                            tickFormatter={(v) => formatValue(v, selectedMetric?.unit || "")}
+                            tickFormatter={(v) => formatValue(v, selectedMetric?.unit || "", 1)}
                             tick={{ fontSize: 12, fill: "#6b7280" }}
                             axisLine={{ stroke: "#e5e7eb" }}
                             tickLine={{ stroke: "#e5e7eb" }}
@@ -1350,7 +1350,7 @@ function CompareContent() {
                                       <span className="text-xs text-gray-500 dark:text-gray-400">{barChartYear}</span>
                                     </div>
                                     <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                      {formatValue(entry?.value as number, selectedMetric?.unit || "")}
+                                      {formatValue(entry?.value as number, selectedMetric?.unit || "", 1)}
                                     </span>
                                   </div>
                                 </div>

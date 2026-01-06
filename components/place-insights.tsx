@@ -37,8 +37,8 @@ interface PlaceInsightsProps {
 interface SignalForUI {
   id: string
   label: string
-  outcome: "high" | "low" | "neutral" | "rising" | "falling"
-  strength: 1 | 2 | 3
+  outcome: "high" | "low" | "neutral" | "rising" | "falling" | "extreme" | "extreme_high" | "extreme_low"
+  strength: 1 | 2 | 3 | 4
   detail: string
   robustness?: "all" | "baseline" | "mixed"
 }

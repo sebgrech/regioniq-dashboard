@@ -314,9 +314,16 @@ export function computeSignal(
           value = jobs / pop16_64
           detail = detail.replace("{value}", value.toFixed(2))
           
-          if (value >= (config.thresholds.high ?? 1.0)) outcome = "high"
-          else if (value <= (config.thresholds.low ?? 0.8)) outcome = "low"
-          else outcome = "neutral"
+          // Check for extreme employment hubs first (City of London, Westminster, etc.)
+          if (config.thresholds.extreme && value >= config.thresholds.extreme) {
+            outcome = "extreme"
+          } else if (value >= (config.thresholds.high ?? 1.0)) {
+            outcome = "high"
+          } else if (value <= (config.thresholds.low ?? 0.8)) {
+            outcome = "low"
+          } else {
+            outcome = "neutral"
+          }
         }
       } else if (config.id === "income_capture") {
         const gdhi = metrics["gdhi_per_head_gbp"]?.current
@@ -328,9 +335,18 @@ export function computeSignal(
           if (value !== null) {
             detail = detail.replace("{value}", (value * 100).toFixed(0))
             
-            if (value >= (config.thresholds.high ?? 0.7)) outcome = "high"
-            else if (value <= (config.thresholds.low ?? 0.5)) outcome = "low"
-            else outcome = "neutral"
+            // Check for extreme values first (affluent suburbs or major output centres)
+            if (config.thresholds.extreme_high && value >= config.thresholds.extreme_high) {
+              outcome = "extreme_high"
+            } else if (config.thresholds.extreme_low && value <= config.thresholds.extreme_low) {
+              outcome = "extreme_low"
+            } else if (value >= (config.thresholds.high ?? 0.7)) {
+              outcome = "high"
+            } else if (value <= (config.thresholds.low ?? 0.5)) {
+              outcome = "low"
+            } else {
+              outcome = "neutral"
+            }
           }
         }
       } else if (config.id === "productivity_strength") {
@@ -340,9 +356,16 @@ export function computeSignal(
           value = (gva * 1_000_000) / jobs
           detail = detail.replace("{value}", Math.round(value).toLocaleString())
           
-          if (value >= (config.thresholds.high ?? 70000)) outcome = "high"
-          else if (value <= (config.thresholds.low ?? 45000)) outcome = "low"
-          else outcome = "neutral"
+          // Check for extreme productivity first (finance, oil & gas, pharma clusters)
+          if (config.thresholds.extreme && value >= config.thresholds.extreme) {
+            outcome = "extreme"
+          } else if (value >= (config.thresholds.high ?? 70000)) {
+            outcome = "high"
+          } else if (value <= (config.thresholds.low ?? 45000)) {
+            outcome = "low"
+          } else {
+            outcome = "neutral"
+          }
         }
       }
       break
@@ -354,11 +377,29 @@ export function computeSignal(
         const empRate = metrics["employment_rate_pct"]?.current
         const unempRate = metrics["unemployment_rate_pct"]?.current
         
-        if (empRate !== null && unempRate !== null) {
-          value = empRate // Use employment rate as primary metric
+        // Handle missing data gracefully
+        if (empRate === null || empRate === undefined) {
+          // No employment rate data for this region (common for small LADs)
+          detail = "Employment rate data not available for this region"
+          outcome = "neutral"
+          value = null
+        } else if (unempRate === null || unempRate === undefined) {
+          // Only employment rate available
+          detail = `Employment rate ${empRate.toFixed(1)}%`
+          value = empRate
+          if (empRate >= (config.thresholds.high ?? 76)) {
+            outcome = "high"
+          } else if (empRate <= (config.thresholds.low ?? 72)) {
+            outcome = "low"
+          } else {
+            outcome = "neutral"
+          }
+        } else {
+          // Both metrics available
+          value = empRate
           detail = detail
-            .replace("{empRate}", empRate?.toFixed(1) ?? "N/A")
-            .replace("{unempRate}", unempRate?.toFixed(1) ?? "N/A")
+            .replace("{empRate}", empRate.toFixed(1))
+            .replace("{unempRate}", unempRate.toFixed(1))
           
           // High employment + low unemployment = tight
           if (empRate >= (config.thresholds.high ?? 76)) {

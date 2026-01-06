@@ -46,8 +46,8 @@ type VerdictVisualType = "boundary" | "outputVsJobs" | "workforceSlack" | "weekd
 interface SignalForUI {
   id: string
   label: string
-  outcome: "high" | "low" | "neutral" | "rising" | "falling"
-  strength: 1 | 2 | 3  // for ●●○ display
+  outcome: "high" | "low" | "neutral" | "rising" | "falling" | "extreme" | "extreme_high" | "extreme_low"
+  strength: 1 | 2 | 3 | 4  // for ●●●● display (4 = extreme/purple)
   detail: string       // short detail on expand (max 60 chars)
   robustness: "all" | "baseline" | "mixed"  // scenario stability indicator
 }
@@ -215,53 +215,97 @@ const SIGNAL_LABELS: Record<string, string> = {
 }
 
 // =============================================================================
-// Place Context Computation (capitals, #1 rankings)
+// Place Context Computation (capitals, financial centres, major hubs)
 // =============================================================================
 
-// UK and devolved capitals (by region code)
-const CAPITAL_LABELS: Record<string, string> = {
+// UK and devolved capitals + major financial/employment centres (by region code)
+const PLACE_CONTEXT_LABELS: Record<string, string> = {
   // ITL1 level
   "UKI": "UK capital region",
-  // ITL3 level - capitals
-  "TLM13": "Scottish capital",  // City of Edinburgh ITL3
-  // LAD level - major capitals
-  "E09000001": "City of London",
-  "E09000033": "UK capital",  // Westminster
-  "S12000036": "Scottish capital",  // City of Edinburgh LAD
-  "W06000015": "Welsh capital",     // Cardiff
+  
+  // ITL2 level - Central London
+  "TLI3": "Central London",    // Inner London - West
+  "TLI4": "Central London",    // Inner London - East
+  
+  // ITL3 level - capitals and financial centres
+  "TLI31": "Central London financial district",  // Westminster
+  "TLI32": "Central London",   // Camden & City of London
+  "TLI41": "Central London financial district",  // Tower Hamlets (Canary Wharf)
+  "TLI42": "Central London",   // Hackney & Newham
+  "TLI43": "Central London",   // Lewisham & Southwark
+  "TLI44": "Central London",   // Lambeth
+  "TLM13": "Scottish capital", // City of Edinburgh ITL3
+  
+  // LAD level - major capitals and financial centres
+  "E09000001": "City of London financial district",
+  "E09000033": "UK capital (Westminster)",
+  "E09000030": "Major financial centre (Canary Wharf)",  // Tower Hamlets
+  "E09000019": "Major employment hub",   // Islington (Tech City)
+  "E09000007": "Major employment hub",   // Camden (King's Cross)
+  "E09000028": "Major employment hub",   // Southwark (London Bridge)
+  "S12000036": "Scottish capital",       // City of Edinburgh LAD
+  "W06000015": "Welsh capital",          // Cardiff
   "N09000003": "Northern Ireland capital", // Belfast
+  
+  // Major city centres outside London
+  "E08000003": "Major city centre",      // Manchester
+  "E08000025": "Major city centre",      // Birmingham
+  "E08000035": "Major city centre",      // Leeds
+  "S12000046": "Major city centre",      // Glasgow City
+}
+
+// Regions that are known major employment hubs (employment density structurally > 1.0)
+// Used to suppress misleading signals about "residential pressure" or "commuter profile"
+const MAJOR_EMPLOYMENT_HUBS = new Set([
+  // London financial districts
+  "E09000001", // City of London
+  "E09000033", // Westminster
+  "E09000030", // Tower Hamlets (Canary Wharf)
+  "E09000019", // Islington
+  "E09000007", // Camden
+  "E09000028", // Southwark
+  "E09000012", // Hackney
+  "E09000013", // Hammersmith and Fulham
+  // ITL3 equivalents
+  "TLI31", "TLI32", "TLI41", "TLI42", "TLI43",
+])
+
+/**
+ * Check if a region is a known major employment hub
+ */
+export function isMajorEmploymentHub(regionCode: string, dbCode?: string): boolean {
+  return MAJOR_EMPLOYMENT_HUBS.has(regionCode) || 
+         (dbCode !== undefined && MAJOR_EMPLOYMENT_HUBS.has(dbCode))
 }
 
 /**
  * Compute place context prefix based on:
- * 1. Capital status (UK, Scottish, Welsh, NI)
- * 2. #1 rank for key metrics (GVA, Employment)
+ * 1. Capital/financial centre status
+ * 2. Major employment hub status
+ * 3. London borough fallback
  * 
- * Returns a short prefix like "UK capital" or "#1 GVA nationally"
+ * Returns a short prefix like "UK capital" or "Major financial centre"
  */
 function computePlaceContextPrefix(
   regionCode: string,
   allMetricsData: Record<string, { current: number | null; growth5yr: number | null }>,
   regionLevel: string
 ): string | null {
-  // Check for capital status first
+  // Check for capital/financial centre status first
   const region = REGIONS.find(r => r.code === regionCode)
   const dbCode = region?.dbCode ?? regionCode
   
-  if (CAPITAL_LABELS[regionCode]) {
-    return CAPITAL_LABELS[regionCode]
+  if (PLACE_CONTEXT_LABELS[regionCode]) {
+    return PLACE_CONTEXT_LABELS[regionCode]
   }
-  if (CAPITAL_LABELS[dbCode]) {
-    return CAPITAL_LABELS[dbCode]
+  if (PLACE_CONTEXT_LABELS[dbCode]) {
+    return PLACE_CONTEXT_LABELS[dbCode]
   }
   
-  // For London LADs (E09...), add context
+  // For London LADs (E09...) not in the explicit list, add generic context
   if (dbCode.startsWith("E09")) {
     return "London borough"
   }
-  
-  // Could add #1 GVA/Employment detection here if we had percentiles loaded
-  // For now, we rely on the signals to convey this
   
   return null
 }
@@ -292,13 +336,18 @@ function getConclusions(signals: SignalResult[]): string[] {
 }
 
 /**
- * Convert outcome to strength (1-3 dots)
- * Unified traffic light system:
+ * Convert outcome to strength (1-4 dots)
+ * Extended traffic light system with purple tier for extreme:
+ * - 4 = Extreme (purple) - major outliers like City of London, ultra-high productivity
  * - 3 = High/Rising (green)
  * - 2 = Neutral (amber)
  * - 1 = Low/Falling (red)
+ * 
+ * Note: extreme_high and extreme_low both map to strength=4 (purple)
+ * The distinction is semantic (direction), not visual strength
  */
-function outcomeToStrength(outcome: string): 1 | 2 | 3 {
+function outcomeToStrength(outcome: string): 1 | 2 | 3 | 4 {
+  if (outcome === "extreme" || outcome === "extreme_high" || outcome === "extreme_low") return 4 // Purple
   if (outcome === "high" || outcome === "rising") return 3   // Green
   if (outcome === "neutral") return 2                        // Amber
   return 1 // low/falling                                    // Red
@@ -333,6 +382,33 @@ function selectDominantSignal(signals: SignalResult[]): SignalResult | null {
  * - Baseline only → "under baseline conditions"
  * - Mixed scenarios → no suffix (silence > hedging)
  */
+/**
+ * Clean and strengthen claim language for OM-readiness
+ * - Remove hedging ("may", "appears", "likely", "could")
+ * - Remove preambles ("This area", "This region")
+ * - Keep language direct and confident
+ */
+function cleanClaimForOM(s: string): string {
+  return s
+    .replace(/^This area /, "")
+    .replace(/^This region /, "")
+    .replace(/^A high share of /, "High ")
+    .replace(/^Economic output /, "Output ")
+    .replace(/—.*$/, "")
+    // Remove hedging - make statements direct
+    .replace(/ may support /, " supports ")
+    .replace(/ may indicate /, " indicates ")
+    .replace(/ may be /, " is ")
+    .replace(/ may /, " ")
+    .replace(/ appears to be /, " is ")
+    .replace(/ appears /, " ")
+    .replace(/ likely /, " ")
+    .replace(/ could be /, " is ")
+    .replace(/ could /, " ")
+    .replace(/  +/g, " ") // Collapse double spaces
+    .trim()
+}
+
 function generateVerdictSentence(
   characterConclusions: string[],
   pressureSlackConclusions: string[],
@@ -342,20 +418,8 @@ function generateVerdictSentence(
   const character = characterConclusions[0] || ""
   const pressure = pressureSlackConclusions[0] || ""
   
-  // Extract core claims (remove preambles and qualifiers)
-  const cleanClaim = (s: string) => s
-    .replace(/^This area /, "")
-    .replace(/^This region /, "")
-    .replace(/^A high share of /, "High ")
-    .replace(/^Economic output /, "Output ")
-    .replace(/—.*$/, "")
-    .replace(/ may /, " ")
-    .replace(/ appears /, " ")
-    .replace(/ likely /, " ")
-    .trim()
-  
-  const mainClaim = cleanClaim(character)
-  const qualifier = cleanClaim(pressure)
+  const mainClaim = cleanClaimForOM(character)
+  const qualifier = cleanClaimForOM(pressure)
   
   // Build the core sentence first
   let coreSentence = ""
@@ -365,27 +429,31 @@ function generateVerdictSentence(
     coreSentence = qualifier.charAt(0).toUpperCase() + qualifier.slice(1) + persistenceSuffix
   } else if (!qualifier) {
     // If no qualifier, just return main claim (no persistence on character claims)
+    // This is the ideal case for extreme hubs - clean, single-clause statement
     coreSentence = mainClaim.charAt(0).toUpperCase() + mainClaim.slice(1)
   } else {
-    // Combine with "but" or "with" (no semicolons)
+    // Combine with "with" for complementary info, avoid "but" which implies contradiction
     const lowerQualifier = qualifier.charAt(0).toLowerCase() + qualifier.slice(1)
-    const connector = lowerQualifier.includes("capacity") || lowerQualifier.includes("available") 
+    
+    // Use "with" for capacity/labour signals, otherwise append as additional info
+    const connector = lowerQualifier.includes("capacity") || 
+                      lowerQualifier.includes("available") ||
+                      lowerQualifier.includes("hiring") ||
+                      lowerQualifier.includes("labour")
       ? "with" 
-      : "but"
+      : "—" // Use em dash for secondary observations
     
     // Add persistence suffix to the qualifier (pressure/slack signal)
     const qualifierWithPersistence = lowerQualifier + persistenceSuffix
-    coreSentence = `${mainClaim.charAt(0).toUpperCase()}${mainClaim.slice(1)}, ${connector} ${qualifierWithPersistence}`
+    coreSentence = `${mainClaim.charAt(0).toUpperCase()}${mainClaim.slice(1)}${connector === "—" ? " — " : ", " + connector + " "}${qualifierWithPersistence}`
   }
   
-  // Prepend place context if available (use colon, not em dash)
+  // Prepend place context if available (use colon)
   if (placeContextPrefix) {
     const withContext = `${placeContextPrefix}: ${coreSentence.charAt(0).toLowerCase()}${coreSentence.slice(1)}`
-    // Prefer always showing a full, untruncated sentence (wrapping is OK in UI)
     return withContext
   }
   
-  // Prefer always showing a full, untruncated sentence (wrapping is OK in UI)
   return coreSentence
 }
 
@@ -513,7 +581,18 @@ export async function POST(request: NextRequest) {
     
     // Get conclusions
     const characterConclusions = getConclusions(characterSignals)
-    const pressureSlackConclusions = getConclusions(pressureSlackSignals)
+    
+    // Check if this is an extreme employment hub
+    // For extreme hubs, growth_composition conclusions are structurally irrelevant
+    // (e.g., City of London with 500k jobs and 10k residents — pop growth % comparisons are meaningless)
+    const employmentDensitySignal = signals.find(s => s.id === "employment_density")
+    const isExtremeEmploymentHub = employmentDensitySignal?.outcome === "extreme"
+    
+    // Gate pressure/slack conclusions for extreme employment hubs
+    // Only suppress growth_composition, keep labour_capacity conclusions
+    const pressureSlackConclusions = isExtremeEmploymentHub
+      ? getConclusions(pressureSlackSignals.filter(s => s.id !== "growth_composition"))
+      : getConclusions(pressureSlackSignals)
     
     // Build UI block
     const dominantSignal = selectDominantSignal(signals)

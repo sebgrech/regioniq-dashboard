@@ -62,6 +62,9 @@ function getLatestValue(data: DataPoint[]): number | null {
 /**
  * Compute pattern tiles from cross-metric data
  * Each tile = one idea, ultra-visual
+ * 
+ * IMPORTANT: Uses employment density (jobs per working-age resident) as the 
+ * primary structural indicator. Growth rate comparisons are secondary.
  */
 function computePatterns(
   allMetricsData: { metricId: string; data: DataPoint[] }[],
@@ -81,22 +84,53 @@ function computePatterns(
   const popYoY = getYoY(popData, year)
   const incYoY = getYoY(incData, year)
   const latestEmpRate = getLatestValue(empRateData)
+  
+  // Calculate employment density (jobs per total population as proxy)
+  // This is the KEY structural indicator for determining if a region is
+  // an employment destination vs residential catchment
+  const latestEmp = getLatestValue(empData)
+  const latestPop = getLatestValue(popData)
+  const employmentDensity = (latestEmp && latestPop && latestPop > 0) 
+    ? latestEmp / latestPop 
+    : null
+  
+  // Extreme employment hub threshold (City of London, Westminster, Canary Wharf)
+  // These regions have job:population ratios far exceeding 1.0
+  const isExtremeEmploymentHub = employmentDensity !== null && employmentDensity > 1.5
+  const isEmploymentDestination = employmentDensity !== null && employmentDensity > 0.6
+  const isResidentialCatchment = employmentDensity !== null && employmentDensity < 0.4
 
-  // A) Commuter profile: employment_density low AND pop growth > job growth
-  if (popYoY != null && empYoY != null && popYoY > empYoY + 0.5) {
+  // A) Major employment hub: extremely high job concentration
+  // Only show this for genuine employment destinations
+  if (isExtremeEmploymentHub) {
     patterns.push({
-      id: "commuter_profile",
-      title: "Commuter profile",
-      caption: "Residents likely work elsewhere",
+      id: "major_employment_hub",
+      title: "Major employment hub",
+      caption: "Draws workers from across the region",
+      signal: "positive",
+      icon: Briefcase,
+      delta: `${employmentDensity!.toFixed(1)} jobs/resident`,
+      metrics: ["emp_total_jobs", "population_total"]
+    })
+  }
+  
+  // A2) Residential catchment: only flag if employment density is genuinely low
+  // This replaces the old "commuter profile" logic that used growth rates
+  if (isResidentialCatchment && !isExtremeEmploymentHub) {
+    patterns.push({
+      id: "residential_catchment",
+      title: "Residential catchment",
+      caption: "Workforce likely exports to employment centres",
       signal: "neutral",
-      icon: Users,
-      delta: `Pop +${popYoY.toFixed(1)}%`,
-      metrics: ["population_total", "emp_total_jobs"]
+      icon: Home,
+      delta: `${employmentDensity!.toFixed(2)} jobs/resident`,
+      metrics: ["emp_total_jobs", "population_total"]
     })
   }
 
   // B) Local capture gap: income weak relative to output
-  if (gvaYoY != null && incYoY != null && gvaYoY > incYoY + 1.5) {
+  // Skip this for extreme employment hubs where low capture is structural
+  if (!isExtremeEmploymentHub && gvaYoY != null && incYoY != null && gvaYoY > incYoY + 1.5) {
     patterns.push({
       id: "capture_gap",
       title: "Local capture",
@@ -122,7 +156,8 @@ function computePatterns(
   }
 
   // D) Labour reservoir: slack available + job growth weak
-  if (latestEmpRate != null && latestEmpRate < 73 && empYoY != null && empYoY < 1) {
+  // Skip for employment hubs where labour market dynamics are different
+  if (!isEmploymentDestination && latestEmpRate != null && latestEmpRate < 73 && empYoY != null && empYoY < 1) {
     patterns.push({
       id: "labour_reservoir",
       title: "Labour reservoir",
@@ -147,12 +182,13 @@ function computePatterns(
     })
   }
 
-  // F) Residential engine: pop growing faster than jobs
-  if (popYoY != null && empYoY != null && popYoY > empYoY + 1) {
+  // F) Residential pressure: pop growing faster than jobs
+  // Only show if this is NOT an employment hub (where pop growth is structurally lower)
+  if (!isEmploymentDestination && popYoY != null && empYoY != null && popYoY > empYoY + 1) {
     patterns.push({
-      id: "residential_engine",
-      title: "Residential engine",
-      caption: "Housing pressure may be building",
+      id: "residential_pressure",
+      title: "Residential pressure",
+      caption: "Housing demand may be building",
       signal: "neutral",
       icon: Home,
       delta: `Pop +${popYoY.toFixed(1)}%`,
