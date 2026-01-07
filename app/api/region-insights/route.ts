@@ -577,7 +577,9 @@ export async function POST(request: NextRequest) {
     const archetype = deriveArchetype(signals)
     
     // Derive implications (max 3)
-    const implications = deriveImplications(signalsForImplications)
+    // Pass population for small LAD confidence gating
+    const population = allMetricsData["population_total"]?.current
+    const implications = deriveImplications(signalsForImplications, population)
     
     // Get conclusions
     const characterConclusions = getConclusions(characterSignals)

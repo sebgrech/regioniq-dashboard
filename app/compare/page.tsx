@@ -688,6 +688,331 @@ const ChartTimeseriesCompare = ({
   )
 }
 
+// ============================================================================
+// RANK PERSISTENCE HEATMAP
+// Shows how each region's ranking changes over time - perfect for OMs
+// Rows = regions, Cols = years, Cell = rank position (1st = best)
+// ============================================================================
+
+interface RankHeatmapCardProps {
+  chartRegions: Array<{
+    regionCode: string
+    regionName: string
+    data: any[]
+    color?: string
+  }>
+  selectedMetric: any
+  metric: string
+  scenario: string
+  regionColorMap: Map<string, string>
+  regionColors: string[]
+  isLoading: boolean
+}
+
+const RankHeatmapCard = ({
+  chartRegions,
+  selectedMetric,
+  metric,
+  scenario,
+  regionColorMap,
+  regionColors,
+  isLoading,
+}: RankHeatmapCardProps) => {
+  // State for year range selection
+  const [yearRange, setYearRange] = useState<"10y" | "20y" | "all">("10y")
+  
+  // Compute all available years from the data
+  const allYears = useMemo(() => {
+    const years = new Set<number>()
+    chartRegions.forEach((region) => {
+      region.data?.forEach((d: any) => {
+        const y = d.year ?? d.period
+        if (y != null) years.add(y)
+      })
+    })
+    return Array.from(years).sort((a, b) => a - b)
+  }, [chartRegions])
+
+  // Filter years based on selected range
+  const displayYears = useMemo(() => {
+    if (yearRange === "all" || allYears.length === 0) return allYears
+    
+    const currentYear = Math.max(...allYears.filter(y => y <= 2024)) || 2024
+    const startYear = yearRange === "10y" ? currentYear - 9 : currentYear - 19
+    
+    return allYears.filter(y => y >= startYear && y <= currentYear)
+  }, [allYears, yearRange])
+
+  // Compute ranks for each region at each year
+  // Rank 1 = highest value (best for most metrics like GDHI, population)
+  const rankData = useMemo(() => {
+    if (chartRegions.length === 0 || displayYears.length === 0) return []
+    
+    // For each year, collect all values and compute ranks
+    const yearRanks: Record<number, Record<string, { rank: number; value: number; total: number }>> = {}
+    
+    for (const year of displayYears) {
+      const yearValues: Array<{ regionCode: string; value: number }> = []
+      
+      for (const region of chartRegions) {
+        const dataPoint = region.data?.find((d: any) => (d.year ?? d.period) === year)
+        if (dataPoint?.value != null) {
+          yearValues.push({ regionCode: region.regionCode, value: dataPoint.value })
+        }
+      }
+      
+      // Sort descending (highest value = rank 1)
+      yearValues.sort((a, b) => b.value - a.value)
+      
+      // Assign ranks
+      yearRanks[year] = {}
+      yearValues.forEach((item, index) => {
+        yearRanks[year][item.regionCode] = {
+          rank: index + 1,
+          value: item.value,
+          total: yearValues.length,
+        }
+      })
+    }
+    
+    // Build row data for each region
+    return chartRegions.map((region) => ({
+      regionCode: region.regionCode,
+      regionName: region.regionName,
+      color: regionColorMap.get(region.regionCode) || regionColors[0],
+      ranks: displayYears.map(year => ({
+        year,
+        ...yearRanks[year]?.[region.regionCode],
+      })),
+    }))
+  }, [chartRegions, displayYears, regionColorMap, regionColors])
+
+  // Color scale: Rank 1 = darkest indigo, worst rank = light
+  const getRankColor = useCallback((rank: number, total: number) => {
+    if (total <= 1) return "#6366f1" // Single region = primary color
+    
+    // Normalize rank to 0-1 (0 = best, 1 = worst)
+    const normalized = (rank - 1) / (total - 1)
+    
+    // Gradient from dark indigo (best) to light gray (worst)
+    // Best: #4338ca (indigo-700)
+    // Good: #6366f1 (indigo-500)
+    // Mid: #a5b4fc (indigo-300)
+    // Weak: #e0e7ff (indigo-100)
+    // Worst: #f1f5f9 (slate-100)
+    
+    if (normalized < 0.2) return "#4338ca"
+    if (normalized < 0.4) return "#6366f1"
+    if (normalized < 0.6) return "#818cf8"
+    if (normalized < 0.8) return "#a5b4fc"
+    return "#c7d2fe"
+  }, [])
+
+  // Export data preparation
+  const heatmapExportRows = useMemo(() => {
+    const rows: any[] = []
+    for (const region of rankData) {
+      for (const rankInfo of region.ranks) {
+        if (rankInfo.rank != null) {
+          rows.push({
+            Metric: selectedMetric?.title || metric,
+            Region: region.regionName,
+            "Region Code": region.regionCode,
+            Year: rankInfo.year,
+            Rank: rankInfo.rank,
+            "Total Regions": rankInfo.total,
+            Value: rankInfo.value,
+            Scenario: scenario,
+          })
+        }
+      }
+    }
+    return rows
+  }, [rankData, selectedMetric?.title, metric, scenario])
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Rank Trajectory</CardTitle>
+          <CardDescription>Tracking relative position over time</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[200px] flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin mr-2" />
+            Loading rank data...
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (chartRegions.length < 2) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Rank Trajectory</CardTitle>
+          <CardDescription>Tracking relative position over time</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[100px] flex items-center justify-center text-muted-foreground">
+            Select at least 2 regions to compare rankings
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <ExportableChartCard
+      rows={heatmapExportRows}
+      csvRows={heatmapExportRows}
+      filenameBase={`regioniq_${metric}_rank_trajectory_${scenario}`}
+      isLoading={isLoading}
+    >
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Rank Trajectory</CardTitle>
+              <CardDescription>
+                Track how each region's position changes over time — persistence signals structural advantage
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Year range selector */}
+              <div className="flex items-center rounded-lg border bg-muted/30 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setYearRange("10y")}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                    yearRange === "10y" 
+                      ? "bg-white dark:bg-gray-800 shadow-sm text-gray-900 dark:text-gray-100" 
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-700"
+                  }`}
+                >
+                  10Y
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setYearRange("20y")}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                    yearRange === "20y" 
+                      ? "bg-white dark:bg-gray-800 shadow-sm text-gray-900 dark:text-gray-100" 
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-700"
+                  }`}
+                >
+                  20Y
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setYearRange("all")}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                    yearRange === "all" 
+                      ? "bg-white dark:bg-gray-800 shadow-sm text-gray-900 dark:text-gray-100" 
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-700"
+                  }`}
+                >
+                  All
+                </button>
+              </div>
+              <Badge variant="outline" className="text-xs">
+                {displayYears[0]}–{displayYears[displayYears.length - 1]}
+              </Badge>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Heatmap Grid */}
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <th className="text-left text-sm font-medium text-muted-foreground p-2 sticky left-0 bg-background min-w-[160px]">
+                    Region
+                  </th>
+                  {displayYears.map((year) => (
+                    <th 
+                      key={year} 
+                      className={`text-center text-xs font-mono p-1.5 min-w-[36px] ${
+                        year === 2024 ? "text-primary font-semibold" : "text-muted-foreground"
+                      }`}
+                    >
+                      {year.toString().slice(-2)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rankData.map((region) => (
+                  <tr key={region.regionCode} className="border-t border-muted/30">
+                    <td className="text-sm font-medium p-2 sticky left-0 bg-background">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-2 h-2 rounded-full flex-shrink-0" 
+                          style={{ backgroundColor: region.color }}
+                        />
+                        <span className="truncate">{region.regionName}</span>
+                      </div>
+                    </td>
+                    {region.ranks.map((rankInfo) => (
+                      <td
+                        key={rankInfo.year}
+                        className="text-center p-1"
+                        title={rankInfo.rank != null 
+                          ? `${region.regionName}: Rank ${rankInfo.rank} of ${rankInfo.total} (${formatValue(rankInfo.value, selectedMetric?.unit || "")})`
+                          : "No data"
+                        }
+                      >
+                        {rankInfo.rank != null ? (
+                          <div
+                            className="w-8 h-8 rounded flex items-center justify-center text-xs font-semibold mx-auto transition-all hover:scale-110"
+                            style={{
+                              backgroundColor: getRankColor(rankInfo.rank, rankInfo.total),
+                              color: rankInfo.rank <= Math.ceil(rankInfo.total * 0.4) ? "#ffffff" : "#1f2937",
+                            }}
+                          >
+                            {rankInfo.rank}
+                          </div>
+                        ) : (
+                          <div className="w-8 h-8 rounded bg-muted/30 flex items-center justify-center text-xs text-muted-foreground mx-auto">
+                            —
+                          </div>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Legend */}
+          <div className="mt-4 pt-4 border-t flex items-center justify-between">
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <div className="w-4 h-4 rounded" style={{ backgroundColor: "#4338ca" }} />
+                <span>1st (Leading)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-4 h-4 rounded" style={{ backgroundColor: "#818cf8" }} />
+                <span>Middle</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-4 h-4 rounded" style={{ backgroundColor: "#c7d2fe" }} />
+                <span>Last (Lagging)</span>
+              </div>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Rank among {chartRegions.length} selected regions • Persistent dark = structural winner
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </ExportableChartCard>
+  )
+}
+
 interface ComparisonData {
   [regionCode: string]: {
     [metricId: string]: DataPoint[]
@@ -1383,6 +1708,19 @@ function CompareContent() {
               </Card>
                 </ExportableChartCard>
             </ErrorBoundaryWrapper>
+
+          {/* Rank Persistence Heatmap */}
+          <ErrorBoundaryWrapper name="rank heatmap">
+            <RankHeatmapCard
+              chartRegions={chartRegions}
+              selectedMetric={selectedMetric}
+              metric={metric}
+              scenario={scenario}
+              regionColorMap={regionColorMap}
+              regionColors={regionColors}
+              isLoading={!hasAllData && isLoading}
+            />
+          </ErrorBoundaryWrapper>
 
           {/* Compare Copilot - HIDDEN FOR V1: Component exists but is not rendered
               To re-enable, uncomment the section below:

@@ -276,11 +276,11 @@ export function GeofenceResults({
       <CardHeader className={cn("py-2 px-4", compact ? "py-2 px-4" : undefined)}>
         <div className="flex flex-col gap-1.5">
           {/* Top row: Title */}
-          <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-xl font-semibold">
-              <MapPin className="h-5 w-5 text-primary" />
-              Catchment Analysis
-            </CardTitle>
+            <MapPin className="h-5 w-5 text-primary" />
+            Catchment Analysis
+          </CardTitle>
           </div>
           {/* Bottom row: Badge + Export */}
           <div className="flex items-center justify-between gap-2">
@@ -296,7 +296,7 @@ export function GeofenceResults({
                     <Download className="h-3.5 w-3.5" />
                   )}
                   <span className="ml-1.5 text-xs">Export</span>
-                </Button>
+              </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={handleExportCSV}>

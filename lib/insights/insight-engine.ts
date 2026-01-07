@@ -608,11 +608,15 @@ export function computeSignalPersistence(
 /**
  * Format persistence as a temporal suffix for the verdict
  * 
- * Rules:
- * - Holds to horizon → "through 2035"
- * - Changes within 3-5 years → ", expected to shift by {year}"
- * - Baseline only → "under baseline conditions"
- * - Mixed scenarios → no suffix (silence > hedging)
+ * IC-DEFENSIBLE RULES (no predictions, no hedging):
+ * - Holds in ALL scenarios through horizon → " through 2035" (fully robust)
+ * - Holds in baseline only through horizon → " through 2035 under baseline conditions"
+ * - Changes within 5 years in ANY scenario → NO SUFFIX (silence > false precision)
+ * - Changes 6+ years out, robust → " through {year}" 
+ * - Changes 6+ years out, baseline only → " through {year} under baseline conditions"
+ * - Mixed/uncertain → NO SUFFIX (silence > hedging)
+ * 
+ * NEVER USE: "expected to shift", "may change", "likely to" — these are predictions
  */
 export function formatPersistenceSuffix(
   persistence: SignalPersistence | null,
@@ -622,12 +626,22 @@ export function formatPersistenceSuffix(
   
   const { firstChangeYear, holdsIn } = persistence
   
-  // Mixed scenarios → silence is more credible
+  // Mixed scenarios → silence is more credible than hedging
   if (holdsIn === "mixed") {
     return ""
   }
   
-  // Holds through horizon
+  // Changes soon (within 5 years) in any scenario → stay silent
+  // Rationale: near-term projections have wide confidence intervals,
+  // stating a specific year implies false precision
+  if (firstChangeYear !== null) {
+    const yearsUntilChange = firstChangeYear - baseYear
+    if (yearsUntilChange <= 5) {
+      return "" // Silence > "expected to shift by X"
+    }
+  }
+  
+  // Holds through horizon (2035)
   if (firstChangeYear === null) {
     if (holdsIn === "all") {
       return " through 2035"
@@ -636,13 +650,7 @@ export function formatPersistenceSuffix(
     }
   }
   
-  // Changes soon (within 5 years)
-  const yearsUntilChange = firstChangeYear - baseYear
-  if (yearsUntilChange <= 5) {
-    return `, expected to shift by ${firstChangeYear}`
-  }
-  
-  // Changes later (6+ years out)
+  // Changes later (6+ years out) — safe to state horizon year
   if (holdsIn === "all") {
     return ` through ${firstChangeYear - 1}`
   } else {

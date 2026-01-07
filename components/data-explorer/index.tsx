@@ -244,8 +244,8 @@ export function DataExplorer({
       
       // Query non-UK regions via Data API
       if (nonUkRegions.length > 0) {
-        const token = await getAccessToken()
-        if (!token) throw new Error("Not authenticated")
+      const token = await getAccessToken()
+      if (!token) throw new Error("Not authenticated")
         
         const nonUkRequestBody = {
           ...requestBody,
@@ -256,16 +256,16 @@ export function DataExplorer({
           )
         }
         
-        const res = await fetchWithTimeout(
-          dataUrl,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      const res = await fetchWithTimeout(
+        dataUrl,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
             body: JSON.stringify(nonUkRequestBody),
-          },
-          20_000
-        )
-        const json = await fetchJsonOrThrow(res)
+        },
+        20_000
+      )
+      const json = await fetchJsonOrThrow(res)
         if (json?.data) {
           allResults.push(...json.data)
         }

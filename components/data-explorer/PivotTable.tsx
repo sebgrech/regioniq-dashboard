@@ -53,7 +53,7 @@ function formatCompact(raw: number | null, unit: string, metricName?: string): s
   const isGBP = unit && (unitLower.includes("gbp") || unit.includes("£")) ||
                 metricLower.includes("gva") || metricLower.includes("gross value added")
   const prefix = isGBP ? "£" : ""
-  
+
   // If value is already in millions, convert to actual value for proper scaling
   const actualValue = isMillions ? raw * 1_000_000 : raw
   
@@ -292,17 +292,17 @@ export function PivotTable({ data, unit = "" }: PivotTableProps) {
                       const dataType = row.dataTypes[year] || ""
                       const isForecast = dataType.toLowerCase() === "forecast"
                       return (
-                        <td
-                          key={year}
+                      <td
+                        key={year}
                           className={cn(
                             "p-3 text-right font-mono tabular-nums text-[13px]",
                             isForecast 
                               ? "text-indigo-700 dark:text-indigo-300 bg-indigo-50/30 dark:bg-indigo-950/10" 
                               : "text-slate-900 dark:text-slate-100"
                           )}
-                        >
+                      >
                           {formatCompact(row.values[year], row.units, row.metric)}
-                        </td>
+                      </td>
                       )
                     })}
 
@@ -321,9 +321,9 @@ export function PivotTable({ data, unit = "" }: PivotTableProps) {
       {/* Footer with row count and legend */}
       <div className="border-t p-3 flex items-center justify-between text-xs text-muted-foreground bg-muted/10">
         <div className="flex items-center gap-4">
-          <span>
-            {pivotedData.length} row{pivotedData.length !== 1 ? "s" : ""} × {years.length} year{years.length !== 1 ? "s" : ""}
-          </span>
+        <span>
+          {pivotedData.length} row{pivotedData.length !== 1 ? "s" : ""} × {years.length} year{years.length !== 1 ? "s" : ""}
+        </span>
           <div className="flex items-center gap-3 border-l pl-4">
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-sm bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700" />
