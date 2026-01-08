@@ -330,6 +330,23 @@ const ChartTimeseriesCompare = ({
     const rowType = payload[0]?.payload?.type
     const seen = new Set<number>() // avoid dup same region from hist/fcst overlap (shouldn't occur, but safe)
 
+    // Recharts does not guarantee payload ordering; enforce region order (region0, region1, ...)
+    const orderedPayload = [...payload]
+      .filter((e: any) => e?.value != null)
+      .sort((a: any, b: any) => {
+        const ak = String(a?.dataKey ?? "")
+        const bk = String(b?.dataKey ?? "")
+        const am = ak.match(/^region(\d+)_/)
+        const bm = bk.match(/^region(\d+)_/)
+        const ai = am ? parseInt(am[1], 10) : 999
+        const bi = bm ? parseInt(bm[1], 10) : 999
+        if (ai !== bi) return ai - bi
+        const aHist = ak.includes("_hist")
+        const bHist = bk.includes("_hist")
+        if (aHist !== bHist) return aHist ? -1 : 1
+        return String(a?.name ?? ak).localeCompare(String(b?.name ?? bk))
+      })
+
     return (
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2 min-w-[180px]">
         <div className="flex items-center gap-2 mb-1.5">
@@ -344,9 +361,7 @@ const ChartTimeseriesCompare = ({
           )}
         </div>
         <div className="space-y-0.5">
-          {payload
-            .filter((e: any) => e.value != null)
-            .map((entry: any, i: number) => {
+          {orderedPayload.map((entry: any, i: number) => {
               const m = String(entry.dataKey).match(/^region(\d+)_/)
               const idx = m ? parseInt(m[1], 10) : -1
               if (idx >= 0 && seen.has(idx)) return null

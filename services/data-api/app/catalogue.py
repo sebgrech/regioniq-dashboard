@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # ⚠️ FORECAST_VINTAGE is release-controlled: only update via env var on weekly publish
 # Format: "2026-W03" (ISO week). Do NOT compute from dates or use quarter-based defaults.
@@ -28,13 +24,7 @@ DEFAULT_LIFECYCLE = Lifecycle(
 )
 
 
-def load_itl_to_lad() -> dict[str, Any]:
-    path = REPO_ROOT / "public" / "processed" / "itl_to_lad.json"
-    if not path.exists():
-        return {"ITL1": {}, "ITL2": {}, "ITL3": {}}
-    return json.loads(path.read_text())
-
-
+# Region code mappings (E-codes used in database -> UK codes for API)
 E_CODE_TO_UK = {
     "E12000001": "UKC",
     "E12000002": "UKD",
@@ -52,7 +42,7 @@ E_CODE_TO_UK = {
 
 UK_TO_E_CODE = {v: k for (k, v) in E_CODE_TO_UK.items()}
 
-# ITL1 in itl_to_lad.json is TL* group codes
+# TL codes (alternative ITL1 format) -> UK codes
 TL_TO_UK = {
     "TLC": "UKC",
     "TLD": "UKD",
@@ -70,8 +60,29 @@ TL_TO_UK = {
 UK_TO_TL = {v: k for (k, v) in TL_TO_UK.items()}
 
 
+# ITL1 region catalogue (hardcoded - stable geography)
+ITL1_REGIONS = [
+    {"region_code": "UK", "region_name": "United Kingdom", "level": "UK"},
+    {"region_code": "UKC", "region_name": "North East", "level": "ITL1"},
+    {"region_code": "UKD", "region_name": "North West", "level": "ITL1"},
+    {"region_code": "UKE", "region_name": "Yorkshire and The Humber", "level": "ITL1"},
+    {"region_code": "UKF", "region_name": "East Midlands", "level": "ITL1"},
+    {"region_code": "UKG", "region_name": "West Midlands", "level": "ITL1"},
+    {"region_code": "UKH", "region_name": "East of England", "level": "ITL1"},
+    {"region_code": "UKI", "region_name": "London", "level": "ITL1"},
+    {"region_code": "UKJ", "region_name": "South East", "level": "ITL1"},
+    {"region_code": "UKK", "region_name": "South West", "level": "ITL1"},
+    {"region_code": "UKL", "region_name": "Wales", "level": "ITL1"},
+    {"region_code": "UKM", "region_name": "Scotland", "level": "ITL1"},
+    {"region_code": "UKN", "region_name": "Northern Ireland", "level": "ITL1"},
+]
+
+
 def metric_classes() -> list[dict[str, Any]]:
-    # v1: minimal catalogue. Expand here without changing the schema contract.
+    """
+    Metric catalogue for the schema endpoint.
+    v1: minimal catalogue. Expand here without changing the schema contract.
+    """
     return [
         {
             "metric_id": "population_total",
@@ -107,30 +118,3 @@ def metric_classes() -> list[dict[str, Any]]:
         },
         # Future: add sector/age breakdown dims without changing endpoint shape.
     ]
-
-
-def region_hierarchy() -> dict[str, str]:
-    """
-    Returns mapping: child_region_code -> parent_region_code (ITL1) for LAD/ITL2/ITL3.
-    Uses itl_to_lad.json to infer ITL1 parents by membership.
-    """
-    m = {}
-    mapping = load_itl_to_lad()
-    itl1 = mapping.get("ITL1", {})
-    # invert LAD -> ITL1(TL*) then to UK*
-    for tl_code, lads in itl1.items():
-        parent = TL_TO_UK.get(tl_code)
-        if not parent:
-            continue
-        for lad in lads:
-            m[lad] = parent
-    # ITL2/ITL3 parents: inferred by their LAD membership mode (simplified: first parent)
-    for level in ("ITL2", "ITL3"):
-        for itl_code, lads in mapping.get(level, {}).items():
-            for lad in lads:
-                if lad in m:
-                    m[itl_code] = m[lad]
-                    break
-    return m
-
-

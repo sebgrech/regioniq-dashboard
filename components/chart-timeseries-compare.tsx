@@ -251,9 +251,26 @@ const ChartTimeseriesCompare = ({
               <Tooltip
                 content={({ active, payload, label }: any) => {
                   if (!active || !payload?.length) return null
+
+                  // Recharts does not guarantee payload ordering; enforce region order (region0, region1, ...)
+                  const orderedPayload = [...payload]
+                    .filter((e: any) => e?.value != null)
+                    .sort((a: any, b: any) => {
+                      const ak = String(a?.dataKey ?? "")
+                      const bk = String(b?.dataKey ?? "")
+                      const am = ak.match(/^region(\d+)_/)
+                      const bm = bk.match(/^region(\d+)_/)
+                      const ai = am ? parseInt(am[1], 10) : 999
+                      const bi = bm ? parseInt(bm[1], 10) : 999
+                      if (ai !== bi) return ai - bi
+                      const aHist = ak.includes("_hist")
+                      const bHist = bk.includes("_hist")
+                      if (aHist !== bHist) return aHist ? -1 : 1
+                      return String(a?.name ?? ak).localeCompare(String(b?.name ?? bk))
+                    })
                   
                   // Get data quality from the first payload (all should have same year)
-                  const firstPayload = payload[0]
+                  const firstPayload = orderedPayload[0] ?? payload[0]
                   const data = firstPayload?.payload
                   
                   // Try to get data_quality from any of the regions' data
@@ -290,7 +307,7 @@ const ChartTimeseriesCompare = ({
                         Year: {Math.floor(label)}
                       </div>
                       <div className="space-y-1">
-                        {payload.map((e: any, i: number) => (
+                        {orderedPayload.map((e: any, i: number) => (
                           <div key={i} className="flex items-center justify-between gap-4">
                             <div className="flex items-center gap-2">
                               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: e.color }} />

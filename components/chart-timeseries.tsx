@@ -312,6 +312,24 @@ export const ChartTimeseries = memo(function ChartTimeseries({
     const rowType = data?.type
     const dataQuality = data?.data_quality
     const dq = String(dataQuality ?? "").toLowerCase()
+
+    // Recharts does not guarantee payload ordering; enforce a stable top-to-bottom order.
+    const priority =
+      primaryScenario === "upside"
+        ? ["upside", "baseline", "downside"]
+        : primaryScenario === "downside"
+          ? ["downside", "baseline", "upside"]
+          : ["baseline", "upside", "downside"]
+    const orderedPayload = [...payload].sort((a: any, b: any) => {
+      const ak = String(a?.dataKey ?? "")
+      const bk = String(b?.dataKey ?? "")
+      const ai = priority.indexOf(ak)
+      const bi = priority.indexOf(bk)
+      const as = ai === -1 ? 999 : ai
+      const bs = bi === -1 ? 999 : bi
+      if (as !== bs) return as - bs
+      return String(a?.name ?? ak).localeCompare(String(b?.name ?? bk))
+    })
     
     // Determine quality label and color
     let qualityLabel = ''
@@ -342,7 +360,7 @@ export const ChartTimeseries = memo(function ChartTimeseries({
           </Badge>
         </div>
         <div className="space-y-1">
-          {payload.map((e: any, i: number) => (
+          {orderedPayload.map((e: any, i: number) => (
             <div key={i} className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: e.color }} />
