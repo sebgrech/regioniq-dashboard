@@ -54,6 +54,7 @@ export const config = {
     "/metric/:path*",
     "/analysis/:path*",
     "/admin/:path*",
+    "/developers/:path*",
   ],
 }
 
