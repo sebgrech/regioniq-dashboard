@@ -20,6 +20,7 @@ import {
   Loader2,
   FileText,
   FileSpreadsheet,
+  Presentation,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -46,7 +47,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import type { GeofenceResult, LADContribution, Geofence } from "@/lib/geofence"
 import { formatGeofenceResult } from "@/lib/geofence"
-import { exportCatchmentCSV, exportCatchmentXLSX } from "@/lib/geofence/export"
+import { exportCatchmentCSV, exportCatchmentPPTX, exportCatchmentXLSX } from "@/lib/geofence/export"
 
 interface GeofenceResultsProps {
   /** The geofence calculation result */
@@ -207,6 +208,19 @@ export function GeofenceResults({
     }
   }
 
+  const handleExportPPTX = async () => {
+    if (!result) return
+    setIsExporting(true)
+    try {
+      // Title intentionally omitted for now (user asked for “just the metric boxes”).
+      await exportCatchmentPPTX({ result, geofence })
+    } catch (err) {
+      console.error("Export failed:", err)
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   // Loading state
   if (isCalculating) {
     return (
@@ -306,6 +320,10 @@ export function GeofenceResults({
                 <DropdownMenuItem onClick={handleExportXLSX}>
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
                   Export Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPPTX}>
+                  <Presentation className="h-4 w-4 mr-2" />
+                  Export PowerPoint
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

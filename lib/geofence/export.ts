@@ -129,3 +129,25 @@ export async function exportCatchmentXLSX(options: ExportOptions): Promise<void>
   downloadBlob(blob, filename)
 }
 
+/**
+ * Export the 4 catchment summary metric cards as an editable PowerPoint slide (16:9).
+ */
+export async function exportCatchmentPPTX(options: ExportOptions & { title?: string }): Promise<void> {
+  const { result, title } = options
+
+  const res = await fetch("/api/export/pptx/catchment", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ result, title }),
+  })
+
+  if (!res.ok) {
+    const msg = await res.text()
+    throw new Error(msg || "PowerPoint export failed")
+  }
+
+  const blob = await res.blob()
+  const filename = `regioniq_catchment_summary_${result.year}_${result.scenario}_${isoDateStamp()}.pptx`
+  downloadBlob(blob, filename)
+}
+

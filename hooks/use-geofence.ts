@@ -22,6 +22,62 @@ import {
   loadLADGeoJson,
 } from "@/lib/geofence"
 
+function toRad(deg: number): number {
+  return (deg * Math.PI) / 180
+}
+
+function haversineKm(a: [number, number], b: [number, number]): number {
+  const R = 6371 // km
+  const lat1 = toRad(a[1])
+  const lat2 = toRad(b[1])
+  const dLat = toRad(b[1] - a[1])
+  const dLon = toRad(b[0] - a[0])
+
+  const sinDLat = Math.sin(dLat / 2)
+  const sinDLon = Math.sin(dLon / 2)
+  const aa =
+    sinDLat * sinDLat +
+    Math.cos(lat1) * Math.cos(lat2) * (sinDLon * sinDLon)
+  const c = 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa))
+  return R * c
+}
+
+/**
+ * Compute centroid for a polygon ring using the standard planar polygon centroid formula.
+ * For our use-case (circles approximated by polygons, UK-scale), this is sufficiently stable.
+ */
+function ringCentroid(ring: [number, number][]): [number, number] | null {
+  if (!ring || ring.length < 4) return null // need at least 3 vertices + closure
+
+  let twiceArea = 0
+  let cx = 0
+  let cy = 0
+
+  for (let i = 0; i < ring.length - 1; i++) {
+    const [x0, y0] = ring[i]
+    const [x1, y1] = ring[i + 1]
+    const cross = x0 * y1 - x1 * y0
+    twiceArea += cross
+    cx += (x0 + x1) * cross
+    cy += (y0 + y1) * cross
+  }
+
+  if (Math.abs(twiceArea) < 1e-12) {
+    // Fallback: simple average of vertices (excluding closing point)
+    const n = ring.length - 1
+    let ax = 0
+    let ay = 0
+    for (let i = 0; i < n; i++) {
+      ax += ring[i][0]
+      ay += ring[i][1]
+    }
+    return [ax / n, ay / n]
+  }
+
+  const area6 = 3 * twiceArea // 6A where A = twiceArea/2
+  return [cx / area6, cy / area6]
+}
+
 interface UseGeofenceOptions {
   /** Data year for metric fetching */
   year: number
@@ -115,7 +171,21 @@ export function useGeofence(options: UseGeofenceOptions): UseGeofenceReturn {
       return
     }
     
-    const geofence = createGeofence(polygon, mode)
+    const geofence = (() => {
+      // If this came from "circle" drawing, enrich with derived center + radius
+      if (mode === "circle" && polygon.type === "Polygon") {
+        const ring = polygon.coordinates?.[0] as [number, number][] | undefined
+        const center = ring ? ringCentroid(ring) : null
+        const edge = ring?.[0]
+
+        if (center && edge) {
+          const radiusKm = haversineKm(center, edge)
+          return createGeofence(polygon, mode, { center, radiusKm })
+        }
+      }
+
+      return createGeofence(polygon, mode)
+    })()
     
     setState((prev) => ({
       ...prev,

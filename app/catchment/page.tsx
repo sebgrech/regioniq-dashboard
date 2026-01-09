@@ -347,6 +347,9 @@ function CatchmentContent() {
 
   // Get the drawn polygon for visualization (if any)
   const drawnPolygon = geofenceState.geofence?.polygon
+  const circleCenter = geofenceState.geofence?.mode === "circle"
+    ? geofenceState.geofence.center
+    : null
 
   return (
     <div className="flex flex-col h-screen bg-background">
@@ -602,6 +605,44 @@ function CatchmentContent() {
                   paint={{
                     "line-color": "#2563eb",
                     "line-width": 3,
+                  }}
+                />
+              </Source>
+            )}
+
+            {/* Circle center marker (for circle catchments) */}
+            {circleCenter && (
+              <Source
+                id="geofence-circle-center"
+                type="geojson"
+                data={{
+                  type: "Feature",
+                  properties: {},
+                  geometry: {
+                    type: "Point",
+                    coordinates: circleCenter,
+                  },
+                }}
+              >
+                {/* subtle halo */}
+                <Layer
+                  id="geofence-circle-center-halo"
+                  type="circle"
+                  paint={{
+                    "circle-radius": 10,
+                    "circle-color": "#f97316",
+                    "circle-opacity": 0.25,
+                  }}
+                />
+                {/* crisp center dot */}
+                <Layer
+                  id="geofence-circle-center-dot"
+                  type="circle"
+                  paint={{
+                    "circle-radius": 5,
+                    "circle-color": "#ffffff",
+                    "circle-stroke-color": "#f97316",
+                    "circle-stroke-width": 2,
                   }}
                 />
               </Source>
