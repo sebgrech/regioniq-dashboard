@@ -245,7 +245,7 @@ export function DashboardControls({
             size="sm"
             className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
           >
-            <Link href="/developers">
+            <Link href="/developers" id="tour-api-button">
               <Code2 className="h-4 w-4" />
               <span className="hidden sm:inline">API</span>
             </Link>

@@ -119,6 +119,13 @@ export function OnboardingTour(props: {
         targetId: "tour-year-selector",
       },
       {
+        id: "api",
+        title: "API Access",
+        description:
+          "Build on our data: generate API keys to pull forecasts directly into your own systems.",
+        targetId: "tour-api-button",
+      },
+      {
         id: "kpi",
         title: "KPI cards (quick drill-down)",
         description:
