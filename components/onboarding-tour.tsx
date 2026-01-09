@@ -122,7 +122,7 @@ export function OnboardingTour(props: {
         id: "api",
         title: "API Access",
         description:
-          "Build on our data: generate API keys to pull forecasts directly into your own systems.",
+          "Build on our data: click your profile to generate API keys and pull forecasts into your own systems.",
         targetId: "tour-api-button",
       },
       {

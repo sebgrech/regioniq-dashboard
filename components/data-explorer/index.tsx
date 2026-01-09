@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState, useRef, useTransition } from "react"
-import { Download, RefreshCw, Code2, AlertCircle, Loader2, Check, FileText, FileSpreadsheet, Link2 } from "lucide-react"
+import { Download, RefreshCw, Code2, AlertCircle, Loader2, Check, FileText, FileSpreadsheet, Link2, Copy, Terminal, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { LoadingOverlay, FadeUp } from "@/components/ui/animate"
@@ -83,6 +83,8 @@ export function DataExplorer({
   const [apiOpen, setApiOpen] = useState(false)
   const [initialLoad, setInitialLoad] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [copiedCurl, setCopiedCurl] = useState(false)
+  const [copiedPython, setCopiedPython] = useState(false)
 
   // Debounce ref
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
@@ -579,23 +581,139 @@ export function DataExplorer({
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="mt-4 space-y-4 p-4 rounded-lg border bg-muted/10">
-            <div>
-              <div className="text-xs font-medium text-muted-foreground mb-2">Endpoint</div>
-              <code className="text-xs bg-muted px-2 py-1 rounded">{dataUrl}</code>
+          <div className="mt-4 space-y-4 p-4 rounded-xl border bg-card">
+            {/* External API section - for partners */}
+            <div className="p-4 rounded-lg border border-primary/20 bg-primary/[0.02]">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Terminal className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">Use this query via API</span>
+                </div>
+                <a
+                  href="https://api.regioniq.io/docs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline flex items-center gap-1"
+                >
+                  API Docs <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              
+              <div className="text-xs text-muted-foreground mb-4">
+                Copy a ready-to-run script with your current query. Just add your API key.
+              </div>
+
+              {/* Endpoint */}
+              <div className="text-xs font-medium text-muted-foreground mb-1.5">Endpoint</div>
+              <code className="text-xs font-mono bg-muted px-2.5 py-1.5 rounded-md block mb-4 text-foreground border">
+                POST https://api.regioniq.io/api/v1/observations/query
+              </code>
+
+              {/* Copy buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-2 h-9"
+                  onClick={() => {
+                    const curlCmd = `curl -X POST https://api.regioniq.io/api/v1/observations/query \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '${JSON.stringify(requestBody, null, 2).replace(/'/g, "'\\''")}'`
+                    navigator.clipboard.writeText(curlCmd)
+                    setCopiedCurl(true)
+                    setTimeout(() => setCopiedCurl(false), 2000)
+                  }}
+                >
+                  {copiedCurl ? <Check className="h-4 w-4 text-green-500" /> : <Terminal className="h-4 w-4" />}
+                  {copiedCurl ? "Copied!" : "Copy curl"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-2 h-9"
+                  onClick={() => {
+                    const pythonScript = `"""
+RegionIQ API Query
+Generated from Data Explorer
+"""
+import requests
+import pandas as pd
+
+# ============================================
+# 1. Paste your API key here
+#    Get one at: https://app.regioniq.io/developers
+# ============================================
+API_KEY = "riq_live_YOUR_KEY_HERE"
+
+# ============================================
+# 2. Your query (auto-generated)
+# ============================================
+query = ${JSON.stringify(requestBody, null, 4)}
+
+# ============================================
+# 3. Run the query
+# ============================================
+response = requests.post(
+    "https://api.regioniq.io/api/v1/observations/query",
+    headers={
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json",
+    },
+    json=query,
+)
+
+if response.status_code != 200:
+    print(f"Error: {response.status_code}")
+    print(response.text)
+    exit(1)
+
+data = response.json()
+print(f"✓ Loaded {len(data['data'])} records (vintage: {data['meta']['vintage']})")
+
+# ============================================
+# 4. Convert to DataFrame and save to Excel
+# ============================================
+df = pd.DataFrame(data["data"])
+df.to_excel("regioniq_data.xlsx", index=False)
+print("✓ Saved to regioniq_data.xlsx")
+
+# Preview
+print(df.head())
+`
+                    navigator.clipboard.writeText(pythonScript)
+                    setCopiedPython(true)
+                    setTimeout(() => setCopiedPython(false), 2000)
+                  }}
+                >
+                  {copiedPython ? <Check className="h-4 w-4 text-green-500" /> : <FileSpreadsheet className="h-4 w-4" />}
+                  {copiedPython ? "Copied!" : "Copy Python → Excel"}
+                </Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Need an API key?{" "}
+                <a href="/developers" className="text-primary hover:underline font-medium">
+                  Generate one here →
+                </a>
+              </p>
             </div>
+
+            {/* Request body */}
             <div>
-              <div className="text-xs font-medium text-muted-foreground mb-2">Request body</div>
-              <pre className="text-xs bg-muted rounded-md p-3 overflow-auto max-h-[200px]">
+              <div className="text-xs font-medium text-muted-foreground mb-2">Request body (JSON)</div>
+              <pre className="text-xs font-mono bg-muted rounded-lg p-3 overflow-auto max-h-[200px] border text-foreground">
                 {JSON.stringify(requestBody, null, 2)}
               </pre>
             </div>
+
+            {/* Response preview */}
             {result && (
               <div>
                 <div className="text-xs font-medium text-muted-foreground mb-2">
-                  Response ({(result?.data?.length ?? 0).toLocaleString()} records)
+                  Response preview ({(result?.data?.length ?? 0).toLocaleString()} records)
                 </div>
-                <pre className="text-xs bg-muted rounded-md p-3 overflow-auto max-h-[200px]">
+                <pre className="text-xs font-mono bg-muted rounded-lg p-3 overflow-auto max-h-[200px] border text-foreground">
                   {JSON.stringify(result?.data?.slice(0, 5) ?? null, null, 2)}
                   {(result?.data?.length ?? 0) > 5 && "\n// ... truncated"}
                 </pre>
