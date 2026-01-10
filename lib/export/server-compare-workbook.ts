@@ -1,22 +1,22 @@
 import path from "path"
 import { readFile } from "fs/promises"
 import ExcelJS from "exceljs"
-import { YEARS } from "@/lib/metrics.config"
 
-function getPngDimensions(buf: Buffer): { width: number; height: number } | null {
-  if (!buf || buf.length < 24) return null
+function getPngDimensions(buf: Uint8Array): { width: number; height: number } | null {
+  const b = Buffer.isBuffer(buf) ? buf : Buffer.from(buf)
+  if (!b || b.length < 24) return null
   const isPng =
-    buf[0] === 0x89 &&
-    buf[1] === 0x50 &&
-    buf[2] === 0x4e &&
-    buf[3] === 0x47 &&
-    buf[4] === 0x0d &&
-    buf[5] === 0x0a &&
-    buf[6] === 0x1a &&
-    buf[7] === 0x0a
+    b[0] === 0x89 &&
+    b[1] === 0x50 &&
+    b[2] === 0x4e &&
+    b[3] === 0x47 &&
+    b[4] === 0x0d &&
+    b[5] === 0x0a &&
+    b[6] === 0x1a &&
+    b[7] === 0x0a
   if (!isPng) return null
-  const width = buf.readUInt32BE(16)
-  const height = buf.readUInt32BE(20)
+  const width = b.readUInt32BE(16)
+  const height = b.readUInt32BE(20)
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null
   return { width, height }
 }
@@ -85,8 +85,10 @@ export async function buildCompareWorkbook(params: {
   try {
     const logoPath = path.join(process.cwd(), "public", "x.png")
     const image = await readFile(logoPath)
-    const imageId = wb.addImage({ buffer: image, extension: "png" })
-    const dims = getPngDimensions(image as Buffer)
+    const imageBuf = Buffer.from(image)
+    // ExcelJS' Buffer typing can lag Node's generic Buffer typing; runtime expects a Node Buffer.
+    const imageId = wb.addImage({ buffer: imageBuf as any, extension: "png" })
+    const dims = getPngDimensions(imageBuf)
     const targetW = 120
     const targetH = dims ? Math.round((targetW * dims.height) / dims.width) : 60
     info.addImage(imageId, { tl: { col: 3.15, row: 0.15 }, ext: { width: targetW, height: targetH } })
@@ -151,14 +153,42 @@ export async function buildCompareWorkbook(params: {
   // - Forecast values use indigo for clear visual separation (matches UI)
   const forecastFont = { color: { argb: "FF6366F1" } } // Indigo-500
   const historicalFont = { color: { argb: "FF374151" } } // Gray-700
-  const forecastStart = YEARS.forecastStart
-  for (let c = 2; c <= ts.columnCount; c++) {
-    const headerVal = String(ts.getRow(1).getCell(c).value ?? "")
-    const yr = Number(headerVal)
-    if (!Number.isFinite(yr) || yr < forecastStart) continue
-    for (let r = 2; r <= ts.rowCount; r++) {
-      const cell = ts.getRow(r).getCell(c)
-      cell.font = { ...(cell.font ?? {}), ...forecastFont }
+
+  // IMPORTANT: Do NOT infer forecast cutovers from a global year.
+  // Different region series can have different last-published historical years (e.g. UK vs LAD).
+  // We therefore style forecast cells using API-derived `Data Type` per Region Code + Year,
+  // without changing the Time Series sheet structure or values.
+  const regionCodeByRegionLabel = new Map<string, string>()
+  const isForecastByRegionCodeYear = new Set<string>()
+  for (const r of canonicalRows ?? []) {
+    const regionLabel = String(r.Region ?? "")
+    const regionCode = String(r["Region Code"] ?? "")
+    const year = typeof r.Year === "number" ? r.Year : Number(r.Year)
+    const dataType = String(r["Data Type"] ?? "").toLowerCase()
+    if (regionLabel && regionCode && !regionCodeByRegionLabel.has(regionLabel)) {
+      regionCodeByRegionLabel.set(regionLabel, regionCode)
+    }
+    if (regionCode && Number.isFinite(year) && dataType === "forecast") {
+      isForecastByRegionCodeYear.add(`${regionCode}::${year}`)
+    }
+  }
+
+  // Style only the cells that correspond to forecast rows per the API.
+  // NOTE: We intentionally avoid applying a historical font to preserve existing workbook styling.
+  for (let r = 2; r <= ts.rowCount; r++) {
+    const regionLabel = String(ts.getRow(r).getCell(1).value ?? "")
+    const regionCode = regionCodeByRegionLabel.get(regionLabel)
+    if (!regionCode) continue
+
+    for (let c = 2; c <= ts.columnCount; c++) {
+      const headerVal = String(ts.getRow(1).getCell(c).value ?? "")
+      const yr = Number(headerVal)
+      if (!Number.isFinite(yr)) continue
+
+      if (isForecastByRegionCodeYear.has(`${regionCode}::${yr}`)) {
+        const cell = ts.getRow(r).getCell(c)
+        cell.font = { ...(cell.font ?? {}), ...forecastFont }
+      }
     }
   }
 

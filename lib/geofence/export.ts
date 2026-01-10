@@ -150,4 +150,3 @@ export async function exportCatchmentPPTX(options: ExportOptions & { title?: str
   const filename = `regioniq_catchment_summary_${result.year}_${result.scenario}_${isoDateStamp()}.pptx`
   downloadBlob(blob, filename)
 }
-

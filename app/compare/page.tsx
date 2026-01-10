@@ -95,23 +95,50 @@ const ChartTimeseriesCompare = ({
     setVisible(regions.map(() => true))
   }, [regions])
 
-  // 1) Compute the LAST historical year across all supplied region series
-  const lastHistoricalYear = useMemo(() => {
-    const histYears: number[] = []
-    for (const r of regions ?? []) {
+  // 1) Compute forecast boundaries PER REGION from API data_type
+  // This avoids a single global split year (UK and LAD can differ).
+  const regionBoundaries = useMemo(() => {
+    return (regions ?? []).map((r: any) => {
+      const histYears: number[] = []
+      const fcstYears: number[] = []
+
       for (const pt of r?.data ?? []) {
         const year = (pt.year ?? pt.period) as number
         const t = (pt.type ?? pt.data_type) as "historical" | "forecast" | undefined
-        if (year != null && t === "historical") histYears.push(year)
+        if (year == null) continue
+        if (t === "historical") histYears.push(year)
+        else if (t === "forecast") fcstYears.push(year)
       }
-    }
-    if (!histYears.length) return null
-    return Math.max(...histYears)
+
+      const lastHistoricalYear = histYears.length ? Math.max(...histYears) : null
+      const forecastStartYear = fcstYears.length ? Math.min(...fcstYears) : null
+      return { lastHistoricalYear, forecastStartYear }
+    })
   }, [regions])
 
+  // Earliest forecast start year across selected regions.
+  // Useful as a visual cue when different regions switch at different times.
+  const earliestForecastStartYear = useMemo(() => {
+    if (!regionBoundaries.length) return null
+    const years = regionBoundaries
+      .map((b: { forecastStartYear: number | null }) => b.forecastStartYear)
+      .filter((y: number | null): y is number => typeof y === "number")
+    if (!years.length) return null
+    return Math.min(...years)
+  }, [regionBoundaries])
+
+  const hasMixedForecastStart = useMemo(() => {
+    const years = regionBoundaries
+      .map((b: { forecastStartYear: number | null }) => b.forecastStartYear)
+      .filter((y: number | null): y is number => typeof y === "number")
+    if (!years.length) return false
+    const first = years[0]
+    return !years.every((y: number) => y === first)
+  }, [regionBoundaries])
+
   // 2) Build a combined year → values map with SPLIT keys per region:
-  //    region{idx}_hist for years <= lastHistoricalYear, region{idx}_fcst for > lastHistoricalYear.
-  //    We also tag each row's "type" so the tooltip shows Historical/Forecast correctly.
+  //    region{idx}_hist for historical points, region{idx}_fcst for forecast points.
+  //    We rely on API `data_type` per point; when missing, we infer using the per-region boundary.
   const chartData = useMemo(() => {
     if (!regions?.length) return []
 
@@ -130,6 +157,7 @@ const ChartTimeseriesCompare = ({
     regions.forEach(({ data }: any, idx: number) => {
       const kHist = `region${idx}_hist`
       const kFcst = `region${idx}_fcst`
+      const boundary = regionBoundaries[idx] ?? { lastHistoricalYear: null, forecastStartYear: null }
 
       for (const pt of data ?? []) {
         const y = (pt.year ?? pt.period) as number
@@ -138,33 +166,36 @@ const ChartTimeseriesCompare = ({
         const t = (pt.type ?? pt.data_type) as "historical" | "forecast" | undefined
 
         // Decide forecast vs historical per point.
-        // Prefer the provided type; fall back to the lastHistoricalYear threshold.
-        const isForecast = t ? t === "forecast" : (lastHistoricalYear != null ? y > lastHistoricalYear : false)
+        // Prefer the provided type; fall back to per-region boundary inference.
+        const isForecast = t
+          ? t === "forecast"
+          : boundary.forecastStartYear != null
+            ? y >= boundary.forecastStartYear
+            : boundary.lastHistoricalYear != null
+              ? y > boundary.lastHistoricalYear
+              : false
 
         if (isForecast) row[kFcst] = pt.value
         else row[kHist] = pt.value
       }
     })
 
-    // To connect the lines without gap, duplicate the last historical value into the forecast key for each region
-    if (lastHistoricalYear != null) {
-      for (let idx = 0; idx < regions.length; idx++) {
-        const kHist = `region${idx}_hist`
-        const kFcst = `region${idx}_fcst`
-        const row = yearMap.get(lastHistoricalYear)
-        if (row && row[kHist] != null && row[kFcst] == null) {
-          row[kFcst] = row[kHist]
-        }
+    // Ensure no visible gap at each region's transition:
+    // At the FIRST forecast year, copy the forecast point into the historical key (for that one year only)
+    // so solid and dashed series touch, while dashed still starts at the forecast year.
+    for (let idx = 0; idx < regions.length; idx++) {
+      const kHist = `region${idx}_hist`
+      const kFcst = `region${idx}_fcst`
+      const fs = regionBoundaries[idx]?.forecastStartYear
+      if (fs == null) continue
+      const row = yearMap.get(fs)
+      if (row && row[kFcst] != null && row[kHist] == null) {
+        row[kHist] = row[kFcst]
       }
     }
 
-    // Tag the row type by the year threshold so tooltip stays consistent across regions
-    for (const row of yearMap.values()) {
-      row.type = lastHistoricalYear != null && row.year <= lastHistoricalYear ? "historical" : "forecast"
-    }
-
     return Array.from(yearMap.values()).sort((a, b) => a.year - b.year)
-  }, [regions, lastHistoricalYear])
+  }, [regions, regionBoundaries])
 
   // Available years for index base year dropdown
   const availableBaseYears = useMemo(() => {
@@ -327,7 +358,9 @@ const ChartTimeseriesCompare = ({
   // 3) Custom tooltip (deduces region name from key "region{idx}_hist|_fcst")
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload || !payload.length) return null
-    const rowType = payload[0]?.payload?.type
+    const hasHist = payload.some((e: any) => String(e?.dataKey ?? "").includes("_hist"))
+    const hasFcst = payload.some((e: any) => String(e?.dataKey ?? "").includes("_fcst"))
+    const rowType = hasHist && hasFcst ? "mixed" : hasFcst ? "forecast" : "historical"
     const seen = new Set<number>() // avoid dup same region from hist/fcst overlap (shouldn't occur, but safe)
 
     // Recharts does not guarantee payload ordering; enforce region order (region0, region1, ...)
@@ -341,9 +374,11 @@ const ChartTimeseriesCompare = ({
         const ai = am ? parseInt(am[1], 10) : 999
         const bi = bm ? parseInt(bm[1], 10) : 999
         if (ai !== bi) return ai - bi
-        const aHist = ak.includes("_hist")
-        const bHist = bk.includes("_hist")
-        if (aHist !== bHist) return aHist ? -1 : 1
+        // Prefer forecast entries over historical when both exist (transition year),
+        // so the tooltip reflects that this year is forecast for that region.
+        const aFcst = ak.includes("_fcst")
+        const bFcst = bk.includes("_fcst")
+        if (aFcst !== bFcst) return aFcst ? -1 : 1
         return String(a?.name ?? ak).localeCompare(String(b?.name ?? bk))
       })
 
@@ -351,8 +386,12 @@ const ChartTimeseriesCompare = ({
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2 min-w-[180px]">
         <div className="flex items-center gap-2 mb-1.5">
           <span className="font-medium text-gray-900 dark:text-gray-100 text-sm">{label}</span>
-          <Badge variant={rowType === "historical" ? "secondary" : "outline"} className="text-[10px] px-1.5 py-0">
-            {rowType === "historical" ? "Historical" : "Forecast"}
+          <Badge
+            variant={rowType === "historical" ? "secondary" : "outline"}
+            className="text-[10px] px-1.5 py-0"
+            title={rowType === "mixed" ? "Some regions are historical, others are forecast in this year" : undefined}
+          >
+            {rowType === "mixed" ? "Mixed" : rowType === "historical" ? "Historical" : "Forecast"}
           </Badge>
           {isIndexed && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-indigo-600 border-indigo-300">
@@ -367,11 +406,13 @@ const ChartTimeseriesCompare = ({
               if (idx >= 0 && seen.has(idx)) return null
               if (idx >= 0) seen.add(idx)
               const regionName = idx >= 0 ? (regions[idx]?.regionName ?? `Region ${idx + 1}`) : entry.dataKey
+              const entryType = String(entry.dataKey).includes("_fcst") ? "Forecast" : "Historical"
               return (
                 <div key={i} className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-1.5">
                     <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
                     <span className="text-xs text-gray-600 dark:text-gray-400">{regionName}</span>
+                    <span className="text-[10px] text-gray-500 dark:text-gray-500">{entryType}</span>
                   </div>
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                     {isIndexed ? entry.value.toFixed(1) : formatValue(entry.value, unit)}
@@ -548,10 +589,10 @@ const ChartTimeseriesCompare = ({
                 />
               )}
 
-              {/* Forecast divider on LAST historical year */}
-              {lastHistoricalYear != null && (
+              {/* Forecast divider at earliest forecast start year */}
+              {earliestForecastStartYear != null && (
                 <ReferenceLine
-                  x={lastHistoricalYear}
+                  x={earliestForecastStartYear}
                   stroke="#9ca3af"
                   strokeDasharray="5 5"
                   strokeOpacity={0.8}
@@ -565,7 +606,7 @@ const ChartTimeseriesCompare = ({
                         fontSize={12}
                         textAnchor="start"
                       >
-                        Forecast
+                        {hasMixedForecastStart ? "Forecast (some regions)" : "Forecast"}
                       </text>
                     )
                   }}
@@ -695,7 +736,7 @@ const ChartTimeseriesCompare = ({
             </div>
           </div>
           <div className="text-xs">
-            Divider marks last historical year • forecast is dashed.
+            Forecast is dashed; boundary may vary by region.
           </div>
         </div>
       </CardContent>
@@ -1094,6 +1135,7 @@ function CompareContent() {
   const [comparisonData, setComparisonData] = useState<ComparisonData>({})
   const [isLoading, setIsLoading] = useState(false)
   const [barChartYear, setBarChartYear] = useState<number>(year)
+  const [barAutoScale, setBarAutoScale] = useState(false)
   
   // Indexed chart state (lifted to page level for exports)
   const [isIndexed, setIsIndexed] = useState(false)
@@ -1400,6 +1442,51 @@ function CompareContent() {
       .sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
   }, [chartRegions, barChartYear, barLastHistoricalYear])
 
+  // Fixed X-axis domain for the snapshot chart:
+  // compute over ALL selected regions and ALL available years so scrubbing doesn't re-scale.
+  const barFixedDomain = useMemo((): [number, number] => {
+    const values: number[] = []
+    for (const region of chartRegions) {
+      for (const pt of region.data ?? []) {
+        const v = (pt as any)?.value
+        if (typeof v === "number" && Number.isFinite(v)) values.push(v)
+      }
+    }
+    if (!values.length) return [0, 1]
+    let min = Math.min(...values)
+    let max = Math.max(...values)
+    if (min === max) {
+      // Avoid zero-width domains
+      const bump = min === 0 ? 1 : Math.abs(min) * 0.05
+      min = min - bump
+      max = max + bump
+    }
+    // Avoid negative lower bounds when the whole series is non-negative
+    if (min >= 0) min = 0
+    const range = max - min
+    const pad = range > 0 ? range * 0.05 : Math.abs(max) * 0.05
+    return [min, max + pad]
+  }, [chartRegions])
+
+  // Auto domain for the snapshot chart (per selected year).
+  // For bars, starting from zero is almost always the least misleading default.
+  const barAutoDomain = useMemo((): [number, number] => {
+    const values = barChartData
+      .map((d) => d.value)
+      .filter((v): v is number => typeof v === "number" && Number.isFinite(v))
+    if (!values.length) return [0, 1]
+    const min = Math.min(...values)
+    const max = Math.max(...values)
+    if (min >= 0) {
+      const pad = max === 0 ? 1 : max * 0.05
+      return [0, max + pad]
+    }
+    // Mixed/negative values: pad both ends
+    const range = max - min
+    const pad = range > 0 ? range * 0.05 : Math.abs(max || 1) * 0.05
+    return [min - pad, max + pad]
+  }, [barChartData])
+
   // Bar chart export rows
   const barChartExportRows = useMemo(() => {
     const unit = selectedMetric?.unit || ""
@@ -1603,6 +1690,32 @@ function CompareContent() {
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
+                      <div className="flex items-center rounded-lg border bg-muted/30 p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setBarAutoScale(false)}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            !barAutoScale
+                              ? "bg-white dark:bg-gray-800 shadow-sm text-gray-900 dark:text-gray-100"
+                              : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                          }`}
+                          title="Keep a fixed scale across years"
+                        >
+                          Fixed
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBarAutoScale(true)}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            barAutoScale
+                              ? "bg-white dark:bg-gray-800 shadow-sm text-gray-900 dark:text-gray-100"
+                              : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                          }`}
+                          title="Auto-fit the scale to the selected year"
+                        >
+                          Auto
+                        </button>
+                      </div>
                       {barChartYear > YEARS.forecastStart && (
                         <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
                           Forecast
@@ -1656,6 +1769,7 @@ function CompareContent() {
                           <CartesianGrid strokeDasharray="3 3" opacity={0.3} horizontal={true} vertical={false} />
                           <XAxis
                             type="number"
+                            domain={barAutoScale ? barAutoDomain : barFixedDomain}
                             tickFormatter={(v) => formatValue(v, selectedMetric?.unit || "", 1)}
                             tick={{ fontSize: 12, fill: "#6b7280" }}
                             axisLine={{ stroke: "#e5e7eb" }}
@@ -1724,18 +1838,7 @@ function CompareContent() {
                 </ExportableChartCard>
             </ErrorBoundaryWrapper>
 
-          {/* Rank Persistence Heatmap */}
-          <ErrorBoundaryWrapper name="rank heatmap">
-            <RankHeatmapCard
-              chartRegions={chartRegions}
-              selectedMetric={selectedMetric}
-              metric={metric}
-              scenario={scenario}
-              regionColorMap={regionColorMap}
-              regionColors={regionColors}
-              isLoading={!hasAllData && isLoading}
-            />
-          </ErrorBoundaryWrapper>
+          {/* Rank Trajectory (heatmap) is temporarily hidden for V1 */}
 
           {/* Compare Copilot - HIDDEN FOR V1: Component exists but is not rendered
               To re-enable, uncomment the section below:

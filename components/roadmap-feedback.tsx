@@ -58,28 +58,37 @@ export function RoadmapFeedback({ currentRegion }: RoadmapFeedbackProps) {
 
     setIsSubmitting(true)
 
-    // For now, log to console. Later wire to Supabase or external service.
-    const feedback = {
-      features: Array.from(selectedFeatures),
-      otherMetrics: otherMetrics.trim(),
-      email: email.trim() || null,
-      currentRegion,
-      timestamp: new Date().toISOString(),
-      userAgent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+    try {
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          features: Array.from(selectedFeatures),
+          otherMetrics: otherMetrics.trim() || null,
+          email: email.trim() || null,
+          currentRegion: currentRegion ?? null,
+        }),
+      })
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json?.error || "Failed to submit feedback")
+      }
+
+      setIsSubmitted(true)
+      toast({
+        title: "Thanks for your feedback!",
+        description: "Your input helps us prioritize what to build next.",
+      })
+    } catch (e: any) {
+      toast({
+        title: "Couldn't submit feedback",
+        description: e?.message ?? "Please try again in a moment.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
     }
-
-    console.log("📋 Roadmap Feedback Submitted:", feedback)
-
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 800))
-
-    setIsSubmitting(false)
-    setIsSubmitted(true)
-
-    toast({
-      title: "Thanks for your feedback!",
-      description: "Your input helps us prioritize what to build next.",
-    })
   }
 
   if (isSubmitted) {
