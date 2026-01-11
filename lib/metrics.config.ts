@@ -84,6 +84,16 @@ export const METRICS: Metric[] = [
     color: "hsl(var(--chart-2))",
   },
   {
+    id: "gdhi_total_mn_gbp",
+    title: "Gross Disposable Household Income",
+    shortTitle: "GDHI Total",
+    unit: "£m",
+    icon: PoundSterling,
+    decimals: 0,
+    color: "hsl(var(--chart-3))",
+    showInDashboard: false,
+  },
+  {
     id: "gdhi_per_head_gbp",
     title: "Disposable Income (per head)",
     shortTitle: "GDHI",

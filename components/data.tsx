@@ -16,7 +16,7 @@ import {
   ChevronRight,
   X,
 } from "lucide-react"
-import { YEARS, METRICS, type Scenario } from "@/lib/metrics.config"
+import { YEARS, METRICS, getRegion, type Scenario } from "@/lib/metrics.config"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import { exportCSV } from "@/lib/export"
@@ -38,7 +38,7 @@ type ApiSelection =
 
 type ApiQuery = {
   query: Array<{
-    code: "metric" | "region" | "level" | "year" | "scenario" | "data_type"
+    code: "metric" | "region" | "level" | "year" | "time_period" | "scenario" | "data_type"
     selection: ApiSelection
   }>
   response?: { format: "records" }
@@ -304,17 +304,26 @@ export function MetricDataTab({ metricId, region, regions: initialRegions, year,
     return Array.from({ length: to - from + 1 }, (_, i) => from + i)
   }, [schema])
 
+  // Data API expects a special code for UK macro (K02000001) while the UI uses "UK".
+  // Do NOT remap other region codes (ITL/LAD codes are already API-facing).
+  const regionsForQuery = useMemo(() => {
+    return regions.map((code) => {
+      if (code === "UK") return getRegion("UK")?.dbCode ?? code
+      return code
+    })
+  }, [regions])
+
   const requestBody: ApiQuery = useMemo(() => {
     const years = selectedYears.length ? selectedYears : [year]
     const q: ApiQuery["query"] = [
       { code: "metric", selection: { filter: "item", values: metrics } },
-      { code: "region", selection: { filter: "item", values: regions } },
+      { code: "region", selection: { filter: "item", values: regionsForQuery } },
       // External Data API uses "time_period" instead of "year"
       { code: "time_period", selection: { filter: "item", values: years.map(String) } },
       { code: "scenario", selection: { filter: "item", values: [localScenario] } },
     ]
     return { query: q, response: { format: "records" }, limit: 250000 }
-  }, [metrics, regions, selectedYears, year, localScenario])
+  }, [metrics, regionsForQuery, selectedYears, year, localScenario])
 
   // Use Next.js API route as wrapper around external Data API
   // This ensures auth and CORS are handled consistently
@@ -445,8 +454,16 @@ export function MetricDataTab({ metricId, region, regions: initialRegions, year,
     const rows = (result?.data ?? []) as any[]
     return rows.map((r) => ({
       Metric: metricLabel(r.metric_id ?? r.metric),
-      Region: regionLabel(r.region_code ?? r.region),
-      "Region Code": r.region_code ?? r.region,
+      Region: (() => {
+        const raw = String(r.region_code ?? r.region ?? "")
+        const ui = getRegion(raw)?.code ?? raw
+        return regionLabel(ui)
+      })(),
+      "Region Code": (() => {
+        const raw = String(r.region_code ?? r.region ?? "")
+        const ui = getRegion(raw)?.code ?? raw
+        return ui
+      })(),
       Year: r.time_period ?? r.year,
       Scenario: scenarioLabel(r.scenario),
       Value: typeof r.value === "number" ? r.value : r.value == null ? null : Number(r.value),
