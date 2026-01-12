@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createSupabaseServerClient } from "@/lib/supabase-server"
+import { createSupabaseAdminClient } from "@/lib/supabase-admin"
 
 const BodySchema = z.object({
   features: z.array(z.string()).default([]),
@@ -177,7 +178,10 @@ export async function POST(req: NextRequest) {
   const raw = await req.json().catch(() => ({}))
   const body = BodySchema.parse(raw)
 
-  const insert = await supabase
+  // Use admin client to bypass RLS for server-side insert
+  const adminSupabase = createSupabaseAdminClient()
+
+  const insert = await adminSupabase
     .from("roadmap_feedback")
     .insert({
       user_id: user.id,
@@ -213,7 +217,7 @@ export async function POST(req: NextRequest) {
     })
 
     if (notion.ok) {
-      await supabase
+      await adminSupabase
         .from("roadmap_feedback")
         .update({
           notion_page_id: notion.notionPageId,
@@ -223,7 +227,7 @@ export async function POST(req: NextRequest) {
         })
         .eq("id", row.id)
     } else {
-      await supabase
+      await adminSupabase
         .from("roadmap_feedback")
         .update({
           notion_sync_status: "error",
@@ -232,7 +236,7 @@ export async function POST(req: NextRequest) {
         .eq("id", row.id)
     }
   } catch (e: any) {
-    await supabase
+    await adminSupabase
       .from("roadmap_feedback")
       .update({
         notion_sync_status: "error",
