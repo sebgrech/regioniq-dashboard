@@ -206,13 +206,11 @@ export function RegionPicker({
               variant="ghost"
               size="sm"
               className="h-8 text-xs"
-              onClick={() => {
-                // TODO: Open map modal
-                console.log("Open map picker")
-              }}
+              disabled
+              title="Pick on map is not available yet."
             >
               <Map className="h-3 w-3 mr-1" />
-              Pick on Map
+              Pick on Map (soon)
             </Button>
 
             {multiSelect && selectedRegions.length > 0 && (
