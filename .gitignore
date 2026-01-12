@@ -46,3 +46,5 @@ dist/
 tsconfig.tsbuildinfo
 .vercel
 main
+
+.mp4
