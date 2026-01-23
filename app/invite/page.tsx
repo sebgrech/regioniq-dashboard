@@ -5,8 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowRight, MapPin, Search, Check, ChevronDown } from "lucide-react"
 import { REGIONS, type Region } from "@/lib/metrics.config"
 
-// Group regions by country for the picker
-const GROUPED_REGIONS = REGIONS.filter(r => ["ITL1", "ITL2"].includes(r.level)).reduce(
+// Group regions by country for the picker (include LAD level for local identification)
+const GROUPED_REGIONS = REGIONS.filter(r => ["ITL1", "ITL2", "ITL3", "LAD"].includes(r.level)).reduce(
   (acc, region) => {
     const country = region.country
     if (!acc[country]) acc[country] = []
@@ -230,7 +230,9 @@ export default function InvitePage() {
         localStorage.setItem("riq:just-logged-in", "1")
       } catch {}
 
-      router.replace(returnTo)
+      // Redirect to dashboard with the selected home region
+      const separator = returnTo.includes('?') ? '&' : '?'
+      router.replace(`${returnTo}${separator}region=${homeRegion}`)
       router.refresh()
     } catch (err: any) {
       setError(err?.message || "Something went wrong")

@@ -563,7 +563,7 @@ export default function MetricDetailContent({ id }: { id: string }) {
       <div className="container mx-auto px-4 py-8">
         <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="space-y-8">
           {/* Conditionally show 4 tabs for UK (no Regional), 5 tabs for other regions */}
-          <TabsList className={`grid w-full ${isUK ? "grid-cols-4" : "grid-cols-5"}`}>
+          <TabsList className={`grid w-full ${isUK ? "grid-cols-3" : "grid-cols-5"}`}>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="scenarios">Scenarios</TabsTrigger>
             {!isUK && <TabsTrigger value="regional">Regional</TabsTrigger>}
