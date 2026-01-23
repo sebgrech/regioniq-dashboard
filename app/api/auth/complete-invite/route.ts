@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server"
 const BodySchema = z.object({
   fullName: z.string().trim().max(120).optional(),
   password: z.string().min(8, "Password must be at least 8 characters"),
+  homeRegion: z.string().max(20).optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -21,8 +22,14 @@ export async function POST(req: NextRequest) {
     const update: { password: string; data?: Record<string, any> } = {
       password: body.password,
     }
-    if (body.fullName) {
-      update.data = { full_name: body.fullName }
+    
+    // Build user_metadata with optional fields
+    const metadata: Record<string, any> = {}
+    if (body.fullName) metadata.full_name = body.fullName
+    if (body.homeRegion) metadata.home_region = body.homeRegion
+    
+    if (Object.keys(metadata).length > 0) {
+      update.data = metadata
     }
 
     const { error } = await supabase.auth.updateUser(update)

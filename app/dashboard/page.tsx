@@ -321,17 +321,31 @@ function DashboardContent() {
     router.push(`?${newParams}`, { scroll: false })
   }
 
-  // Sync localStorage to URL on client mount (after hydration) - only once
+  // Sync region: URL param > localStorage > user's home_region > default "UKI"
+  // Runs once on mount, and again when user loads (to pick up home_region if no other preference)
+  const hasAppliedHomeRegion = useRef(false)
   useEffect(() => {
     if (typeof window === "undefined") return
+    
     const urlRegion = searchParams?.get("region")
     if (!urlRegion) {
-      // If no URL param, check localStorage and update URL
+      // If no URL param, check localStorage first
       const savedRegion = localStorage.getItem(REGION_KEY)
       if (savedRegion && savedRegion !== region) {
         // Avoid momentarily zooming/fitting to a stale metadata region before the URL sync lands.
         setSelectedRegionMetadata(null)
         updateURL({ region: savedRegion })
+        return
+      }
+      
+      // If no localStorage and user is loaded with a home_region, use that (only once)
+      if (!savedRegion && user && !hasAppliedHomeRegion.current) {
+        const userHomeRegion = (user as any)?.user_metadata?.home_region
+        if (userHomeRegion && userHomeRegion !== region) {
+          hasAppliedHomeRegion.current = true
+          setSelectedRegionMetadata(null)
+          updateURL({ region: userHomeRegion })
+        }
       }
     } else {
       // Save URL param to localStorage
@@ -340,7 +354,7 @@ function DashboardContent() {
       } catch {}
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Only run once on mount
+  }, [user]) // Re-run when user loads to check for home_region
 
   const handleRegionChange = (metadata: import("@/components/region-search").RegionMetadata) => {
     // Reset confetti celebrations when region changes
