@@ -84,8 +84,9 @@ export function OnboardingTour(props: {
   isUK: boolean
   onFinish: () => void
   userName?: string | null
+  apiAccess?: boolean
 }) {
-  const { open, onOpenChange, isUK, onFinish, userName } = props
+  const { open, onOpenChange, isUK, onFinish, userName, apiAccess = true } = props
   const [stepIdx, setStepIdx] = useState(0)
   const [mounted, setMounted] = useState(false)
   const [showWelcomeIntro, setShowWelcomeIntro] = useState(false)
@@ -118,13 +119,20 @@ export function OnboardingTour(props: {
           "Try it: flip between Actual and forecast years to see how the picture shifts.",
         targetId: "tour-year-selector",
       },
-      {
+    ]
+
+    // Only show API step if user has API access
+    if (apiAccess !== false) {
+      base.push({
         id: "api",
         title: "API Access",
         description:
           "Build on our data: click your profile to generate API keys and pull forecasts into your own systems.",
         targetId: "tour-api-button",
-      },
+      })
+    }
+
+    base.push(
       {
         id: "kpi",
         title: "KPI cards (quick drill-down)",
@@ -139,7 +147,7 @@ export function OnboardingTour(props: {
           "Try it: click a region on the map. This view is the fastest way to spot patterns geographically.",
         targetId: "tour-map-viewport",
       },
-    ]
+    )
 
     // Action cards (explicit steps so the tour matches what users can actually click).
     base.push({
@@ -198,7 +206,7 @@ export function OnboardingTour(props: {
     })
 
     return base
-  }, [isUK])
+  }, [isUK, apiAccess])
 
   const current = steps[Math.min(stepIdx, steps.length - 1)]
   const isFirst = stepIdx === 0

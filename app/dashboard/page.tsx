@@ -971,6 +971,7 @@ function DashboardContent() {
         isUK={isUK}
         onFinish={markTourSeen}
         userName={displayName}
+        apiAccess={(user as any)?.user_metadata?.api_access !== false}
       />
     </div>
   )
