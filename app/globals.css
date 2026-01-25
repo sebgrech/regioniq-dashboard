@@ -1051,3 +1051,41 @@
 .animation-delay-800 { 
   animation-delay: 800ms; 
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CHECKMARK ANIMATION - Linear/Stripe-style success indicator
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Circle draw animation - draws the outer circle */
+@keyframes circle-draw {
+  from { 
+    stroke-dashoffset: 151; 
+  }
+  to { 
+    stroke-dashoffset: 0; 
+  }
+}
+
+/* Checkmark draw animation - draws the checkmark path */
+@keyframes check-draw {
+  from { 
+    stroke-dashoffset: 36; 
+  }
+  to { 
+    stroke-dashoffset: 0; 
+  }
+}
+
+/* Circle animation class */
+.animate-circle-draw {
+  stroke-dasharray: 151;
+  stroke-dashoffset: 151;
+  animation: circle-draw 0.5s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+
+/* Checkmark animation class - delayed to start after circle */
+.animate-check-draw {
+  stroke-dasharray: 36;
+  stroke-dashoffset: 36;
+  animation: check-draw 0.35s cubic-bezier(0.65, 0, 0.35, 1) 0.35s forwards;
+}
