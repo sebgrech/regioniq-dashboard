@@ -543,28 +543,29 @@ export default function InvitePage() {
                       className={[
                         "mt-2 inline-flex h-10 items-center justify-center rounded-xl px-4",
                         "bg-white/10 hover:bg-white/14 text-white/90",
-                        "transition-all duration-200",
+                        "transition-all duration-200 cursor-pointer",
                       ].join(" ")}
                     >
                       Back to login
                     </button>
                   </div>
                 ) : !user ? (
-                  <div className="space-y-2">
-                    <div className="text-[14px] font-medium text-white">Invite not active</div>
+                  <div className="space-y-3">
+                    <div className="text-[14px] font-medium text-white">Link expired</div>
                     <div className="text-[13px] text-white/45">
-                      This invite link is invalid or expired. Ask for a new invite link.
+                      This link is no longer valid. Request a new one to continue.
                     </div>
                     <button
                       type="button"
-                      onClick={() => router.replace("/login")}
+                      onClick={() => router.replace("/login?mode=request")}
                       className={[
                         "mt-2 inline-flex h-10 items-center justify-center rounded-xl px-4",
-                        "bg-white/10 hover:bg-white/14 text-white/90",
-                        "transition-all duration-200",
+                        "bg-white text-[hsl(220,48%,9%)] font-medium",
+                        "hover:shadow-lg hover:shadow-white/10 hover:scale-[1.01]",
+                        "transition-all duration-200 cursor-pointer",
                       ].join(" ")}
                     >
-                      Back to login
+                      Request new link
                     </button>
                   </div>
                 ) : (

@@ -50,7 +50,14 @@ export default function LandingPage() {
   })
 
   // Auth mode: 'signin' or 'request'
-  const [mode, setMode] = useState<'signin' | 'request'>('signin')
+  const [mode, setMode] = useState<'signin' | 'request'>(() => {
+    // Check URL param for initial mode (e.g., from expired invite redirect)
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      return params.get("mode") === 'request' ? 'request' : 'signin'
+    }
+    return 'signin'
+  })
   
   // Sign in state
   const [email, setEmail] = useState("")
