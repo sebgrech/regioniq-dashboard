@@ -751,9 +751,9 @@ export default function InvitePage() {
                       className={[
                         "group relative w-full h-12 rounded-xl px-4 overflow-hidden",
                         "bg-white text-[hsl(220,48%,9%)] font-medium",
-                        "transition-all duration-200",
-                        "hover:shadow-lg hover:shadow-white/10 active:scale-[0.99]",
-                        "disabled:opacity-40 disabled:pointer-events-none",
+                        "transition-all duration-200 cursor-pointer",
+                        "hover:shadow-lg hover:shadow-white/10 hover:scale-[1.01] active:scale-[0.99]",
+                        "disabled:opacity-40 disabled:pointer-events-none disabled:cursor-not-allowed",
                         "flex items-center justify-center gap-2",
                       ].join(" ")}
                     >

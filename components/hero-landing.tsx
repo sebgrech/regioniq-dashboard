@@ -2,19 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ArrowRight, MapPin, Search, Check, ChevronDown } from "lucide-react"
-import { REGIONS, type Region } from "@/lib/metrics.config"
-
-// Group regions by country for the picker (include LAD level for local identification)
-const GROUPED_REGIONS = REGIONS.filter(r => ["ITL1", "ITL2", "ITL3", "LAD"].includes(r.level)).reduce(
-  (acc, region) => {
-    const country = region.country
-    if (!acc[country]) acc[country] = []
-    acc[country].push(region)
-    return acc
-  },
-  {} as Record<string, Region[]>
-)
+import { ArrowRight } from "lucide-react"
 
 type Anchor = {
   x: number // %
@@ -72,44 +60,11 @@ export default function LandingPage() {
 
   // Request access state
   const [requestEmail, setRequestEmail] = useState("")
-  const [homeRegion, setHomeRegion] = useState("UKI") // Default to London
-  const [regionPickerOpen, setRegionPickerOpen] = useState(false)
-  const [regionSearch, setRegionSearch] = useState("")
-  const regionPickerRef = useRef<HTMLDivElement>(null)
   const [requestLoading, setRequestLoading] = useState(false)
   const [requestSuccess, setRequestSuccess] = useState(false)
   const [requestError, setRequestError] = useState<string | null>(null)
 
   const returnTo = useMemo(() => searchParams.get("returnTo") || "/dashboard", [searchParams])
-  
-  // Filter regions based on search
-  const filteredGroupedRegions = useMemo(() => {
-    if (!regionSearch.trim()) return GROUPED_REGIONS
-    const search = regionSearch.toLowerCase()
-    const result: Record<string, Region[]> = {}
-    for (const [country, regions] of Object.entries(GROUPED_REGIONS)) {
-      const filtered = regions.filter(
-        r => r.name.toLowerCase().includes(search) || r.code.toLowerCase().includes(search)
-      )
-      if (filtered.length > 0) result[country] = filtered
-    }
-    return result
-  }, [regionSearch])
-
-  const selectedRegion = useMemo(() => REGIONS.find(r => r.code === homeRegion), [homeRegion])
-  
-  // Close region picker when clicking outside
-  useEffect(() => {
-    if (!regionPickerOpen) return
-    const handleClickOutside = (e: MouseEvent) => {
-      if (regionPickerRef.current && !regionPickerRef.current.contains(e.target as Node)) {
-        setRegionPickerOpen(false)
-        setRegionSearch("")
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [regionPickerOpen])
 
   // If Supabase redirects invite/magic links with tokens in the URL hash (/#access_token=...),
   // catch it here (both "/" and "/login" render this component) and forward to /auth/fragment.
@@ -237,7 +192,7 @@ export default function LandingPage() {
       const res = await fetch("/api/auth/request-access", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: requestEmail, homeRegion }),
+        body: JSON.stringify({ email: requestEmail }),
       })
       const payload = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(payload?.error || "Request failed")
@@ -598,9 +553,9 @@ export default function LandingPage() {
                       className={[
                         "group relative w-full h-12 rounded-xl px-4 overflow-hidden",
                         "bg-white text-[hsl(220,48%,9%)] font-medium",
-                        "transition-all duration-200",
-                        "hover:shadow-lg hover:shadow-white/10 active:scale-[0.99]",
-                        "disabled:opacity-40 disabled:pointer-events-none",
+                        "transition-all duration-200 cursor-pointer",
+                        "hover:shadow-lg hover:shadow-white/10 hover:scale-[1.01] active:scale-[0.99]",
+                        "disabled:opacity-40 disabled:pointer-events-none disabled:cursor-not-allowed",
                         "flex items-center justify-center gap-2",
                       ].join(" ")}
                     >
@@ -626,7 +581,7 @@ export default function LandingPage() {
                           setMode('request')
                           setAuthError(null)
                         }}
-                        className="text-[13px] text-white/70 hover:text-white transition-colors underline underline-offset-2"
+                        className="text-[13px] text-white/70 hover:text-white transition-colors underline underline-offset-2 cursor-pointer"
                       >
                         Request access
                       </button>
@@ -728,8 +683,8 @@ export default function LandingPage() {
                           "px-4 py-2 rounded-lg text-[13px]",
                           "bg-white/5 hover:bg-white/10 border border-white/10",
                           "text-white/70 hover:text-white",
-                          "transition-all duration-200",
-                          "disabled:opacity-50 disabled:pointer-events-none",
+                          "transition-all duration-200 cursor-pointer",
+                          "disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed",
                         ].join(" ")}
                       >
                         {requestLoading ? 'Sending…' : 'Resend link'}
@@ -741,7 +696,7 @@ export default function LandingPage() {
                           "px-4 py-2 rounded-lg text-[13px]",
                           "bg-white/5 hover:bg-white/10 border border-white/10",
                           "text-white/70 hover:text-white",
-                          "transition-all duration-200",
+                          "transition-all duration-200 cursor-pointer",
                         ].join(" ")}
                       >
                         Different email
@@ -759,7 +714,7 @@ export default function LandingPage() {
                           setMode('signin')
                           resetRequestAccess()
                         }}
-                        className="text-[13px] text-white/40 hover:text-white/60 transition-colors"
+                        className="text-[13px] text-white/40 hover:text-white/60 transition-colors cursor-pointer"
                       >
                         ← Back to sign in
                       </button>
@@ -784,133 +739,6 @@ export default function LandingPage() {
                       required
                     />
 
-                    {/* Home Region Picker */}
-                    <div ref={regionPickerRef} className="relative">
-                      {/* Animated glow ring when open */}
-                      <div 
-                        className={[
-                          "absolute -inset-[2px] rounded-xl transition-all duration-500 pointer-events-none",
-                          regionPickerOpen 
-                            ? "opacity-100" 
-                            : "opacity-0",
-                        ].join(" ")}
-                        style={{
-                          background: "linear-gradient(135deg, rgba(139,92,246,0.4) 0%, rgba(34,211,238,0.3) 50%, rgba(139,92,246,0.4) 100%)",
-                          filter: "blur(4px)",
-                        }}
-                      />
-                      
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRegionPickerOpen(!regionPickerOpen)
-                          if (!regionPickerOpen) setRegionSearch("")
-                        }}
-                        className={[
-                          "relative h-12 w-full rounded-xl px-4",
-                          "bg-[hsl(220,48%,9%)]/60 border",
-                          regionPickerOpen ? "border-purple-500/50 ring-2 ring-purple-500/40" : "border-white/10",
-                          "text-white/90 text-left",
-                          "focus:outline-none",
-                          "transition-all duration-200",
-                          "flex items-center justify-between gap-2",
-                        ].join(" ")}
-                      >
-                        <div className="flex items-center gap-3">
-                          <MapPin className="h-4 w-4 text-purple-400" />
-                          <span className={selectedRegion ? "text-white/90" : "text-white/30"}>
-                            {selectedRegion?.name || "Select your home region"}
-                          </span>
-                        </div>
-                        <ChevronDown 
-                          className={[
-                            "h-4 w-4 text-white/50 transition-transform duration-300",
-                            regionPickerOpen ? "rotate-180" : "",
-                          ].join(" ")} 
-                        />
-                      </button>
-
-                      {/* Dropdown panel */}
-                      {regionPickerOpen && (
-                        <div 
-                          className={[
-                            "absolute top-full left-0 right-0 mt-2 z-50",
-                            "rounded-xl border border-white/10 bg-[hsl(220,48%,9%)]/95 backdrop-blur-xl",
-                            "shadow-2xl shadow-purple-500/20",
-                            "overflow-hidden",
-                            "animate-in fade-in-0 slide-in-from-top-2 duration-200",
-                          ].join(" ")}
-                        >
-                          {/* Search input */}
-                          <div className="relative border-b border-white/10">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-                            <input
-                              value={regionSearch}
-                              onChange={(e) => setRegionSearch(e.target.value)}
-                              placeholder="Search regions..."
-                              className={[
-                                "w-full h-11 pl-11 pr-4 bg-transparent",
-                                "text-white/90 text-sm placeholder:text-white/30",
-                                "focus:outline-none",
-                              ].join(" ")}
-                              autoFocus
-                            />
-                          </div>
-                          
-                          {/* Region list */}
-                          <div className="max-h-56 overflow-y-auto">
-                            {Object.keys(filteredGroupedRegions).length === 0 ? (
-                              <div className="px-4 py-6 text-center text-sm text-white/40">
-                                No regions found
-                              </div>
-                            ) : (
-                              Object.entries(filteredGroupedRegions).map(([country, regions]) => (
-                                <div key={country}>
-                                  <div className="px-4 py-2 text-[11px] text-white/40 uppercase tracking-wider font-medium sticky top-0 bg-[hsl(220,48%,9%)]">
-                                    {country}
-                                  </div>
-                                  {regions.map(region => (
-                                    <button
-                                      key={region.code}
-                                      type="button"
-                                      onClick={() => {
-                                        setHomeRegion(region.code)
-                                        setRegionPickerOpen(false)
-                                        setRegionSearch("")
-                                      }}
-                                      className={[
-                                        "w-full px-4 py-2.5 text-left text-sm",
-                                        "hover:bg-white/5 transition-colors",
-                                        "flex items-center justify-between",
-                                        homeRegion === region.code 
-                                          ? "text-purple-300 bg-purple-500/10" 
-                                          : "text-white/80",
-                                      ].join(" ")}
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <span>{region.name}</span>
-                                        <span className="text-[10px] text-white/30 px-1.5 py-0.5 rounded bg-white/5">
-                                          {region.level}
-                                        </span>
-                                      </div>
-                                      {homeRegion === region.code && (
-                                        <Check className="h-4 w-4 text-purple-400" />
-                                      )}
-                                    </button>
-                                  ))}
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Helper text */}
-                      <p className="mt-1.5 text-[11px] text-white/30">
-                        Your default region when signing in
-                      </p>
-                    </div>
-
                     {requestError ? <div className="text-[13px] text-red-300/90">{requestError}</div> : null}
 
                     {/* Button with shimmer effect */}
@@ -920,9 +748,9 @@ export default function LandingPage() {
                       className={[
                         "group relative w-full h-12 rounded-xl px-4 overflow-hidden",
                         "bg-white text-[hsl(220,48%,9%)] font-medium",
-                        "transition-all duration-200",
-                        "hover:shadow-lg hover:shadow-white/10 active:scale-[0.99]",
-                        "disabled:opacity-40 disabled:pointer-events-none",
+                        "transition-all duration-200 cursor-pointer",
+                        "hover:shadow-lg hover:shadow-white/10 hover:scale-[1.01] active:scale-[0.99]",
+                        "disabled:opacity-40 disabled:pointer-events-none disabled:cursor-not-allowed",
                         "flex items-center justify-center gap-2",
                       ].join(" ")}
                     >
@@ -948,7 +776,7 @@ export default function LandingPage() {
                           setMode('signin')
                           setRequestError(null)
                         }}
-                        className="text-[13px] text-white/70 hover:text-white transition-colors underline underline-offset-2"
+                        className="text-[13px] text-white/70 hover:text-white transition-colors underline underline-offset-2 cursor-pointer"
                       >
                         Sign in
                       </button>
