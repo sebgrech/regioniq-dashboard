@@ -15,9 +15,10 @@ import { Key, LogOut, ChevronDown, User } from "lucide-react"
 
 interface UserMenuProps {
   email: string | null | undefined
+  apiAccess?: boolean // If false, hide API Keys menu item
 }
 
-export function UserMenu({ email }: UserMenuProps) {
+export function UserMenu({ email, apiAccess = true }: UserMenuProps) {
   const router = useRouter()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
@@ -68,14 +69,18 @@ export function UserMenu({ email }: UserMenuProps) {
             <p className="text-sm font-medium truncate">{email || "Unknown"}</p>
           </div>
         </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          className="cursor-pointer gap-2"
-          onClick={() => router.push("/developers")}
-        >
-          <Key className="h-4 w-4" />
-          API Keys
-        </DropdownMenuItem>
+        {apiAccess !== false && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="cursor-pointer gap-2"
+              onClick={() => router.push("/developers")}
+            >
+              <Key className="h-4 w-4" />
+              API Keys
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           className="cursor-pointer gap-2 text-destructive focus:text-destructive"

@@ -30,6 +30,8 @@ interface DashboardControlsProps {
   onScenarioChange?: (scenario: Scenario) => void
   // User email - for showing admin controls
   userEmail?: string | null
+  // API access flag from user_metadata
+  apiAccess?: boolean
 }
 
 export function DashboardControls({
@@ -41,6 +43,7 @@ export function DashboardControls({
   scenario,
   onScenarioChange,
   userEmail,
+  apiAccess,
 }: DashboardControlsProps) {
   const yearSelectorRef = useRef<HTMLDivElement>(null)
 
@@ -256,7 +259,7 @@ export function DashboardControls({
 
           {/* User menu - account dropdown */}
           <div id="tour-api-button">
-            <UserMenu email={userEmail} />
+            <UserMenu email={userEmail} apiAccess={apiAccess} />
           </div>
         </div>
         

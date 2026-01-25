@@ -611,6 +611,7 @@ function DashboardContent() {
           onRegionChange={handleRegionChange}
           onYearChange={handleYearChange}
           userEmail={(user as any)?.email}
+          apiAccess={(user as any)?.user_metadata?.api_access !== false}
         />
       )}
 

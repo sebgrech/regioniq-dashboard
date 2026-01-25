@@ -462,6 +462,7 @@ export default function MetricDetailContent({ id }: { id: string }) {
         scenario={scenario}
         onScenarioChange={handleScenarioChange}
         userEmail={user?.email}
+        apiAccess={(user as any)?.user_metadata?.api_access !== false}
       />
 
       {/* Header */}

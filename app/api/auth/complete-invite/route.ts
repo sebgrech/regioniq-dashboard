@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createSupabaseServerClient } from "@/lib/supabase-server"
+import { createSupabaseAdminClient } from "@/lib/supabase-admin"
 
 const BodySchema = z.object({
   fullName: z.string().trim().max(120).optional(),
@@ -27,6 +28,22 @@ export async function POST(req: NextRequest) {
     const metadata: Record<string, any> = {}
     if (body.fullName) metadata.full_name = body.fullName
     if (body.homeRegion) metadata.home_region = body.homeRegion
+    
+    // Check allowed_emails for api_access flag
+    const userEmail = userData.user.email
+    if (userEmail) {
+      const admin = createSupabaseAdminClient()
+      const { data: allowedRow } = await admin
+        .from("allowed_emails")
+        .select("api_access")
+        .ilike("email", userEmail)
+        .single()
+      
+      // If api_access is explicitly false, set it in user metadata
+      if (allowedRow?.api_access === false) {
+        metadata.api_access = false
+      }
+    }
     
     if (Object.keys(metadata).length > 0) {
       update.data = metadata
