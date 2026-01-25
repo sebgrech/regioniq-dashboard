@@ -516,22 +516,20 @@ export default function LandingPage() {
                   transitionDelay: "60ms",
                 }}
               >
-                {mode === 'signin' ? 'Sign in' : (requestSuccess ? 'Check your email' : 'Request access')}
+                {mode === 'signin' ? 'Sign in' : (requestSuccess ? '' : 'Request access')}
               </div>
               <div 
                 className={[
                   "text-[13px] leading-relaxed text-white/45",
                   "transition-all duration-700 ease-out",
                   loaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3",
+                  requestSuccess ? "hidden" : "",
                 ].join(" ")}
                 style={{ transitionDelay: "120ms" }}
               >
                 {mode === 'signin' 
                   ? 'Access economic intelligence, faster.' 
-                  : (requestSuccess 
-                      ? `We sent a sign-in link to ${requestEmail}` 
-                      : 'Get a sign-in link sent to your email.'
-                    )
+                  : 'Get a sign-in link sent to your email.'
                 }
               </div>
             </div>
@@ -635,14 +633,22 @@ export default function LandingPage() {
                     </div>
                   </form>
                 ) : requestSuccess ? (
-                  /* Success State with Animated Checkmark */
-                  <div className="space-y-6 py-4">
-                    {/* Animated Checkmark */}
-                    <div className="flex justify-center">
-                      <div className="relative">
+                  /* Premium Success State - "Authenticated" */
+                  <div className="py-8">
+                    {/* Animated Checkmark with Glow */}
+                    <div className="flex justify-center mb-8">
+                      <div className="relative animate-success-glow">
+                        {/* Subtle background glow */}
+                        <div 
+                          className="absolute inset-0 rounded-full blur-xl opacity-0 animate-glow-pulse"
+                          style={{
+                            background: "radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%)",
+                            transform: "scale(1.5)",
+                          }}
+                        />
                         <svg 
                           viewBox="0 0 52 52" 
-                          className="w-16 h-16"
+                          className="relative w-20 h-20"
                         >
                           {/* Circle */}
                           <circle 
@@ -650,8 +656,8 @@ export default function LandingPage() {
                             cy="26" 
                             r="24" 
                             fill="none" 
-                            stroke="rgba(255,255,255,0.9)" 
-                            strokeWidth="2"
+                            stroke="rgba(255,255,255,0.85)" 
+                            strokeWidth="1.5"
                             className="animate-circle-draw"
                             style={{
                               strokeDasharray: 151,
@@ -663,7 +669,7 @@ export default function LandingPage() {
                             d="M15 27l7 7 15-15" 
                             fill="none" 
                             stroke="rgba(255,255,255,1)" 
-                            strokeWidth="3" 
+                            strokeWidth="2.5" 
                             strokeLinecap="round" 
                             strokeLinejoin="round"
                             className="animate-check-draw"
@@ -676,13 +682,41 @@ export default function LandingPage() {
                       </div>
                     </div>
 
-                    {/* Expiry note */}
-                    <p className="text-center text-[13px] text-white/50">
-                      The link expires in 1 hour.
+                    {/* Primary text - Authenticated */}
+                    <h3 
+                      className="text-center text-[22px] font-medium text-white tracking-tight mb-3 animate-text-enter"
+                      style={{ animationDelay: "0.7s" }}
+                    >
+                      Authenticated
+                    </h3>
+
+                    {/* Secondary text - Email confirmation */}
+                    <p 
+                      className="text-center text-[14px] text-white/60 mb-1 animate-text-enter"
+                      style={{ animationDelay: "0.85s" }}
+                    >
+                      We sent a sign-in link to
+                    </p>
+                    <p 
+                      className="text-center text-[14px] text-white/80 font-medium mb-6 animate-text-enter"
+                      style={{ animationDelay: "0.95s" }}
+                    >
+                      {requestEmail}
                     </p>
 
-                    {/* Action buttons */}
-                    <div className="flex items-center justify-center gap-4 text-[13px]">
+                    {/* Tertiary text - Expiry note */}
+                    <p 
+                      className="text-center text-[12px] text-white/35 mb-8 animate-text-enter"
+                      style={{ animationDelay: "1.05s" }}
+                    >
+                      Link expires in 1 hour
+                    </p>
+
+                    {/* Ghost action buttons */}
+                    <div 
+                      className="flex items-center justify-center gap-3 animate-text-enter"
+                      style={{ animationDelay: "1.15s" }}
+                    >
                       <button
                         type="button"
                         onClick={() => {
@@ -690,29 +724,42 @@ export default function LandingPage() {
                           onSubmitRequestAccess({ preventDefault: () => {} } as React.FormEvent)
                         }}
                         disabled={requestLoading}
-                        className="text-white/70 hover:text-white transition-colors underline underline-offset-2 disabled:opacity-50"
+                        className={[
+                          "px-4 py-2 rounded-lg text-[13px]",
+                          "bg-white/5 hover:bg-white/10 border border-white/10",
+                          "text-white/70 hover:text-white",
+                          "transition-all duration-200",
+                          "disabled:opacity-50 disabled:pointer-events-none",
+                        ].join(" ")}
                       >
                         {requestLoading ? 'Sending…' : 'Resend link'}
                       </button>
-                      <span className="text-white/30">·</span>
                       <button
                         type="button"
                         onClick={resetRequestAccess}
-                        className="text-white/70 hover:text-white transition-colors underline underline-offset-2"
+                        className={[
+                          "px-4 py-2 rounded-lg text-[13px]",
+                          "bg-white/5 hover:bg-white/10 border border-white/10",
+                          "text-white/70 hover:text-white",
+                          "transition-all duration-200",
+                        ].join(" ")}
                       >
-                        Use different email
+                        Different email
                       </button>
                     </div>
 
                     {/* Back to sign in */}
-                    <div className="pt-2 text-center">
+                    <div 
+                      className="pt-6 text-center animate-text-enter"
+                      style={{ animationDelay: "1.25s" }}
+                    >
                       <button
                         type="button"
                         onClick={() => {
                           setMode('signin')
                           resetRequestAccess()
                         }}
-                        className="text-[13px] text-white/50 hover:text-white/70 transition-colors"
+                        className="text-[13px] text-white/40 hover:text-white/60 transition-colors"
                       >
                         ← Back to sign in
                       </button>

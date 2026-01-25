@@ -1089,3 +1089,56 @@
   stroke-dashoffset: 36;
   animation: check-draw 0.35s cubic-bezier(0.65, 0, 0.35, 1) 0.35s forwards;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SUCCESS STATE ANIMATIONS - Premium "Authenticated" UI
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Subtle glow pulse on the checkmark container */
+@keyframes success-glow {
+  0%, 100% { 
+    filter: drop-shadow(0 0 0 rgba(255,255,255,0));
+  }
+  50% { 
+    filter: drop-shadow(0 0 20px rgba(255,255,255,0.25));
+  }
+}
+
+.animate-success-glow {
+  animation: success-glow 3s ease-in-out infinite;
+  animation-delay: 0.9s; /* Start after checkmark animation completes */
+}
+
+/* Background glow pulse */
+@keyframes glow-pulse {
+  0%, 100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.8);
+  }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 3s ease-in-out infinite;
+  animation-delay: 0.9s;
+}
+
+/* Text entrance animation - staggered fade up */
+@keyframes text-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-text-enter {
+  opacity: 0;
+  animation: text-enter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
