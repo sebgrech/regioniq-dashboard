@@ -578,6 +578,41 @@ function getImplicationExplanation(id: string, text: string): string {
   return "This insight is derived from regional economic signals including job draw, income retention, and labour capacity indicators."
 }
 
+/**
+ * Format verdict sentence with bold key terms for visual hierarchy
+ * Key terms: economic archetypes, labour market states, temporal qualifiers
+ */
+function formatVerdictWithBold(sentence: string): React.ReactNode {
+  // Key terms to bold (case-insensitive matching, preserve original case)
+  const boldTerms = [
+    "Residential catchment",
+    "Employment destination", 
+    "Major employment destination",
+    "Major employment hub",
+    "Tight labour market",
+    "Labour market",
+    "Affluent residential",
+    "Major output centre",
+    "through 2035",
+    "hiring constraints persist",
+    "residents commute",
+  ]
+  
+  // Build regex pattern for all terms
+  const pattern = new RegExp(`(${boldTerms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi')
+  
+  // Split and map
+  const parts = sentence.split(pattern)
+  
+  return parts.map((part, i) => {
+    const isMatch = boldTerms.some(term => term.toLowerCase() === part.toLowerCase())
+    if (isMatch) {
+      return <strong key={i} className="font-semibold text-foreground">{part}</strong>
+    }
+    return <span key={i}>{part}</span>
+  })
+}
+
 function ImplicationCard({ text, id, index }: { text: string; id: string; index: number }) {
   const [hovered, setHovered] = useState(false)
   const Icon = getImplicationIcon(id, text)
@@ -939,8 +974,8 @@ export function AssetEconomicContext({
   return (
     <div className="space-y-5">
       {/* Verdict sentence with visual glyph - no header, archetype now in asset header */}
-      <div className="-mt-2 p-4 md:p-5 rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
-        <div className="flex flex-col md:flex-row gap-4 md:gap-6 items-start">
+      <div className="-mt-2 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-border/40 bg-muted/30">
+        <div className="flex flex-col md:flex-row gap-3 md:gap-4 items-center">
           {/* Verdict Visual Glyph */}
           {ui.verdictVisual?.type && (
             <div className="flex-shrink-0 animate-in fade-in-0 zoom-in-95 duration-500">
@@ -950,9 +985,9 @@ export function AssetEconomicContext({
               />
             </div>
           )}
-          {/* Verdict text */}
-          <p className="text-base md:text-lg text-foreground leading-relaxed flex-1">
-            {ui.verdictSentence}
+          {/* Verdict text with bold key terms */}
+          <p className="text-base md:text-lg text-foreground/90 leading-relaxed flex-1">
+            {formatVerdictWithBold(ui.verdictSentence)}
           </p>
         </div>
       </div>

@@ -82,9 +82,9 @@ export function AssetHeader({
               <span className="opacity-60">via</span>
               <CompanyLogo 
                 name={broker} 
-                size={28} 
+                size={36} 
                 showFallback={false}
-                className="rounded-sm grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all"
+                className="rounded-md grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all"
               />
             </div>
           )}

@@ -642,20 +642,13 @@ export function formatPersistenceSuffix(
   }
   
   // Holds through horizon (2035)
+  // Drop "under baseline conditions" - it's hedgy and baseline is the primary scenario
   if (firstChangeYear === null) {
-    if (holdsIn === "all") {
-      return " through 2035"
-    } else {
-      return " through 2035 under baseline conditions"
-    }
+    return " through 2035"
   }
   
   // Changes later (6+ years out) — safe to state horizon year
-  if (holdsIn === "all") {
-    return ` through ${firstChangeYear - 1}`
-  } else {
-    return ` through ${firstChangeYear - 1} under baseline conditions`
-  }
+  return ` through ${firstChangeYear - 1}`
 }
 
 // =============================================================================
