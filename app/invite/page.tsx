@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ArrowRight, MapPin, Search, Check, ChevronDown } from "lucide-react"
+import Link from "next/link"
+import { ArrowRight, ArrowLeft, MapPin, Search, Check, ChevronDown } from "lucide-react"
 import { REGIONS, type Region } from "@/lib/metrics.config"
 
 // Group regions by country for the picker (include LAD level for local identification)
@@ -243,6 +244,14 @@ export default function InvitePage() {
 
   return (
     <div ref={containerRef} className="relative min-h-screen bg-[hsl(220,48%,9%)] text-white overflow-hidden">
+      {/* Back to marketing site */}
+      <Link 
+        href="https://regioniq.io" 
+        className="fixed top-6 left-6 z-50 flex items-center gap-2 text-sm text-white/50 hover:text-white transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        <span>Back</span>
+      </Link>
       {/* Aurora Borealis animated background - FULL WIDTH (match login page) */}
       <div className="fixed inset-0 pointer-events-none z-0">
         {/* Aurora gradients with slow, smooth animations */}

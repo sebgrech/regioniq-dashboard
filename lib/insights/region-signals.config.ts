@@ -80,7 +80,7 @@ export const REGION_SIGNALS: SignalConfig[] = [
     conclusions: {
       extreme: "Major employment destination with extremely high job concentration",
       high: "Employment destination supporting weekday demand for office and services",
-      low: "Residential catchment with workforce exporting to neighbouring employment centres",
+      low: "Residential catchment — residents commute to nearby employment hubs",
       neutral: "Employment broadly matches the local working-age population"
     },
     detail: "{value} jobs per working-age resident"
@@ -132,7 +132,7 @@ export const REGION_SIGNALS: SignalConfig[] = [
       falling: -0.5
     },
     conclusions: {
-      high: "Limited spare labour capacity with hiring constraints",
+      high: "Tight labour market — hiring constraints persist",
       low: "Slack in the working-age population",
       neutral: "Labour market capacity is balanced",
       rising: "Labour supply becoming constrained",

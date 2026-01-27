@@ -82,11 +82,10 @@ export function AssetHeader({
               <span className="opacity-60">via</span>
               <CompanyLogo 
                 name={broker} 
-                size={20} 
+                size={28} 
                 showFallback={false}
-                className="rounded-sm"
+                className="rounded-sm grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all"
               />
-              <span className="font-medium text-foreground/80">{broker}</span>
             </div>
           )}
         </div>
@@ -187,30 +186,45 @@ export function AssetHeader({
         </div>
 
         {/* Key stats expandable */}
-        {keyStats && keyStats.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-border/30">
-            <button
-              onClick={() => setShowStats(!showStats)}
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            >
-              <ChevronDown className={cn(
-                "h-4 w-4 transition-transform duration-200",
-                showStats && "rotate-180"
-              )} />
-              <span>Key statistics from offering memorandum</span>
-            </button>
-            
-            {showStats && (
-              <ul className="mt-3 space-y-1.5 pl-6">
-                {keyStats.map((stat, idx) => (
-                  <li key={idx} className="text-sm text-muted-foreground/80 list-disc">
-                    {stat}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
+        {(() => {
+          // Filter out stats we have on our platform (population, income growth)
+          const filteredStats = keyStats?.filter(stat => {
+            const lower = stat.toLowerCase()
+            return !(
+              lower.includes("population") ||
+              lower.includes("catchment") ||
+              lower.includes("residents") ||
+              lower.includes("household income growth") ||
+              lower.includes("income growth yoy") ||
+              lower.includes("gdhi")
+            )
+          })
+          
+          return filteredStats && filteredStats.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-border/30">
+              <button
+                onClick={() => setShowStats(!showStats)}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                <ChevronDown className={cn(
+                  "h-4 w-4 transition-transform duration-200",
+                  showStats && "rotate-180"
+                )} />
+                <span>Key statistics from offering memorandum</span>
+              </button>
+              
+              {showStats && (
+                <ul className="mt-3 space-y-1.5 pl-6">
+                  {filteredStats.map((stat, idx) => (
+                    <li key={idx} className="text-sm text-muted-foreground/80 list-disc">
+                      {stat}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )
+        })()}
       </div>
     </div>
   )

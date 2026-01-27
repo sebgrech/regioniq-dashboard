@@ -432,20 +432,14 @@ function generateVerdictSentence(
     // This is the ideal case for extreme hubs - clean, single-clause statement
     coreSentence = mainClaim.charAt(0).toUpperCase() + mainClaim.slice(1)
   } else {
-    // Combine with "with" for complementary info, avoid "but" which implies contradiction
+    // Combine with period + new sentence for cleaner separation
     const lowerQualifier = qualifier.charAt(0).toLowerCase() + qualifier.slice(1)
     
-    // Use "with" for capacity/labour signals, otherwise append as additional info
-    const connector = lowerQualifier.includes("capacity") || 
-                      lowerQualifier.includes("available") ||
-                      lowerQualifier.includes("hiring") ||
-                      lowerQualifier.includes("labour")
-      ? "with" 
-      : "—" // Use em dash for secondary observations
+    // Capitalize the qualifier as a new sentence, add persistence suffix
+    const qualifierSentence = qualifier.charAt(0).toUpperCase() + qualifier.slice(1) + persistenceSuffix
     
-    // Add persistence suffix to the qualifier (pressure/slack signal)
-    const qualifierWithPersistence = lowerQualifier + persistenceSuffix
-    coreSentence = `${mainClaim.charAt(0).toUpperCase()}${mainClaim.slice(1)}${connector === "—" ? " — " : ", " + connector + " "}${qualifierWithPersistence}`
+    // Use period to separate the two ideas cleanly
+    coreSentence = `${mainClaim.charAt(0).toUpperCase()}${mainClaim.slice(1)}. ${qualifierSentence}`
   }
   
   // Prepend place context if available (use colon)

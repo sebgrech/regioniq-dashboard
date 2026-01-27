@@ -91,12 +91,12 @@ const METRIC_NAMES: Record<string, string> = {
   unemployment_rate_pct: "Unemployment",
 }
 
-// Short names for headlines (without "per head")
+// Short names for headlines (clearer labels for display)
 const METRIC_SHORT_NAMES: Record<string, string> = {
   population_total: "Population",
   population_16_64: "Working Age",
   nominal_gva_mn_gbp: "GVA",
-  gdhi_per_head_gbp: "Income",
+  gdhi_per_head_gbp: "Income per head",
   emp_total_jobs: "Employment",
   employment_rate_pct: "Employment Rate",
   unemployment_rate_pct: "Unemployment",

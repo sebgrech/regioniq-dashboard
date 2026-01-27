@@ -5,6 +5,7 @@ import { useParams } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
 import { Loader2, Sparkles, ExternalLink } from "lucide-react"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { REGIONS, type Scenario } from "@/lib/metrics.config"
 import { fetchSeries, type DataPoint } from "@/lib/data-service"
 import { createClient } from "@supabase/supabase-js"
@@ -247,14 +248,17 @@ function AssetPageContent() {
             </div>
           </div>
 
-          {/* CTA */}
-          <Link
-            href="https://regioniq.io"
-            className="hidden sm:inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Get full access
-            <ExternalLink className="h-3 w-3" />
-          </Link>
+          {/* Theme toggle + CTA */}
+          <div className="hidden sm:flex items-center gap-3">
+            <ThemeToggle />
+            <Link
+              href="https://regioniq.io"
+              className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Get full access
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -296,7 +300,7 @@ function AssetPageContent() {
         </div>
         
         {/* Economic Context Section - tinted background for visual cohesion */}
-        <div className="bg-muted/10 -mx-4 px-4 py-8 md:-mx-8 md:px-8 mt-6 rounded-t-2xl">
+        <div className="bg-muted/10 -mx-4 px-4 pt-8 pb-4 md:-mx-8 md:px-8 mt-6 rounded-t-2xl">
           {/* Prose-style economic context */}
           <AssetEconomicContext
             regionCode={uiRegionCode}
@@ -311,11 +315,11 @@ function AssetPageContent() {
           />
           
           {/* Selected economic indicators - quieter, appendix-grade */}
-          <div className="mt-8 pt-6 border-t border-border/20">
-            <p className="text-xs text-muted-foreground/60 mb-4">
+          <div className="mt-6 pt-4 border-t border-border/20">
+            <p className="text-sm text-muted-foreground/70 mb-3 font-medium">
               Selected economic indicators
             </p>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               <NotableFlags
                 regionCode={uiRegionCode}
                 regionName={asset.region_name}
@@ -351,7 +355,7 @@ function AssetPageContent() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t mt-12">
+      <footer className="border-t mt-6">
         <div className="container mx-auto px-4 py-6 max-w-5xl">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">

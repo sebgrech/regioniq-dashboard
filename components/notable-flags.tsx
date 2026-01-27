@@ -203,7 +203,7 @@ function FlagRow({ flag, index }: { flag: PlaceFlag; index: number }) {
       {/* icon */}
       <div
         className={cn(
-          "flex h-7 w-7 items-center justify-center rounded-md bg-background/70",
+          "flex h-8 w-8 items-center justify-center rounded-md bg-background/70",
           "border border-border/40",
           "transition-transform duration-200 group-hover:scale-[1.03]",
           tone.icon
@@ -215,14 +215,14 @@ function FlagRow({ flag, index }: { flag: PlaceFlag; index: number }) {
       {/* text */}
       <div className="min-w-0">
         <div className="flex items-baseline gap-2 min-w-0">
-          <div className={cn("font-semibold leading-tight truncate text-lg", tone.text)}>
+          <div className={cn("font-semibold leading-tight truncate text-xl", tone.text)}>
             {flag.headline}
           </div>
           <div className="hidden md:block text-lg text-muted-foreground truncate">
             {flag.metricName}
           </div>
         </div>
-        <div className={cn("text-sm leading-snug", tone.muted)}>
+        <div className={cn("text-base leading-snug", tone.muted)}>
           {flag.subline}
         </div>
       </div>

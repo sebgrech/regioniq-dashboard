@@ -366,7 +366,7 @@ export function MetricInteractionInsights({
     )
   }
 
-  // Minimal mode - no card chrome, quieter styling
+  // Minimal mode - no card chrome, balanced sizing for readability
   if (minimal) {
     return (
       <div className="space-y-2">
@@ -376,31 +376,31 @@ export function MetricInteractionInsights({
             <div
               key={pattern.id}
               className={cn(
-                "flex items-center gap-3 p-3 rounded-lg border transition-all duration-200",
+                "flex items-center gap-3 p-4 rounded-xl border transition-all duration-200",
                 signalColors[pattern.signal],
                 "animate-in fade-in-0 slide-in-from-bottom-2 duration-300"
               )}
               style={{ animationDelay: `${index * 60}ms`, animationFillMode: "backwards" }}
             >
-              <div className="p-1.5 rounded-md bg-background/50 flex-shrink-0">
-                <Icon className="h-3.5 w-3.5" />
+              <div className="p-2 rounded-lg bg-background/50 flex-shrink-0">
+                <Icon className="h-4 w-4" />
               </div>
               <div className="flex-1 min-w-0">
-                <span className="font-medium text-sm">{pattern.title}</span>
-                <p className="text-xs opacity-70 leading-snug">
+                <span className="font-semibold text-base">{pattern.title}</span>
+                <p className="text-sm opacity-70 leading-snug mt-0.5">
                   {pattern.caption}
                 </p>
               </div>
               {pattern.delta && (
                 <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
                   <div className={cn(
-                    "px-2 py-0.5 rounded text-xs font-mono font-medium",
+                    "px-2.5 py-1 rounded-lg text-sm font-mono font-semibold",
                     deltaPillColors[pattern.signal]
                   )}>
                     {pattern.delta}
                   </div>
                   {pattern.period && (
-                    <span className="text-[10px] text-muted-foreground/60">{pattern.period}</span>
+                    <span className="text-xs text-muted-foreground/60">{pattern.period}</span>
                   )}
                 </div>
               )}
@@ -428,7 +428,7 @@ export function MetricInteractionInsights({
         </div>
       </CardHeader>
       
-      <CardContent className="space-y-2 pb-3 pt-0 px-5">
+      <CardContent className="space-y-2.5 pb-2 pt-0 px-5">
         {visiblePatterns.map((pattern, index) => {
           const Icon = pattern.icon
           const isRelevant = pattern.metrics.includes(currentMetricId)
@@ -438,7 +438,7 @@ export function MetricInteractionInsights({
               key={pattern.id}
               className={cn(
                 // Premium tile styling with hover lift
-                "flex items-center gap-3 p-4 rounded-xl border transition-all duration-300",
+                "flex items-center gap-5 p-6 rounded-xl border transition-all duration-300",
                 "hover:-translate-y-0.5 hover:shadow-md",
                 signalColors[pattern.signal],
                 isRelevant && "ring-2 ring-primary/30",
@@ -451,36 +451,36 @@ export function MetricInteractionInsights({
               style={{ animationFillMode: "backwards" }}
             >
               {/* Icon - larger, more prominent */}
-              <div className="p-2 rounded-lg bg-background/60 flex-shrink-0 shadow-sm">
-                <Icon className="h-4 w-4" />
+              <div className="p-3.5 rounded-lg bg-background/60 flex-shrink-0 shadow-sm">
+                <Icon className="h-6 w-6" />
               </div>
               
               {/* Title + Caption */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm">{pattern.title}</span>
+                  <span className="font-semibold text-xl">{pattern.title}</span>
                   {isRelevant && (
-                    <Badge variant="outline" className="text-[10px] h-4 px-1.5 bg-primary/10 border-primary/30">
+                    <Badge variant="outline" className="text-sm h-6 px-2.5 bg-primary/10 border-primary/30">
                       Current
                     </Badge>
                   )}
                 </div>
-                <p className="text-xs opacity-75 leading-snug mt-0.5">
+                <p className="text-lg opacity-75 leading-snug mt-1">
                   {pattern.caption}
                 </p>
               </div>
               
               {/* Delta pill - more prominent */}
               {pattern.delta && (
-                <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   <div className={cn(
-                    "px-2.5 py-1 rounded-lg text-xs font-mono font-semibold shadow-sm",
+                    "px-4 py-2.5 rounded-lg text-lg font-mono font-semibold shadow-sm",
                     deltaPillColors[pattern.signal]
                   )}>
                     {pattern.delta}
                   </div>
                   {pattern.period && (
-                    <span className="text-[10px] text-muted-foreground/60">{pattern.period}</span>
+                    <span className="text-base text-muted-foreground/60">{pattern.period}</span>
                   )}
                 </div>
               )}
