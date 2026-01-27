@@ -210,7 +210,7 @@ export function AssetHeader({
                   "h-4 w-4 transition-transform duration-200",
                   showStats && "rotate-180"
                 )} />
-                <span>Key statistics from offering memorandum</span>
+                <span>Key statistics from investment memorandum</span>
               </button>
               
               {showStats && (
