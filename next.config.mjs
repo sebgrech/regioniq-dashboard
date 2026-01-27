@@ -8,6 +8,12 @@ const nextConfig = {
   },
   images: {
     unoptimized: true,
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'img.logo.dev',
+      },
+    ],
   },
   // Environment variable defaults - can be overridden in Vercel/production
   env: {

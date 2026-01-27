@@ -3,6 +3,7 @@
 import { Building2, MapPin, Banknote, User, Calendar, Ruler, ChevronDown } from "lucide-react"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
+import { CompanyLogo } from "@/components/company-logo"
 
 export interface AssetHeaderProps {
   address: string
@@ -77,8 +78,14 @@ export function AssetHeader({
           </div>
           
           {broker && (
-            <div className="text-right text-xs text-muted-foreground">
-              <span className="opacity-60">via</span>{" "}
+            <div className="flex items-center gap-2 text-right text-xs text-muted-foreground">
+              <span className="opacity-60">via</span>
+              <CompanyLogo 
+                name={broker} 
+                size={20} 
+                showFallback={false}
+                className="rounded-sm"
+              />
               <span className="font-medium text-foreground/80">{broker}</span>
             </div>
           )}
@@ -148,9 +155,17 @@ export function AssetHeader({
           
           {tenant && (
             <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-purple-500/10">
-                <User className="h-4 w-4 text-purple-400" />
-              </div>
+              <CompanyLogo 
+                name={tenant} 
+                size={40} 
+                showFallback={true}
+                fallback={
+                  <div className="p-2 rounded-lg bg-purple-500/10">
+                    <User className="h-4 w-4 text-purple-400" />
+                  </div>
+                }
+                className="rounded-lg"
+              />
               <div>
                 <div className="text-xs text-muted-foreground">Tenant</div>
                 <div className="text-sm font-semibold text-foreground">{tenant}</div>
