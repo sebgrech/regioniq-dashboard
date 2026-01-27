@@ -18,6 +18,8 @@ interface NotableFlagsProps {
   year: number
   allMetricsData: { metricId: string; data: DataPoint[] }[]
   isLoading?: boolean
+  /** Minimal mode - removes card chrome for embedding in OM-style layouts */
+  minimal?: boolean
 }
 
 interface PlaceFlag {
@@ -220,7 +222,7 @@ function FlagRow({ flag, index }: { flag: PlaceFlag; index: number }) {
             {flag.metricName}
           </div>
         </div>
-        <div className={cn("text-lg leading-snug truncate", tone.muted)}>
+        <div className={cn("text-sm leading-snug", tone.muted)}>
           {flag.subline}
         </div>
       </div>
@@ -249,6 +251,7 @@ export function NotableFlags({
   year,
   allMetricsData,
   isLoading = false,
+  minimal = false,
 }: NotableFlagsProps) {
   const [response, setResponse] = useState<PlaceFlagsResponse | null>(null)
   const [isFetching, setIsFetching] = useState(false)
@@ -344,6 +347,15 @@ export function NotableFlags({
 
   // Loading
   if (isLoading || isFetching) {
+    if (minimal) {
+      return (
+        <div className="space-y-2">
+          <div className="h-10 skeleton-shimmer rounded-lg" />
+          <div className="h-10 skeleton-shimmer rounded-lg" />
+          <div className="h-10 skeleton-shimmer rounded-lg" />
+        </div>
+      )
+    }
     return (
       <Card className="bg-card/60 backdrop-blur-sm border border-border/50">
         <CardHeader className="px-5 pt-4 pb-2">
@@ -365,6 +377,28 @@ export function NotableFlags({
 
   // Hide if none (premium behavior)
   if (!response?.hasFlags || !response.flags?.length) return null
+
+  // Minimal mode - no card chrome, quieter styling
+  if (minimal) {
+    return (
+      <div ref={cardRef} className="space-y-1">
+        <div className="relative">
+          <div className="absolute left-[3px] top-0.5 bottom-0.5 w-px bg-border/30" />
+          <div className="divide-y divide-border/10">
+            {response.flags.slice(0, 4).map((flag, i) => (
+              <div
+                key={flag.id}
+                className={cn("animate-in fade-in-0 slide-in-from-bottom-2")}
+                style={{ animationDelay: `${i * 60}ms`, animationFillMode: "backwards" }}
+              >
+                <FlagRow flag={flag} index={i} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <Card ref={cardRef} className="bg-card/60 backdrop-blur-sm border border-border/50">

@@ -26,6 +26,8 @@ interface MetricInteractionInsightsProps {
   regionName: string
   currentMetricId: string
   isLoading?: boolean
+  /** Minimal mode - removes card chrome for embedding in OM-style layouts */
+  minimal?: boolean
 }
 
 interface PatternTile {
@@ -35,10 +37,17 @@ interface PatternTile {
   signal: "positive" | "neutral" | "caution"
   icon: React.ComponentType<{ className?: string }>
   delta?: string
+  period?: string // e.g., "2023–24"
   metrics: string[]
 }
 
-function getYoY(data: DataPoint[], targetYear: number): number | null {
+interface YoYResult {
+  value: number
+  fromYear: number
+  toYear: number
+}
+
+function getYoY(data: DataPoint[], targetYear: number): YoYResult | null {
   const historicalData = data
     .filter((d) => d.type === "historical" && d.year <= targetYear)
     .sort((a, b) => a.year - b.year)
@@ -49,7 +58,12 @@ function getYoY(data: DataPoint[], targetYear: number): number | null {
   const previous = historicalData[historicalData.length - 2]
 
   if (!current || !previous) return null
-  return calculateChange(current.value, previous.value)
+  
+  return {
+    value: calculateChange(current.value, previous.value),
+    fromYear: previous.year,
+    toYear: current.year,
+  }
 }
 
 function getLatestValue(data: DataPoint[]): number | null {
@@ -130,34 +144,36 @@ function computePatterns(
 
   // B) Local capture gap: income weak relative to output
   // Skip this for extreme employment hubs where low capture is structural
-  if (!isExtremeEmploymentHub && gvaYoY != null && incYoY != null && gvaYoY > incYoY + 1.5) {
+  if (!isExtremeEmploymentHub && gvaYoY != null && incYoY != null && gvaYoY.value > incYoY.value + 1.5) {
     patterns.push({
       id: "capture_gap",
       title: "Local capture",
       caption: "Output not fully reflected in local incomes",
       signal: "caution",
       icon: PoundSterling,
-      delta: `Gap ${(gvaYoY - incYoY).toFixed(1)}pp`,
+      delta: `Gap ${(gvaYoY.value - incYoY.value).toFixed(1)}pp`,
+      period: `${gvaYoY.fromYear}–${gvaYoY.toYear.toString().slice(-2)}`,
       metrics: ["nominal_gva_mn_gbp", "gdhi_per_head_gbp"]
     })
   }
 
   // C) Consumer tailwind: GDHI growth strong + employment stable/positive
-  if (incYoY != null && incYoY > 2 && empYoY != null && empYoY >= 0) {
+  if (incYoY != null && incYoY.value > 2 && empYoY != null && empYoY.value >= 0) {
     patterns.push({
       id: "consumer_tailwind",
       title: "Consumer tailwind",
       caption: "Household spending power improving",
       signal: "positive",
       icon: ArrowUpRight,
-      delta: `Inc +${incYoY.toFixed(1)}%`,
+      delta: `Inc +${incYoY.value.toFixed(1)}%`,
+      period: `${incYoY.fromYear}–${incYoY.toYear.toString().slice(-2)}`,
       metrics: ["gdhi_per_head_gbp", "emp_total_jobs"]
     })
   }
 
   // D) Labour reservoir: slack available + job growth weak
   // Skip for employment hubs where labour market dynamics are different
-  if (!isEmploymentDestination && latestEmpRate != null && latestEmpRate < 73 && empYoY != null && empYoY < 1) {
+  if (!isEmploymentDestination && latestEmpRate != null && latestEmpRate < 73 && empYoY != null && empYoY.value < 1) {
     patterns.push({
       id: "labour_reservoir",
       title: "Labour reservoir",
@@ -170,35 +186,37 @@ function computePatterns(
   }
 
   // E) Demand pressure: pop growth + emp growth both strong
-  if (popYoY != null && popYoY > 1 && empYoY != null && empYoY > 1) {
+  if (popYoY != null && popYoY.value > 1 && empYoY != null && empYoY.value > 1) {
     patterns.push({
       id: "demand_pressure",
       title: "Demand pressure",
       caption: "Demand pressure building across assets",
       signal: "caution",
       icon: TrendingUp,
-      delta: `Both +${Math.min(popYoY, empYoY).toFixed(0)}%+`,
+      delta: `Both +${Math.min(popYoY.value, empYoY.value).toFixed(0)}%+`,
+      period: `${popYoY.fromYear}–${popYoY.toYear.toString().slice(-2)}`,
       metrics: ["population_total", "emp_total_jobs"]
     })
   }
 
   // F) Residential pressure: pop growing faster than jobs
   // Only show if this is NOT an employment hub (where pop growth is structurally lower)
-  if (!isEmploymentDestination && popYoY != null && empYoY != null && popYoY > empYoY + 1) {
+  if (!isEmploymentDestination && popYoY != null && empYoY != null && popYoY.value > empYoY.value + 1) {
     patterns.push({
       id: "residential_pressure",
       title: "Residential pressure",
       caption: "Housing demand may be building",
       signal: "neutral",
       icon: Home,
-      delta: `Pop +${popYoY.toFixed(1)}%`,
+      delta: `Pop +${popYoY.value.toFixed(1)}%`,
+      period: `${popYoY.fromYear}–${popYoY.toYear.toString().slice(-2)}`,
       metrics: ["population_total", "emp_total_jobs"]
     })
   }
 
   // G) Productivity-led (existing, tightened)
   if (gvaYoY != null && empYoY != null) {
-    const diff = gvaYoY - empYoY
+    const diff = gvaYoY.value - empYoY.value
     if (diff > 1) {
       patterns.push({
         id: "productivity_led",
@@ -207,6 +225,7 @@ function computePatterns(
         signal: "positive",
         icon: TrendingUp,
         delta: `+${diff.toFixed(1)}pp`,
+        period: `${gvaYoY.fromYear}–${gvaYoY.toYear.toString().slice(-2)}`,
         metrics: ["nominal_gva_mn_gbp", "emp_total_jobs"]
       })
     } else if (diff < -1) {
@@ -217,13 +236,14 @@ function computePatterns(
         signal: "neutral",
         icon: Briefcase,
         delta: `${diff.toFixed(1)}pp`,
+        period: `${gvaYoY.fromYear}–${gvaYoY.toYear.toString().slice(-2)}`,
         metrics: ["nominal_gva_mn_gbp", "emp_total_jobs"]
       })
     }
   }
 
   // H) Tight labour market
-  if (latestEmpRate != null && latestEmpRate > 76 && empYoY != null && empYoY > 1) {
+  if (latestEmpRate != null && latestEmpRate > 76 && empYoY != null && empYoY.value > 1) {
     patterns.push({
       id: "tight_labour",
       title: "Tight market",
@@ -236,27 +256,29 @@ function computePatterns(
   }
 
   // I) Strong momentum (fallback)
-  if (patterns.length === 0 && gvaYoY != null && gvaYoY > 2) {
+  if (patterns.length === 0 && gvaYoY != null && gvaYoY.value > 2) {
     patterns.push({
       id: "strong_momentum",
       title: "Strong momentum",
       caption: "Economic expansion continuing",
       signal: "positive",
       icon: TrendingUp,
-      delta: `+${gvaYoY.toFixed(1)}%`,
+      delta: `+${gvaYoY.value.toFixed(1)}%`,
+      period: `${gvaYoY.fromYear}–${gvaYoY.toYear.toString().slice(-2)}`,
       metrics: ["nominal_gva_mn_gbp"]
     })
   }
 
   // J) Contraction warning
-  if (gvaYoY != null && gvaYoY < -1) {
+  if (gvaYoY != null && gvaYoY.value < -1) {
     patterns.push({
       id: "contraction",
       title: "Contraction",
       caption: "Output declining may precede job losses",
       signal: "caution",
       icon: TrendingDown,
-      delta: `${gvaYoY.toFixed(1)}%`,
+      delta: `${gvaYoY.value.toFixed(1)}%`,
+      period: `${gvaYoY.fromYear}–${gvaYoY.toYear.toString().slice(-2)}`,
       metrics: ["nominal_gva_mn_gbp"]
     })
   }
@@ -282,6 +304,7 @@ export function MetricInteractionInsights({
   regionName,
   currentMetricId,
   isLoading = false,
+  minimal = false,
 }: MetricInteractionInsightsProps) {
   const [showInfo, setShowInfo] = useState(false)
   const [showAll, setShowAll] = useState(false)
@@ -296,6 +319,15 @@ export function MetricInteractionInsights({
   const hasMore = patterns.length > 3
 
   if (isLoading) {
+    if (minimal) {
+      return (
+        <div className="space-y-2">
+          <div className="h-14 skeleton-shimmer rounded-lg" />
+          <div className="h-14 skeleton-shimmer rounded-lg" />
+          <div className="h-14 skeleton-shimmer rounded-lg" />
+        </div>
+      )
+    }
     return (
       <Card className="bg-card/60 backdrop-blur-sm border border-border/50">
         <CardHeader className="pb-2 pt-3 px-5">
@@ -316,6 +348,7 @@ export function MetricInteractionInsights({
   }
 
   if (patterns.length === 0) {
+    if (minimal) return null
     return (
       <Card className="bg-card/60 backdrop-blur-sm border border-border/50">
         <CardHeader className="pb-2 pt-3 px-5">
@@ -330,6 +363,51 @@ export function MetricInteractionInsights({
           </p>
         </CardContent>
       </Card>
+    )
+  }
+
+  // Minimal mode - no card chrome, quieter styling
+  if (minimal) {
+    return (
+      <div className="space-y-2">
+        {visiblePatterns.slice(0, 3).map((pattern, index) => {
+          const Icon = pattern.icon
+          return (
+            <div
+              key={pattern.id}
+              className={cn(
+                "flex items-center gap-3 p-3 rounded-lg border transition-all duration-200",
+                signalColors[pattern.signal],
+                "animate-in fade-in-0 slide-in-from-bottom-2 duration-300"
+              )}
+              style={{ animationDelay: `${index * 60}ms`, animationFillMode: "backwards" }}
+            >
+              <div className="p-1.5 rounded-md bg-background/50 flex-shrink-0">
+                <Icon className="h-3.5 w-3.5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="font-medium text-sm">{pattern.title}</span>
+                <p className="text-xs opacity-70 leading-snug">
+                  {pattern.caption}
+                </p>
+              </div>
+              {pattern.delta && (
+                <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                  <div className={cn(
+                    "px-2 py-0.5 rounded text-xs font-mono font-medium",
+                    deltaPillColors[pattern.signal]
+                  )}>
+                    {pattern.delta}
+                  </div>
+                  {pattern.period && (
+                    <span className="text-[10px] text-muted-foreground/60">{pattern.period}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     )
   }
 
@@ -394,11 +472,16 @@ export function MetricInteractionInsights({
               
               {/* Delta pill - more prominent */}
               {pattern.delta && (
-                <div className={cn(
-                  "px-2.5 py-1 rounded-lg text-xs font-mono font-semibold flex-shrink-0 shadow-sm",
-                  deltaPillColors[pattern.signal]
-                )}>
-                  {pattern.delta}
+                <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                  <div className={cn(
+                    "px-2.5 py-1 rounded-lg text-xs font-mono font-semibold shadow-sm",
+                    deltaPillColors[pattern.signal]
+                  )}>
+                    {pattern.delta}
+                  </div>
+                  {pattern.period && (
+                    <span className="text-[10px] text-muted-foreground/60">{pattern.period}</span>
+                  )}
                 </div>
               )}
             </div>

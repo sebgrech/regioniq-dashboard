@@ -11,7 +11,8 @@ import { createClient } from "@supabase/supabase-js"
 
 // Components
 import { AssetHeader } from "@/components/asset-header"
-import { PlaceInsights } from "@/components/place-insights"
+import { AssetLocationMap } from "@/components/asset-location-map"
+import { AssetEconomicContext, AssetComparisonCharts } from "@/components/asset-economic-context"
 import { NotableFlags } from "@/components/notable-flags"
 import { MetricInteractionInsights } from "@/components/metric-interaction-insights"
 
@@ -71,6 +72,9 @@ function AssetPageContent() {
     data: DataPoint[]
   }[]>([])
   const [metricsLoading, setMetricsLoading] = useState(true)
+  
+  // Archetype for header badge
+  const [archetype, setArchetype] = useState<string | null>(null)
 
   // Current year for analysis
   const year = new Date().getFullYear()
@@ -138,6 +142,35 @@ function AssetPageContent() {
 
     loadAllMetrics()
   }, [asset, scenario])
+  
+  // Fetch archetype for header badge
+  useEffect(() => {
+    if (!asset) return
+    
+    const fetchArchetype = async () => {
+      try {
+        const uiRegion = REGIONS.find(r => r.dbCode === asset.region_code)
+        const regionCode = uiRegion?.code ?? asset.region_code
+        
+        const response = await fetch("/api/region-insights", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ regionCode, year, scenario }),
+        })
+        
+        if (response.ok) {
+          const data = await response.json()
+          if (data?.ui?.bucketLabel) {
+            setArchetype(data.ui.bucketLabel)
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch archetype:", err)
+      }
+    }
+    
+    fetchArchetype()
+  }, [asset, year, scenario])
 
   // Get UI region code for components
   const uiRegionCode = asset
@@ -180,35 +213,37 @@ function AssetPageContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Minimal Header */}
+      {/* Header - Prominent branding */}
       <header className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
         <div className="w-full px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            {/* Logo */}
-            <Link href="https://regioniq.io" className="relative h-10 w-10 flex-shrink-0">
-              <Image
-                src="/x.png"
-                alt="RegionIQ"
-                fill
-                className="object-contain dark:hidden"
-                priority
-              />
-              <Image
-                src="/Frame 11.png"
-                alt="RegionIQ"
-                fill
-                className="object-contain hidden dark:block"
-                priority
-              />
+            {/* Logo + RegionIQ text */}
+            <Link href="https://regioniq.io" className="flex items-center gap-2.5">
+              <div className="relative h-9 w-9 flex-shrink-0">
+                <Image
+                  src="/x.png"
+                  alt="RegionIQ"
+                  fill
+                  className="object-contain dark:hidden"
+                  priority
+                />
+                <Image
+                  src="/Frame 11.png"
+                  alt="RegionIQ"
+                  fill
+                  className="object-contain hidden dark:block"
+                  priority
+                />
+              </div>
+              <span className="text-lg font-bold text-foreground tracking-tight">RegionIQ</span>
             </Link>
 
-            <div className="h-8 w-px bg-border" />
+            <div className="h-6 w-px bg-border/60" />
 
+            {/* Asset Analysis - larger text */}
             <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <Sparkles className="h-3.5 w-3.5 text-purple-400" />
-              </div>
-              <span className="text-sm font-medium text-muted-foreground">Asset Analysis</span>
+              <Sparkles className="h-4 w-4 text-purple-400" />
+              <span className="text-lg font-semibold text-foreground">Asset Analysis</span>
             </div>
           </div>
 
@@ -217,7 +252,7 @@ function AssetPageContent() {
             href="https://regioniq.io"
             className="hidden sm:inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            Powered by RegionIQ
+            Get full access
             <ExternalLink className="h-3 w-3" />
           </Link>
         </div>
@@ -225,61 +260,93 @@ function AssetPageContent() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8 max-w-5xl">
-        <div className="space-y-6">
-          {/* Asset Header */}
-          <AssetHeader
-            address={asset.address}
-            postcode={asset.postcode}
-            regionName={asset.region_name}
-            assetType={asset.asset_type}
-            assetClass={asset.asset_class}
-            broker={asset.broker}
-            brokerContact={asset.broker_contact}
-            headline={asset.headline}
-            priceGuidance={asset.price_guidance}
-            yieldInfo={asset.yield}
-            sqFt={asset.sq_ft}
-            tenant={asset.tenant}
-            leaseExpiry={asset.lease_expiry}
-            keyStats={asset.key_stats}
-          />
-
-          {/* Section divider */}
-          <div className="flex items-center gap-4 py-2">
-            <div className="h-px flex-1 bg-border/50" />
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Economic Fundamentals — {asset.region_name}
-            </span>
-            <div className="h-px flex-1 bg-border/50" />
+        {/* Asset Header + Map - Side by side on desktop */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          {/* Asset Header - takes 3/5 on desktop */}
+          <div className="lg:col-span-3">
+            <AssetHeader
+              address={asset.address}
+              postcode={asset.postcode}
+              regionName={asset.region_name}
+              assetType={asset.asset_type}
+              assetClass={asset.asset_class}
+              broker={asset.broker}
+              brokerContact={asset.broker_contact}
+              headline={asset.headline}
+              priceGuidance={asset.price_guidance}
+              yieldInfo={asset.yield}
+              sqFt={asset.sq_ft}
+              tenant={asset.tenant}
+              leaseExpiry={asset.lease_expiry}
+              keyStats={asset.key_stats}
+              archetype={archetype}
+            />
           </div>
-
-          {/* PlaceInsights - One-liner + Signals + Implications */}
-          <PlaceInsights
+          
+          {/* Location Map - takes 2/5 on desktop */}
+          {asset.postcode && (
+            <div className="lg:col-span-2">
+              <AssetLocationMap 
+                postcode={asset.postcode} 
+                address={asset.address}
+                className="h-[280px] lg:h-full lg:min-h-[320px]"
+              />
+            </div>
+          )}
+        </div>
+        
+        {/* Economic Context Section - tinted background for visual cohesion */}
+        <div className="bg-muted/10 -mx-4 px-4 py-8 md:-mx-8 md:px-8 mt-6 rounded-t-2xl">
+          {/* Prose-style economic context */}
+          <AssetEconomicContext
             regionCode={uiRegionCode}
             regionName={asset.region_name}
             year={year}
             scenario={scenario}
-            expanded
+            ladCode={asset.region_code}
+            assetType={asset.asset_type}
+            tenant={asset.tenant}
+            yieldInfo={asset.yield}
+            hideCharts
           />
+          
+          {/* Selected economic indicators - quieter, appendix-grade */}
+          <div className="mt-8 pt-6 border-t border-border/20">
+            <p className="text-xs text-muted-foreground/60 mb-4">
+              Selected economic indicators
+            </p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <NotableFlags
+                regionCode={uiRegionCode}
+                regionName={asset.region_name}
+                year={year}
+                allMetricsData={allMetricsData}
+                isLoading={metricsLoading || allMetricsData.length === 0}
+                minimal
+              />
 
-          {/* Two-column: Notable Flags | Patterns */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <NotableFlags
+              <MetricInteractionInsights
+                allMetricsData={allMetricsData}
+                year={year}
+                regionName={asset.region_name}
+                currentMetricId="population_total"
+                isLoading={metricsLoading || allMetricsData.length === 0}
+                minimal
+              />
+            </div>
+          </div>
+          
+          {/* Regional Comparison Charts - below indicators (temporarily hidden) */}
+          {/* 
+          <div className="mt-8 pt-6 border-t border-border/20">
+            <AssetComparisonCharts
               regionCode={uiRegionCode}
               regionName={asset.region_name}
               year={year}
-              allMetricsData={allMetricsData}
-              isLoading={metricsLoading || allMetricsData.length === 0}
-            />
-
-            <MetricInteractionInsights
-              allMetricsData={allMetricsData}
-              year={year}
-              regionName={asset.region_name}
-              currentMetricId="population_total"
-              isLoading={metricsLoading || allMetricsData.length === 0}
+              scenario={scenario}
             />
           </div>
+          */}
         </div>
       </main>
 
