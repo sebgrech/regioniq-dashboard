@@ -23,6 +23,8 @@ export interface AssetHeaderProps {
   tenant?: string | null
   leaseExpiry?: string | null
   keyStats?: string[] | null
+  /** Economic archetype from region analysis (e.g., "Consumer Hub") */
+  archetype?: string | null
 }
 
 export function AssetHeader({
@@ -40,6 +42,7 @@ export function AssetHeader({
   tenant,
   leaseExpiry,
   keyStats,
+  archetype,
 }: AssetHeaderProps) {
   const [showStats, setShowStats] = useState(false)
 
@@ -54,13 +57,18 @@ export function AssetHeader({
       />
       
       <div className="relative p-6 md:p-8">
-        {/* Top row: Asset type badge + Broker */}
+        {/* Top row: Asset type badge + Archetype + Broker */}
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="flex flex-wrap items-center gap-2">
             {assetClass && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-300 text-xs font-medium">
                 <Building2 className="h-3 w-3" />
                 {assetClass}
+              </span>
+            )}
+            {archetype && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cyan-500/15 text-cyan-400 text-xs font-medium animate-in fade-in-0 slide-in-from-left-2 duration-500">
+                {archetype}
               </span>
             )}
             {assetType && assetType !== assetClass && (
