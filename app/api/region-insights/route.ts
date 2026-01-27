@@ -387,6 +387,7 @@ function selectDominantSignal(signals: SignalResult[]): SignalResult | null {
  * - Remove hedging ("may", "appears", "likely", "could")
  * - Remove preambles ("This area", "This region")
  * - Keep language direct and confident
+ * - Preserve em-dash clauses for detail
  */
 function cleanClaimForOM(s: string): string {
   return s
@@ -394,7 +395,6 @@ function cleanClaimForOM(s: string): string {
     .replace(/^This region /, "")
     .replace(/^A high share of /, "High ")
     .replace(/^Economic output /, "Output ")
-    .replace(/—.*$/, "")
     // Remove hedging - make statements direct
     .replace(/ may support /, " supports ")
     .replace(/ may indicate /, " indicates ")
