@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react"
 import { useParams } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
-import { Loader2, Sparkles, ExternalLink } from "lucide-react"
+import { Loader2, Sparkles, ExternalLink, Building2 } from "lucide-react"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { REGIONS, type Scenario } from "@/lib/metrics.config"
 import { fetchSeries, type DataPoint } from "@/lib/data-service"
@@ -245,6 +245,14 @@ function AssetPageContent() {
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-purple-400" />
               <span className="text-lg font-semibold text-foreground">Asset Analysis</span>
+            </div>
+
+            {/* Region badge - shows the LAD being analyzed (mirrors full dashboard style) */}
+            <div className="hidden sm:flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-primary/10 border border-primary/20">
+                <Building2 className="h-4 w-4 text-primary" />
+              </div>
+              <span className="text-base font-semibold text-foreground">{asset.region_name}</span>
             </div>
           </div>
 
