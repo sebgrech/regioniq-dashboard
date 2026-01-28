@@ -8,7 +8,7 @@
  * - Warm-to-cool gradient: Orange → Cream → Indigo
  * - Clear narrative: "Underperforming → Average → Outperforming"
  * - Matches house chart palette (indigo primary, orange accent)
- * - Grey ONLY for no-data (never for actual values)
+ * - Grey ONLY for no-data (never forim actual values)
  * - Supports metric direction inversion (e.g., unemployment: lower = better)
  * 
  * Color ramp:

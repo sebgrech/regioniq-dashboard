@@ -139,14 +139,10 @@ export async function exportCatchmentPPTX(options: ExportOptions & { title?: str
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ result, title }),
-  })
-
-  if (!res.ok) {
+  })  if (!res.ok) {
     const msg = await res.text()
     throw new Error(msg || "PowerPoint export failed")
-  }
-
-  const blob = await res.blob()
+  }  const blob = await res.blob()
   const filename = `regioniq_catchment_summary_${result.year}_${result.scenario}_${isoDateStamp()}.pptx`
   downloadBlob(blob, filename)
 }

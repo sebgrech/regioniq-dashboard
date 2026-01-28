@@ -49,14 +49,6 @@ export function AssetHeader({
 
   return (
     <div className="relative overflow-hidden rounded-2xl bg-card/50 backdrop-blur-sm border border-border/50">
-      {/* Gradient accent */}
-      <div 
-        className="absolute inset-0 opacity-30 pointer-events-none"
-        style={{
-          background: "linear-gradient(135deg, rgba(139,92,246,0.15) 0%, rgba(34,211,238,0.1) 50%, transparent 100%)",
-        }}
-      />
-      
       <div className="relative p-6 md:p-8">
         {/* Top row: Asset type badge + Archetype + Broker */}
         <div className="flex items-start justify-between gap-4 mb-4">

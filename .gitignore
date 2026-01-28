@@ -47,4 +47,4 @@ tsconfig.tsbuildinfo
 .vercel
 main
 
-.mp4
+*.mp4
