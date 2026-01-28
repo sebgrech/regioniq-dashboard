@@ -12,7 +12,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { ChevronDown, Check, Settings2 } from "lucide-react"
+import { ChevronDown, Check, Settings2, FileText } from "lucide-react"
 import { YEARS, type Scenario } from "@/lib/metrics.config"
 import { RegionSearch, type RegionMetadata } from "@/components/region-search"
 import { cn } from "@/lib/utils"
@@ -242,19 +242,32 @@ export function DashboardControls({
             </div>
           )}
 
-          {/* Admin button - only for admin users */}
+          {/* Admin buttons - only for admin users */}
           {isAdminEmail(userEmail) && (
-            <Button
-              asChild
-              variant="ghost"
-              size="sm"
-              className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
-            >
-              <Link href="/admin/pipeline-runs">
-                <Settings2 className="h-4 w-4" />
-                <span className="hidden sm:inline">Ops</span>
-              </Link>
-            </Button>
+            <>
+              <Button
+                asChild
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+              >
+                <Link href="/admin/assets">
+                  <FileText className="h-4 w-4" />
+                  <span className="hidden sm:inline">Assets</span>
+                </Link>
+              </Button>
+              <Button
+                asChild
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+              >
+                <Link href="/admin/pipeline-runs">
+                  <Settings2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Ops</span>
+                </Link>
+              </Button>
+            </>
           )}
 
           {/* User menu - account dropdown */}

@@ -552,6 +552,12 @@ const IMPLICATION_EXPLANATIONS: Record<string, string> = {
   "spending_power": "High income retention signal indicates local residents capture a larger share of economic value, supporting discretionary spending.",
   "office_market": "High job draw means workers commute into the area, creating demand for office and commercial space near employment centres.",
   "logistics_position": "Output per job is high, indicating capital-intensive or distribution-focused economic activity in the catchment.",
+  // Labour market implications
+  "hiring_constraints": "Labour market utilisation is high relative to available workforce, making it harder for new occupiers to recruit locally and potentially slowing expansion timelines.",
+  "labour_availability": "Labour market slack indicates available workforce capacity, making it easier for new occupiers to recruit locally and scale operations.",
+  // Income capture implications
+  "affluent_commuter_base": "Residents earn significantly more than the local economy produces, indicating high-income commuters who spend locally on retail and services.",
+  "local_spending_power": "Income retention is strong, meaning local residents capture economic value rather than it leaking to neighbouring centres.",
 }
 
 // Get explanation for an implication based on ID or text content
@@ -561,6 +567,15 @@ function getImplicationExplanation(id: string, text: string): string {
   
   // Text-based matching for dynamic implications
   const lowerText = text.toLowerCase()
+  if (lowerText.includes("hiring") && lowerText.includes("constrained")) {
+    return "Labour market utilisation is high relative to available workforce, making it harder for new occupiers to recruit locally and potentially slowing expansion timelines."
+  }
+  if (lowerText.includes("hiring") && lowerText.includes("feasible")) {
+    return "Labour market slack indicates available workforce capacity, making it easier for new occupiers to recruit locally and scale operations."
+  }
+  if (lowerText.includes("high-income") && lowerText.includes("residential")) {
+    return "Residents earn significantly more than the local economy produces, indicating high-income commuters who spend locally on retail and services."
+  }
   if (lowerText.includes("retail") && lowerText.includes("residential")) {
     return "Job draw is low, meaning fewer workers commute in. Retail and residential assets benefit from resident spending rather than worker footfall."
   }

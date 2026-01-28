@@ -271,7 +271,7 @@ function AssetPageContent() {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8 max-w-5xl">
+      <main id="asset-analysis-content" className="container mx-auto px-4 py-8 max-w-5xl bg-background">
         {/* Asset Header + Map - Side by side on desktop */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* Asset Header - takes 3/5 on desktop */}

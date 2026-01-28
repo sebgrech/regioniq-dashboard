@@ -168,7 +168,7 @@ const IMPLICATION_RULES: ImplicationRule[] = [
     id: "consumer_hub_opportunity",
     conditions: [
       { signalId: "employment_density", outcomes: ["low"] },
-      { signalId: "income_capture", outcomes: ["high", "extreme_high"] }
+      { signalId: "income_capture", outcomes: ["high"] }
     ],
     text: "Retail and residential better positioned than office",
     priority: 95,
