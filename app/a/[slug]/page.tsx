@@ -35,6 +35,7 @@ interface AssetPageData {
     name?: string
     email?: string
     phone?: string
+    domain?: string
   } | null
   headline: string | null
   price_guidance: string | null

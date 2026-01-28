@@ -16,6 +16,7 @@ export interface AssetHeaderProps {
     name?: string
     email?: string
     phone?: string
+    domain?: string
   } | null
   headline?: string | null
   priceGuidance?: string | null
@@ -73,6 +74,7 @@ export function AssetHeader({
             <div className="flex items-center gap-2 text-right text-xs text-muted-foreground">
               <span className="opacity-60">via</span>
               <CompanyLogo 
+                domain={brokerContact?.domain}
                 name={broker} 
                 size={36} 
                 showFallback={false}
