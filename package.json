@@ -11,9 +11,10 @@
     "ingest:westminster": "tsx scripts/ingest-westminster.ts",
     "generate:city-regions": "tsx scripts/generate-city-regions.ts",
     "generate:itl-to-lad": "tsx scripts/generate-itl-to-lad.ts",
+    "generate:region-hierarchy": "tsx scripts/generate-region-hierarchy.ts",
     "add:bbox": "tsx scripts/add-bbox-to-geojson.ts",
     "generate:region-index": "tsx scripts/generate-region-index.ts",
-    "prebuild": "pnpm ingest:elections && pnpm ingest:westminster && pnpm generate:city-regions && pnpm generate:itl-to-lad && pnpm add:bbox && pnpm generate:region-index"
+    "prebuild": "pnpm ingest:elections && pnpm ingest:westminster && pnpm generate:city-regions && pnpm generate:itl-to-lad && pnpm generate:region-hierarchy && pnpm add:bbox && pnpm generate:region-index"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

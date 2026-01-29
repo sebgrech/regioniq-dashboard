@@ -18,6 +18,7 @@ import {
 import { REGIONS } from "@/lib/metrics.config"
 import { fetchSeries, type DataPoint } from "@/lib/data-service"
 import { cn } from "@/lib/utils"
+import { getSiblings, getRegionInfo, getParent } from "@/lib/region-hierarchy"
 
 // =============================================================================
 // Types
@@ -58,7 +59,7 @@ const METRICS: MetricConfig[] = [
 const MAIN_COLOR = "#7c3aed" // violet-600 (purple - main region)
 const PEER_COLORS = [
   "#0ea5e9", // sky-500 (blue)
-  "#6366f1", // indigo-500 (dark pink/indigo)
+  "#f87171", // red-400 (coral/salmon)
 ]
 
 // =============================================================================
@@ -90,10 +91,47 @@ export function GPComparisonSection({
   const [peersData, setPeersData] = useState<PeerData[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // Get peer regions (same ITL level siblings)
+  // Get peer regions: sibling ITL3s within the same ITL2 parent
+  // This ensures we compare to regions with grouped forecasts (same ITL2)
   const peerRegions = useMemo(() => {
+    // Use the region hierarchy to get true siblings (same parent ITL2)
+    let siblings = getSiblings(regionCode)
+    
+    // If no direct siblings (e.g., LAD with only one LAD in its ITL3),
+    // traverse up to the parent ITL3 and get its siblings instead
+    if (siblings.length === 0) {
+      const regionInfo = getRegionInfo(regionCode)
+      
+      if (regionInfo?.level === "LAD") {
+        // LAD → get parent ITL3 → get ITL3 siblings
+        const parentITL3 = getParent(regionCode)
+        if (parentITL3 && parentITL3.level === "ITL3") {
+          siblings = getSiblings(parentITL3.code)
+        }
+      }
+    }
+    
+    if (siblings.length > 0) {
+      // Return up to 2 sibling regions from the same ITL2
+      return siblings.slice(0, 2).map(s => ({ code: s.code, name: s.name }))
+    }
+    
+    // Fallback: if no siblings found in hierarchy, use REGIONS config
     const regionConfig = REGIONS.find((r) => r.code === regionCode)
     if (!regionConfig) return []
+    
+    // For ITL3, find other ITL3s with the same ITL2 prefix (first 4 chars)
+    if (regionConfig.level === "ITL3") {
+      const itl2Prefix = regionCode.slice(0, 4) // e.g., TLI3 from TLI33
+      const samePrefixRegions = REGIONS.filter(
+        r => r.level === "ITL3" && 
+             r.code.startsWith(itl2Prefix) && 
+             r.code !== regionCode
+      )
+      return samePrefixRegions.slice(0, 2).map(r => ({ code: r.code, name: r.name }))
+    }
+    
+    // For other levels, fall back to same-level regions
     const level = regionConfig.level || "ITL3"
     const sameLevel = REGIONS.filter(r => r.level === level && r.code !== regionCode)
     return sameLevel.slice(0, 2).map(r => ({ code: r.code, name: r.name }))
@@ -336,6 +374,24 @@ export function GPComparisonSection({
 
   const selectedMetricConfig = METRICS.find(m => m.id === selectedMetric)
 
+  // Custom Y-axis tick for bar chart - bolds the main region
+  const BarYAxisTick = ({ x, y, payload }: any) => {
+    const isMainRegion = payload.value === regionName
+    return (
+      <text
+        x={x}
+        y={y}
+        dy={4}
+        textAnchor="end"
+        fill={isMainRegion ? (isDarkMode ? "#fff" : "#000") : textColor}
+        fontSize={9}
+        fontWeight={isMainRegion ? 600 : 400}
+      >
+        {payload.value}
+      </text>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Section Header */}
@@ -427,16 +483,14 @@ export function GPComparisonSection({
                   {leaseExpiryYear && leaseExpiryYear >= (year - 10) && leaseExpiryYear <= (year + 10) && (
                     <ReferenceLine 
                       x={leaseExpiryYear} 
-                      stroke="#f59e0b"
-                      strokeDasharray="6 3" 
-                      strokeOpacity={0.8}
-                      strokeWidth={1.5}
+                      stroke="#6b7280"
+                      strokeWidth={2.5}
                       label={{ 
                         value: 'Lease Expiry', 
                         position: 'insideTopLeft', 
                         fontSize: 9, 
-                        fill: '#f59e0b',
-                        opacity: 0.9,
+                        fill: '#6b7280',
+                        fontWeight: 500,
                         dx: 4
                       }}
                     />
@@ -538,10 +592,10 @@ export function GPComparisonSection({
                     <YAxis 
                       type="category" 
                       dataKey="name"
-                      tick={{ fontSize: 10, fill: textColor }}
+                      tick={<BarYAxisTick />}
                       axisLine={{ stroke: gridStroke }}
                       tickLine={false}
-                      width={90}
+                      width={160}
                     />
                     <RechartsTooltip content={<BarTooltip />} cursor={{ fill: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }} />
                     <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={24}>

@@ -205,11 +205,11 @@ interface LADComparisonChartProps {
   forecastYear?: number
 }
 
-// House styling colors - main region violet, peers indigo/sky
+// House styling colors - main region violet, peers blue/coral
 const MAIN_COLOR = "#7c3aed" // violet-600
 const PEER_COLORS = [
-  "#6366f1", // indigo-500
-  "#0ea5e9", // sky-500
+  "#0ea5e9", // sky-500 (blue)
+  "#f87171", // red-400 (coral/salmon)
 ]
 
 function LADComparisonChart({ 
@@ -547,52 +547,45 @@ function getImplicationIcon(id: string, text: string): typeof Sun {
 // =============================================================================
 
 // Explanation text for each implication - explains "why" on hover
+// All 17 implication IDs with economically defensible explanations
 const IMPLICATION_EXPLANATIONS: Record<string, string> = {
-  // Structure-based implications
-  "retail_resi_positioning": "Low job draw (workers don't commute in) means consumer-facing assets benefit from resident spending rather than daytime worker presence.",
-  "resident_footfall": "Employment density is low relative to population, indicating most economic activity comes from residents rather than commuting workers.",
-  "spending_power": "High income retention signal indicates local residents capture a larger share of economic value, supporting discretionary spending.",
-  "office_market": "High job draw means workers commute into the area, creating demand for office and commercial space near employment centres.",
-  "logistics_position": "Output per job is high, indicating capital-intensive or distribution-focused economic activity in the catchment.",
-  // Labour market implications
-  "hiring_constraints": "Labour market utilisation is high relative to available workforce, making it harder for new occupiers to recruit locally and potentially slowing expansion timelines.",
-  "labour_availability": "Labour market slack indicates available workforce capacity, making it easier for new occupiers to recruit locally and scale operations.",
-  // Income capture implications
-  "affluent_commuter_base": "Residents earn significantly more than the local economy produces, indicating high-income commuters who spend locally on retail and services.",
-  "local_spending_power": "Income retention is strong, meaning local residents capture economic value rather than it leaking to neighbouring centres.",
+  // Employment Density implications
+  "major_hub_worker_spend": "Extreme employment density (jobs far exceed local population) means the area functions as a regional employment centre. Daytime economic activity is dominated by workers commuting in, not local residents.",
+  "weekday_demand_high": "High employment density indicates more jobs than working-age residents. During business hours, the effective population swells with commuters, supporting office-adjacent retail and F&B.",
+  "weekday_demand_low": "Low employment density means most working-age residents commute elsewhere for work. Daytime economic activity is driven by residents rather than an influx of commuting workers.",
+  "residential_catchment": "Low employment density indicates this is primarily a residential area with workers commuting out. Office demand is limited; convenience retail and residential uses align better with the population profile.",
+  
+  // Income Capture implications
+  "affluent_commuter_base": "Resident incomes significantly exceed local economic output per head. This indicates high earners commuting to employment elsewhere, returning disposable income to the local area.",
+  "local_spending_power": "Income capture is high — residents retain a significant share of economic value generated locally. This supports consumer-facing uses as household spending power aligns with local economic activity.",
+  "output_centre_spend": "Very low income capture means economic output flows to non-resident stakeholders. Local residents have limited purchasing power; retail depends on worker spend during business hours.",
+  "value_leakage": "Low income capture indicates a disconnect between local output and resident incomes. Economic value leaks to neighbouring areas through commuting patterns or corporate structures.",
+  
+  // Labour Capacity implications
+  "hiring_constraints": "High labour market utilisation indicates limited spare workforce capacity. New occupiers face competition for workers, longer recruitment timelines, and potential wage pressure.",
+  "labour_availability": "Lower employment rates indicate available workforce capacity. New occupiers can recruit locally without acute competition, supporting operational ramp-up.",
+  
+  // Productivity implications
+  "productivity_led_growth": "High productivity indicates growth driven by output-per-worker gains rather than headcount expansion. Firms increase output before expanding space, so office absorption lags GVA growth.",
+  "labour_led_growth": "Lower productivity indicates a volume-driven economy where growth requires proportional headcount expansion. Space demand tracks job creation closely.",
+  
+  // Growth Composition implications
+  "employment_growth_leading": "Jobs are growing faster than population, indicating the area is attracting employment. This expands the daytime worker base, supporting office demand and worker-oriented retail.",
+  "residential_pressure_building": "Population is growing faster than local job creation, indicating net in-migration of residents who work elsewhere. This creates demand for housing and local amenities.",
+  
+  // Combination implications
+  "consumer_hub_opportunity": "Combination of low employment density and high income capture indicates an affluent residential catchment. Residents have strong purchasing power but commute elsewhere for work.",
+  "tight_market_constraints": "High employment density combined with high labour utilisation creates acute hiring competition. New occupiers face structural recruitment constraints.",
+  "growth_opportunity": "Low labour utilisation combined with employment-led growth indicates available workforce capacity in a growing employment market. Favourable conditions for occupier expansion.",
 }
 
-// Get explanation for an implication based on ID or text content
-function getImplicationExplanation(id: string, text: string): string {
-  // Direct ID match
+// Get explanation for an implication based on ID
+function getImplicationExplanation(id: string, _text: string): string {
+  // Direct ID match (covers all 17 implication IDs)
   if (IMPLICATION_EXPLANATIONS[id]) return IMPLICATION_EXPLANATIONS[id]
   
-  // Text-based matching for dynamic implications
-  const lowerText = text.toLowerCase()
-  if (lowerText.includes("hiring") && lowerText.includes("constrained")) {
-    return "Labour market utilisation is high relative to available workforce, making it harder for new occupiers to recruit locally and potentially slowing expansion timelines."
-  }
-  if (lowerText.includes("hiring") && lowerText.includes("feasible")) {
-    return "Labour market slack indicates available workforce capacity, making it easier for new occupiers to recruit locally and scale operations."
-  }
-  if (lowerText.includes("high-income") && lowerText.includes("residential")) {
-    return "Residents earn significantly more than the local economy produces, indicating high-income commuters who spend locally on retail and services."
-  }
-  if (lowerText.includes("retail") && lowerText.includes("residential")) {
-    return "Job draw is low, meaning fewer workers commute in. Retail and residential assets benefit from resident spending rather than worker footfall."
-  }
-  if (lowerText.includes("footfall") || lowerText.includes("resident")) {
-    return "Low employment density relative to population indicates economic activity is driven by residents rather than commuting workers."
-  }
-  if (lowerText.includes("spending") || lowerText.includes("income")) {
-    return "High income retention signal indicates local residents capture more economic value, supporting consumer spending capacity."
-  }
-  if (lowerText.includes("office") || lowerText.includes("worker")) {
-    return "High job draw indicates strong in-commuting patterns, creating demand for commercial and office space."
-  }
-  
-  // Default explanation
-  return "This insight is derived from regional economic signals including job draw, income retention, and labour capacity indicators."
+  // Default for any edge cases
+  return "This insight is derived from regional economic signals including employment density, income capture, and labour capacity indicators."
 }
 
 /**

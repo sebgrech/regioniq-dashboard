@@ -10,7 +10,7 @@ import "mapbox-gl/dist/mapbox-gl.css"
 const MAPBOX_LIB = import("mapbox-gl")
 
 interface AssetLocationMapProps {
-  postcode: string
+  postcode?: string | null
   address?: string
   className?: string
 }
@@ -28,11 +28,12 @@ export function AssetLocationMap({ postcode, address, className }: AssetLocation
   const [error, setError] = useState<string | null>(null)
   const mapRef = useRef<any>(null)
   
-  // Geocode the postcode on mount
+  // Geocode the postcode or address on mount
   useEffect(() => {
-    async function geocodePostcode() {
-      if (!postcode) {
-        setError("No postcode provided")
+    async function geocodeLocation() {
+      // Need either postcode or address to geocode
+      if (!postcode && !address) {
+        setError("No location provided")
         setIsLoading(false)
         return
       }
@@ -45,10 +46,17 @@ export function AssetLocationMap({ postcode, address, className }: AssetLocation
           return
         }
         
-        // Use Mapbox Geocoding API
-        const query = encodeURIComponent(`${postcode}, United Kingdom`)
+        // Use postcode if available (preferred), otherwise fall back to address
+        const searchQuery = postcode 
+          ? `${postcode}, United Kingdom`
+          : `${address}, United Kingdom`
+        const query = encodeURIComponent(searchQuery)
+        
+        // Adjust types based on what we're searching for
+        const types = postcode ? "postcode,address" : "address,place,poi"
+        
         const response = await fetch(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/${query}.json?access_token=${token}&country=GB&types=postcode,address&limit=1`
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${query}.json?access_token=${token}&country=GB&types=${types}&limit=1`
         )
         
         if (!response.ok) {
@@ -75,8 +83,8 @@ export function AssetLocationMap({ postcode, address, className }: AssetLocation
       }
     }
     
-    geocodePostcode()
-  }, [postcode])
+    geocodeLocation()
+  }, [postcode, address])
   
   // Map style based on theme - using streets (colored) style
   const mapStyle = theme === "dark" 
@@ -152,8 +160,8 @@ export function AssetLocationMap({ postcode, address, className }: AssetLocation
             {/* Tooltip on hover */}
             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
               <div className="bg-popover/95 backdrop-blur-sm border border-border rounded-lg shadow-lg px-3 py-2 whitespace-nowrap">
-                <p className="text-xs font-medium text-foreground">{postcode}</p>
-                {address && (
+                <p className="text-xs font-medium text-foreground">{postcode || address}</p>
+                {postcode && address && (
                   <p className="text-[10px] text-muted-foreground mt-0.5 max-w-[200px] truncate">
                     {address}
                   </p>
@@ -164,9 +172,9 @@ export function AssetLocationMap({ postcode, address, className }: AssetLocation
         </Marker>
       </Map>
       
-      {/* Postcode badge overlay */}
-      <div className="absolute bottom-3 left-3 bg-background/90 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5 shadow-sm">
-        <p className="text-xs font-medium text-foreground">{postcode}</p>
+      {/* Location badge overlay */}
+      <div className="absolute bottom-3 left-3 bg-background/90 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5 shadow-sm max-w-[200px]">
+        <p className="text-xs font-medium text-foreground truncate">{postcode || address}</p>
       </div>
     </div>
   )

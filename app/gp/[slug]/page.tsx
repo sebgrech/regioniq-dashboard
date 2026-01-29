@@ -143,8 +143,8 @@ function GPHeader({
           </div>
           
           {/* Economic Profile indicator */}
-          <div className="flex items-center gap-2 text-right text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 text-xs font-medium">
+          <div className="flex items-center justify-center">
+            <span className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 text-xs font-medium text-center">
               <BarChart3 className="h-3 w-3" />
               Economic Profile
             </span>
@@ -233,25 +233,50 @@ function GPPageContent() {
   const year = new Date().getFullYear()
   const scenario: Scenario = "baseline"
 
-  // Fetch asset metadata
+  // Fetch asset metadata (try asset_pages first, then portfolio_assets)
   useEffect(() => {
     const fetchAsset = async () => {
       setLoading(true)
       setError(null)
 
-      const { data, error: fetchError } = await supabase
+      // First try asset_pages (OM-based deals)
+      const { data: dealData, error: dealError } = await supabase
         .from("asset_pages")
         .select("*")
         .eq("slug", slug)
         .single()
 
-      if (fetchError || !data) {
-        setError("Asset not found")
+      if (dealData && !dealError) {
+        setAsset(dealData as AssetPageData)
         setLoading(false)
         return
       }
 
-      setAsset(data as AssetPageData)
+      // If not found, try portfolio_assets
+      const { data: portfolioData, error: portfolioError } = await supabase
+        .from("portfolio_assets")
+        .select("*")
+        .eq("slug", slug)
+        .single()
+
+      if (portfolioData && !portfolioError) {
+        // Map portfolio asset to AssetPageData format
+        setAsset({
+          ...portfolioData,
+          broker: null,
+          broker_contact: null,
+          price_guidance: null,
+          yield: null,
+          tenant: null,
+          lease_expiry: null,
+          key_stats: null,
+          page_type: null,
+        } as AssetPageData)
+        setLoading(false)
+        return
+      }
+
+      setError("Asset not found")
       setLoading(false)
     }
 
@@ -445,7 +470,8 @@ function GPPageContent() {
           </div>
           
           {/* Location Map - takes 2/5 on desktop */}
-          {asset.postcode && (
+          {/* Map shows if postcode OR address is available */}
+          {(asset.postcode || asset.address) && (
             <div className="lg:col-span-2">
               <AssetLocationMap 
                 postcode={asset.postcode} 
