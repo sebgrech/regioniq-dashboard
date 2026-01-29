@@ -96,23 +96,30 @@ export function GPComparisonSection({
   const peerRegions = useMemo(() => {
     // Use the region hierarchy to get true siblings (same parent ITL2)
     let siblings = getSiblings(regionCode)
+    let regionInfo = getRegionInfo(regionCode)
     
     // If no direct siblings (e.g., LAD with only one LAD in its ITL3),
     // traverse up to the parent ITL3 and get its siblings instead
-    if (siblings.length === 0) {
-      const regionInfo = getRegionInfo(regionCode)
-      
-      if (regionInfo?.level === "LAD") {
-        // LAD → get parent ITL3 → get ITL3 siblings
-        const parentITL3 = getParent(regionCode)
-        if (parentITL3 && parentITL3.level === "ITL3") {
-          siblings = getSiblings(parentITL3.code)
-        }
+    if (siblings.length === 0 && regionInfo?.level === "LAD") {
+      const parentITL3 = getParent(regionCode)
+      if (parentITL3 && parentITL3.level === "ITL3") {
+        siblings = getSiblings(parentITL3.code)
+        regionInfo = getRegionInfo(parentITL3.code)
+      }
+    }
+    
+    // If still no siblings (e.g., Cornwall is sole ITL3 in its ITL2),
+    // go up to ITL2 and get sibling ITL2s within the same ITL1
+    if (siblings.length === 0 && regionInfo?.level === "ITL3") {
+      const parentITL2 = getParent(regionCode.length === 5 ? regionCode.slice(0, 4) : regionCode)
+      if (parentITL2 && parentITL2.level === "ITL2") {
+        // Get sibling ITL2s (same ITL1 parent)
+        siblings = getSiblings(parentITL2.code)
       }
     }
     
     if (siblings.length > 0) {
-      // Return up to 2 sibling regions from the same ITL2
+      // Return up to 2 sibling regions
       return siblings.slice(0, 2).map(s => ({ code: s.code, name: s.name }))
     }
     
@@ -128,7 +135,17 @@ export function GPComparisonSection({
              r.code.startsWith(itl2Prefix) && 
              r.code !== regionCode
       )
-      return samePrefixRegions.slice(0, 2).map(r => ({ code: r.code, name: r.name }))
+      if (samePrefixRegions.length > 0) {
+        return samePrefixRegions.slice(0, 2).map(r => ({ code: r.code, name: r.name }))
+      }
+      // If sole ITL3 in ITL2, compare to other ITL2s in same ITL1
+      const itl1Prefix = regionCode.slice(0, 3) // e.g., TLK from TLK30
+      const siblingITL2s = REGIONS.filter(
+        r => r.level === "ITL2" && 
+             r.code.startsWith(itl1Prefix) && 
+             r.code !== itl2Prefix
+      )
+      return siblingITL2s.slice(0, 2).map(r => ({ code: r.code, name: r.name }))
     }
     
     // For other levels, fall back to same-level regions

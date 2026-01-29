@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge"
 import { VerdictVisual } from "@/components/place-insights/verdict-visual"
 import { fetchSeries, type DataPoint } from "@/lib/data-service"
 import { REGIONS } from "@/lib/metrics.config"
+import { getSiblings, getRegionInfo, getParent } from "@/lib/region-hierarchy"
 import {
   LineChart,
   Line,
@@ -844,16 +845,65 @@ export function AssetEconomicContext({
     async function fetchPeerData() {
       setPeersLoading(true)
       
-      // Find peer regions from the REGIONS config (same ITL level siblings)
-      const regionConfig = REGIONS.find((r) => r.code === regionCode)
-      
-      // Determine peer regions if config found
+      // Find peer regions: sibling ITL3s within the same ITL2 parent
+      // This ensures we compare to regions with grouped forecasts (same ITL2)
       let peerRegions: { code: string; name: string }[] = []
-      if (regionConfig) {
-        const level = regionConfig.level || "ITL3"
-        const sameLevel = REGIONS.filter(r => r.level === level && r.code !== regionCode)
-        // Take nearby regions (first 2-3 in same level for comparison)
-        peerRegions = sameLevel.slice(0, 2).map(r => ({ code: r.code, name: r.name }))
+      
+      // Use the region hierarchy to get true siblings (same parent ITL2)
+      let siblings = getSiblings(regionCode)
+      let regionInfo = getRegionInfo(regionCode)
+      
+      // If no direct siblings (e.g., LAD with only one LAD in its ITL3),
+      // traverse up to the parent ITL3 and get its siblings instead
+      if (siblings.length === 0 && regionInfo?.level === "LAD") {
+        const parentITL3 = getParent(regionCode)
+        if (parentITL3 && parentITL3.level === "ITL3") {
+          siblings = getSiblings(parentITL3.code)
+          regionInfo = getRegionInfo(parentITL3.code)
+        }
+      }
+      
+      // If still no siblings (e.g., Cornwall is sole ITL3 in its ITL2),
+      // go up to ITL2 and get sibling ITL2s within the same ITL1
+      if (siblings.length === 0 && regionInfo?.level === "ITL3") {
+        const itl2Code = regionCode.length === 5 ? regionCode.slice(0, 4) : regionCode
+        const parentITL2 = getParent(itl2Code)
+        if (parentITL2 && parentITL2.level === "ITL2") {
+          siblings = getSiblings(parentITL2.code)
+        }
+      }
+      
+      if (siblings.length > 0) {
+        peerRegions = siblings.slice(0, 2).map(s => ({ code: s.code, name: s.name }))
+      } else {
+        // Fallback: if no siblings found in hierarchy, use REGIONS config
+        const regionConfig = REGIONS.find((r) => r.code === regionCode)
+        if (regionConfig) {
+          if (regionConfig.level === "ITL3") {
+            const itl2Prefix = regionCode.slice(0, 4)
+            const samePrefixRegions = REGIONS.filter(
+              r => r.level === "ITL3" && 
+                   r.code.startsWith(itl2Prefix) && 
+                   r.code !== regionCode
+            )
+            if (samePrefixRegions.length > 0) {
+              peerRegions = samePrefixRegions.slice(0, 2).map(r => ({ code: r.code, name: r.name }))
+            } else {
+              // Sole ITL3 in ITL2 - compare to sibling ITL2s
+              const itl1Prefix = regionCode.slice(0, 3)
+              const siblingITL2s = REGIONS.filter(
+                r => r.level === "ITL2" && 
+                     r.code.startsWith(itl1Prefix) && 
+                     r.code !== itl2Prefix
+              )
+              peerRegions = siblingITL2s.slice(0, 2).map(r => ({ code: r.code, name: r.name }))
+            }
+          } else {
+            const level = regionConfig.level || "ITL3"
+            const sameLevel = REGIONS.filter(r => r.level === level && r.code !== regionCode)
+            peerRegions = sameLevel.slice(0, 2).map(r => ({ code: r.code, name: r.name }))
+          }
+        }
       }
       
       const metricsToCompare = [
@@ -1186,12 +1236,64 @@ export function AssetComparisonCharts({
     async function fetchPeerData() {
       setPeersLoading(true)
       
-      const regionConfig = REGIONS.find((r) => r.code === regionCode)
+      // Find peer regions: sibling ITL3s within the same ITL2 parent
       let peerRegions: { code: string; name: string }[] = []
-      if (regionConfig) {
-        const level = regionConfig.level || "ITL3"
-        const sameLevel = REGIONS.filter(r => r.level === level && r.code !== regionCode)
-        peerRegions = sameLevel.slice(0, 2).map(r => ({ code: r.code, name: r.name }))
+      
+      // Use the region hierarchy to get true siblings (same parent ITL2)
+      let siblings = getSiblings(regionCode)
+      let regionInfo = getRegionInfo(regionCode)
+      
+      // If no direct siblings (e.g., LAD with only one LAD in its ITL3),
+      // traverse up to the parent ITL3 and get its siblings instead
+      if (siblings.length === 0 && regionInfo?.level === "LAD") {
+        const parentITL3 = getParent(regionCode)
+        if (parentITL3 && parentITL3.level === "ITL3") {
+          siblings = getSiblings(parentITL3.code)
+          regionInfo = getRegionInfo(parentITL3.code)
+        }
+      }
+      
+      // If still no siblings (e.g., Cornwall is sole ITL3 in its ITL2),
+      // go up to ITL2 and get sibling ITL2s within the same ITL1
+      if (siblings.length === 0 && regionInfo?.level === "ITL3") {
+        const itl2Code = regionCode.length === 5 ? regionCode.slice(0, 4) : regionCode
+        const parentITL2 = getParent(itl2Code)
+        if (parentITL2 && parentITL2.level === "ITL2") {
+          siblings = getSiblings(parentITL2.code)
+        }
+      }
+      
+      if (siblings.length > 0) {
+        peerRegions = siblings.slice(0, 2).map(s => ({ code: s.code, name: s.name }))
+      } else {
+        // Fallback: if no siblings found in hierarchy, use REGIONS config
+        const regionConfig = REGIONS.find((r) => r.code === regionCode)
+        if (regionConfig) {
+          if (regionConfig.level === "ITL3") {
+            const itl2Prefix = regionCode.slice(0, 4)
+            const samePrefixRegions = REGIONS.filter(
+              r => r.level === "ITL3" && 
+                   r.code.startsWith(itl2Prefix) && 
+                   r.code !== regionCode
+            )
+            if (samePrefixRegions.length > 0) {
+              peerRegions = samePrefixRegions.slice(0, 2).map(r => ({ code: r.code, name: r.name }))
+            } else {
+              // Sole ITL3 in ITL2 - compare to sibling ITL2s
+              const itl1Prefix = regionCode.slice(0, 3)
+              const siblingITL2s = REGIONS.filter(
+                r => r.level === "ITL2" && 
+                     r.code.startsWith(itl1Prefix) && 
+                     r.code !== itl2Prefix
+              )
+              peerRegions = siblingITL2s.slice(0, 2).map(r => ({ code: r.code, name: r.name }))
+            }
+          } else {
+            const level = regionConfig.level || "ITL3"
+            const sameLevel = REGIONS.filter(r => r.level === level && r.code !== regionCode)
+            peerRegions = sameLevel.slice(0, 2).map(r => ({ code: r.code, name: r.name }))
+          }
+        }
       }
       
       const metricsToCompare = [
