@@ -12,7 +12,7 @@ import { createClient } from "@supabase/supabase-js"
 
 // Components
 import { AssetHeader } from "@/components/asset-header"
-import { AssetLocationMap } from "@/components/asset-location-map"
+import { AssetCatchmentMap } from "@/components/asset-catchment-map"
 import { AssetEconomicContext, AssetComparisonCharts } from "@/components/asset-economic-context"
 import { NotableFlags } from "@/components/notable-flags"
 import { MetricInteractionInsights } from "@/components/metric-interaction-insights"
@@ -297,12 +297,14 @@ function AssetPageContent() {
             />
           </div>
           
-          {/* Location Map - takes 2/5 on desktop */}
-          {asset.postcode && (
+          {/* Interactive Catchment Map - takes 2/5 on desktop */}
+          {(asset.postcode || asset.address) && (
             <div className="lg:col-span-2">
-              <AssetLocationMap 
+              <AssetCatchmentMap 
                 postcode={asset.postcode} 
                 address={asset.address}
+                year={year}
+                scenario={scenario}
                 className="h-[280px] lg:h-full lg:min-h-[320px]"
               />
             </div>
