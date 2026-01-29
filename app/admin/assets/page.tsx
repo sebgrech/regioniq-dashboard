@@ -2,7 +2,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin"
 import { requireAdmin } from "@/lib/api/require-admin"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { ExternalLink, Plus, Building2, MapPin } from "lucide-react"
+import { ExternalLink, Plus, Building2, MapPin, TrendingUp, Briefcase } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -18,6 +18,7 @@ interface AssetPage {
   broker: string | null
   tenant: string | null
   created_at: string
+  page_type: 'sell_side' | 'buy_side' | null
 }
 
 export default async function AssetsPage() {
@@ -29,7 +30,7 @@ export default async function AssetsPage() {
   const { data: assets, error } = await supabase
     .from("asset_pages")
     .select(
-      "id, slug, address, postcode, region_code, region_name, asset_type, asset_class, broker, tenant, created_at"
+      "id, slug, address, postcode, region_code, region_name, asset_type, asset_class, broker, tenant, created_at, page_type"
     )
     .order("created_at", { ascending: false })
     .limit(100)
@@ -84,10 +85,9 @@ export default async function AssetsPage() {
         {assets && assets.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
             {assets.slice(0, 6).map((asset) => (
-              <Link
+              <div
                 key={asset.id}
-                href={`/a/${asset.slug}`}
-                className="group p-4 bg-card border border-border rounded-xl hover:border-primary/50 hover:bg-card/80 transition-all"
+                className="p-4 bg-card border border-border rounded-xl"
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2">
@@ -98,16 +98,43 @@ export default async function AssetsPage() {
                       {asset.asset_class || asset.asset_type || "Asset"}
                     </span>
                   </div>
-                  <ExternalLink className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  {asset.page_type === 'buy_side' ? (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <TrendingUp className="h-3 w-3" />
+                      Buy-side
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                      <Briefcase className="h-3 w-3" />
+                      Sell-side
+                    </span>
+                  )}
                 </div>
                 <h3 className="font-semibold text-foreground mb-1 line-clamp-1">
                   {asset.address}
                 </h3>
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-3">
                   <MapPin className="h-3.5 w-3.5" />
                   <span>{asset.region_name}</span>
                 </div>
-              </Link>
+                {/* View links */}
+                <div className="flex items-center gap-3 pt-2 border-t border-border/50">
+                  <Link
+                    href={`/a/${asset.slug}`}
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    <Briefcase className="h-3 w-3" />
+                    Sell-side
+                  </Link>
+                  <Link
+                    href={`/gp/${asset.slug}`}
+                    className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
+                  >
+                    <TrendingUp className="h-3 w-3" />
+                    Buy-side
+                  </Link>
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -130,7 +157,7 @@ export default async function AssetsPage() {
                   Type
                 </th>
                 <th className="text-left p-3 text-sm font-medium text-muted-foreground">
-                  Broker
+                  Side
                 </th>
                 <th className="text-left p-3 text-sm font-medium text-muted-foreground">
                   Created
@@ -166,8 +193,18 @@ export default async function AssetsPage() {
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="p-3 text-sm text-muted-foreground">
-                    {asset.broker || "—"}
+                  <td className="p-3">
+                    {asset.page_type === 'buy_side' ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded">
+                        <TrendingUp className="h-3 w-3" />
+                        Buy
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded">
+                        <Briefcase className="h-3 w-3" />
+                        Sell
+                      </span>
+                    )}
                   </td>
                   <td className="p-3 text-sm text-muted-foreground">
                     {new Date(asset.created_at).toLocaleDateString("en-GB", {
@@ -177,13 +214,22 @@ export default async function AssetsPage() {
                     })}
                   </td>
                   <td className="p-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                       <Link
                         href={`/a/${asset.slug}`}
-                        className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                        title="Sell-side view"
                       >
-                        View
-                        <ExternalLink className="h-3 w-3" />
+                        <Briefcase className="h-3 w-3" />
+                        Sell
+                      </Link>
+                      <Link
+                        href={`/gp/${asset.slug}`}
+                        className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
+                        title="Buy-side view"
+                      >
+                        <TrendingUp className="h-3 w-3" />
+                        Buy
                       </Link>
                     </div>
                   </td>
@@ -203,10 +249,14 @@ export default async function AssetsPage() {
         {/* Info footer */}
         <div className="mt-6 p-4 bg-muted/30 rounded-lg border border-border/50">
           <h3 className="text-sm font-medium text-foreground mb-2">Creating Asset Pages</h3>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground mb-2">
             Asset pages are created by inserting records into the <code className="px-1 py-0.5 bg-muted rounded text-xs">asset_pages</code> table in Supabase.
-            Each record generates a unique URL at <code className="px-1 py-0.5 bg-muted rounded text-xs">/a/[slug]</code>.
+            Each record generates two URLs:
           </p>
+          <ul className="text-sm text-muted-foreground space-y-1 ml-4">
+            <li>• <code className="px-1 py-0.5 bg-muted rounded text-xs">/a/[slug]</code> — Sell-side view (broker-focused, verdict prominent)</li>
+            <li>• <code className="px-1 py-0.5 bg-muted rounded text-xs">/gp/[slug]</code> — Buy-side view (charts prominent, metric toggles)</li>
+          </ul>
         </div>
       </div>
     </div>

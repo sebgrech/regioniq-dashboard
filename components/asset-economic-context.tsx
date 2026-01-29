@@ -57,6 +57,8 @@ interface AssetEconomicContextProps {
   yieldInfo?: string | null
   /** Hide the LAD comparison charts (render separately via AssetComparisonCharts) */
   hideCharts?: boolean
+  /** Inferred tenant sector for future signal tailoring */
+  tenantSector?: "retail" | "office" | "residential" | "leisure" | "industrial" | "f_and_b" | "other"
 }
 
 interface SignalForUI {
@@ -806,6 +808,7 @@ export function AssetEconomicContext({
   tenant,
   yieldInfo,
   hideCharts = false,
+  tenantSector,
 }: AssetEconomicContextProps) {
   const [data, setData] = useState<PlaceInsightsResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)

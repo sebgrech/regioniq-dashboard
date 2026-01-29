@@ -4,18 +4,19 @@ import { useState, useEffect, Suspense } from "react"
 import { useParams } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
-import { Loader2, Sparkles, ExternalLink, Building2 } from "lucide-react"
+import { Loader2, Sparkles, ExternalLink, Building2, BarChart3, ShoppingBag, Briefcase, Home, Dumbbell, Warehouse, UtensilsCrossed } from "lucide-react"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { REGIONS, type Scenario } from "@/lib/metrics.config"
 import { fetchSeries, type DataPoint } from "@/lib/data-service"
 import { createClient } from "@supabase/supabase-js"
 
 // Components
-import { AssetHeader } from "@/components/asset-header"
 import { AssetLocationMap } from "@/components/asset-location-map"
-import { AssetEconomicContext, AssetComparisonCharts } from "@/components/asset-economic-context"
+import { AssetEconomicContext } from "@/components/asset-economic-context"
 import { NotableFlags } from "@/components/notable-flags"
 import { MetricInteractionInsights } from "@/components/metric-interaction-insights"
+import { GPComparisonSection } from "@/components/gp-comparison-section"
+import { inferTenantSector, SECTOR_LABELS, type TenantSector } from "@/lib/tenant-sector"
 
 // -----------------------------------------------------------------------------
 // Types
@@ -58,10 +59,159 @@ const supabase = createClient(
 )
 
 // -----------------------------------------------------------------------------
+// Sector Icon Component
+// -----------------------------------------------------------------------------
+
+function SectorIcon({ sector, className }: { sector: TenantSector; className?: string }) {
+  switch (sector) {
+    case "retail":
+      return <ShoppingBag className={className} />
+    case "office":
+      return <Briefcase className={className} />
+    case "residential":
+      return <Home className={className} />
+    case "leisure":
+      return <Dumbbell className={className} />
+    case "industrial":
+      return <Warehouse className={className} />
+    case "f_and_b":
+      return <UtensilsCrossed className={className} />
+    default:
+      return <Building2 className={className} />
+  }
+}
+
+// -----------------------------------------------------------------------------
+// GP Header Component (simplified, no broker info)
+// -----------------------------------------------------------------------------
+
+interface GPHeaderProps {
+  address: string
+  postcode?: string | null
+  regionName: string
+  assetType?: string | null
+  assetClass?: string | null
+  headline?: string | null
+  priceGuidance?: string | null
+  yieldInfo?: string | null
+  sqFt?: number | null
+  tenant?: string | null
+  archetype?: string | null
+  tenantSector?: TenantSector
+}
+
+function GPHeader({
+  address,
+  postcode,
+  regionName,
+  assetType,
+  assetClass,
+  headline,
+  priceGuidance,
+  yieldInfo,
+  sqFt,
+  tenant,
+  archetype,
+  tenantSector,
+}: GPHeaderProps) {
+  return (
+    <div className="relative overflow-hidden rounded-2xl bg-card/50 backdrop-blur-sm border border-border/50">
+      <div className="relative p-6 md:p-8">
+        {/* Top row: Asset type badge + Sector + Archetype */}
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {assetClass && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-300 text-xs font-medium">
+                <Building2 className="h-3 w-3" />
+                {assetClass}
+              </span>
+            )}
+            {tenantSector && tenantSector !== "other" && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400 text-xs font-medium">
+                <SectorIcon sector={tenantSector} className="h-3 w-3" />
+                {SECTOR_LABELS[tenantSector]}
+              </span>
+            )}
+            {archetype && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cyan-500/15 text-cyan-400 text-xs font-medium animate-in fade-in-0 slide-in-from-left-2 duration-500">
+                {archetype}
+              </span>
+            )}
+            {assetType && assetType !== assetClass && (
+              <span className="text-xs text-muted-foreground">{assetType}</span>
+            )}
+          </div>
+          
+          {/* Economic Profile indicator */}
+          <div className="flex items-center gap-2 text-right text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 text-xs font-medium">
+              <BarChart3 className="h-3 w-3" />
+              Economic Profile
+            </span>
+          </div>
+        </div>
+
+        {/* Address as hero */}
+        <h1 className="text-2xl md:text-3xl font-semibold text-foreground tracking-tight mb-2">
+          {address}
+        </h1>
+        
+        {/* Location line */}
+        <div className="flex items-center gap-2 text-muted-foreground mb-4">
+          <Building2 className="h-4 w-4" />
+          <span>{regionName}</span>
+          {postcode && (
+            <>
+              <span className="text-border">·</span>
+              <span className="text-xs font-mono">{postcode}</span>
+            </>
+          )}
+        </div>
+
+        {/* Headline */}
+        {headline && (
+          <p className="text-base text-muted-foreground leading-relaxed mb-4">
+            {headline}
+          </p>
+        )}
+
+        {/* Key metrics row */}
+        <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-border/30">
+          {priceGuidance && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground uppercase">Guide</span>
+              <span className="text-lg font-semibold text-foreground">{priceGuidance}</span>
+            </div>
+          )}
+          {yieldInfo && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground uppercase">Yield</span>
+              <span className="text-lg font-semibold text-primary">{yieldInfo}</span>
+            </div>
+          )}
+          {sqFt && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground uppercase">Size</span>
+              <span className="text-sm font-medium text-foreground">{sqFt.toLocaleString()} sq ft</span>
+            </div>
+          )}
+          {tenant && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground uppercase">Tenant</span>
+              <span className="text-sm font-medium text-foreground">{tenant}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// -----------------------------------------------------------------------------
 // Main Content Component
 // -----------------------------------------------------------------------------
 
-function AssetPageContent() {
+function GPPageContent() {
   const params = useParams()
   const slug = params.slug as string
 
@@ -115,9 +265,6 @@ function AssetPageContent() {
     const loadAllMetrics = async () => {
       setMetricsLoading(true)
       try {
-        // Map region_code to the UI code used by fetchSeries
-        // The region_code in asset_pages is the DB code (e.g., E06000055)
-        // We need to find the matching UI code from REGIONS
         const uiRegion = REGIONS.find(r => r.dbCode === asset.region_code)
         const regionCode = uiRegion?.code ?? asset.region_code
 
@@ -180,13 +327,16 @@ function AssetPageContent() {
     ? REGIONS.find(r => r.dbCode === asset.region_code)?.code ?? asset.region_code
     : ""
 
+  // Infer tenant sector from tenant name
+  const tenantSector = asset ? inferTenantSector(asset.tenant) : "other"
+
   // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex items-center gap-3">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <span className="text-muted-foreground">Loading asset analysis...</span>
+          <span className="text-muted-foreground">Loading economic profile...</span>
         </div>
       </div>
     )
@@ -216,7 +366,7 @@ function AssetPageContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header - Prominent branding */}
+      {/* Header - Buy-side branding */}
       <header className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
         <div className="w-full px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -243,13 +393,13 @@ function AssetPageContent() {
 
             <div className="h-6 w-px bg-border/60" />
 
-            {/* Asset Analysis - larger text */}
+            {/* Economic Profile label */}
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-purple-400" />
-              <span className="text-lg font-semibold text-foreground">Asset Analysis</span>
+              <BarChart3 className="h-4 w-4 text-emerald-400" />
+              <span className="text-lg font-semibold text-foreground">Economic Profile</span>
             </div>
 
-            {/* Region badge - shows the LAD being analyzed (mirrors full dashboard style) */}
+            {/* Region badge */}
             <div className="hidden sm:flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-primary/10 border border-primary/20">
                 <Building2 className="h-4 w-4 text-primary" />
@@ -273,27 +423,24 @@ function AssetPageContent() {
       </header>
 
       {/* Main Content */}
-      <main id="asset-analysis-content" className="container mx-auto px-4 py-8 max-w-5xl bg-background">
+      <main className="container mx-auto px-4 py-8 max-w-5xl bg-background">
         {/* Asset Header + Map - Side by side on desktop */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* Asset Header - takes 3/5 on desktop */}
+          {/* GP Header - takes 3/5 on desktop */}
           <div className="lg:col-span-3">
-            <AssetHeader
+            <GPHeader
               address={asset.address}
               postcode={asset.postcode}
               regionName={asset.region_name}
               assetType={asset.asset_type}
               assetClass={asset.asset_class}
-              broker={asset.broker}
-              brokerContact={asset.broker_contact}
               headline={asset.headline}
               priceGuidance={asset.price_guidance}
               yieldInfo={asset.yield}
               sqFt={asset.sq_ft}
               tenant={asset.tenant}
-              leaseExpiry={asset.lease_expiry}
-              keyStats={asset.key_stats}
               archetype={archetype}
+              tenantSector={tenantSector}
             />
           </div>
           
@@ -308,9 +455,19 @@ function AssetPageContent() {
             </div>
           )}
         </div>
+
+        {/* Regional Comparison Charts - HERO POSITION for GP view */}
+        <div className="mt-8">
+          <GPComparisonSection
+            regionCode={uiRegionCode}
+            regionName={asset.region_name}
+            year={year}
+            scenario={scenario}
+          />
+        </div>
         
-        {/* Economic Context Section - tinted background for visual cohesion */}
-        <div className="bg-muted/10 -mx-4 px-4 pt-8 pb-4 md:-mx-8 md:px-8 mt-6 rounded-t-2xl">
+        {/* Economic Context Section */}
+        <div className="bg-muted/10 -mx-4 px-4 pt-8 pb-4 md:-mx-8 md:px-8 mt-8 rounded-t-2xl">
           {/* Prose-style economic context */}
           <AssetEconomicContext
             regionCode={uiRegionCode}
@@ -322,9 +479,10 @@ function AssetPageContent() {
             tenant={asset.tenant}
             yieldInfo={asset.yield}
             hideCharts
+            tenantSector={tenantSector}
           />
           
-          {/* Selected economic indicators - quieter, appendix-grade */}
+          {/* Selected economic indicators */}
           <div className="mt-6 pt-4 border-t border-border/20">
             <p className="text-sm text-muted-foreground/70 mb-3 font-medium">
               Selected economic indicators
@@ -349,18 +507,6 @@ function AssetPageContent() {
               />
             </div>
           </div>
-          
-          {/* Regional Comparison Charts - below indicators (temporarily hidden) */}
-          {/* 
-          <div className="mt-8 pt-6 border-t border-border/20">
-            <AssetComparisonCharts
-              regionCode={uiRegionCode}
-              regionName={asset.region_name}
-              year={year}
-              scenario={scenario}
-            />
-          </div>
-          */}
         </div>
       </main>
 
@@ -378,7 +524,7 @@ function AssetPageContent() {
                 />
               </div>
               <div className="text-sm">
-                <span className="text-muted-foreground">Economic intelligence by </span>
+                <span className="text-muted-foreground">Economic profile by </span>
                 <Link href="https://regioniq.io" className="font-medium text-foreground hover:text-primary transition-colors">
                   RegionIQ
                 </Link>
@@ -399,7 +545,7 @@ function AssetPageContent() {
 // Page Export with Suspense
 // -----------------------------------------------------------------------------
 
-export default function AssetPage() {
+export default function GPPage() {
   return (
     <Suspense
       fallback={
@@ -411,7 +557,7 @@ export default function AssetPage() {
         </div>
       }
     >
-      <AssetPageContent />
+      <GPPageContent />
     </Suspense>
   )
 }
