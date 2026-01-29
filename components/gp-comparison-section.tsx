@@ -28,6 +28,8 @@ interface GPComparisonSectionProps {
   regionName: string
   year: number
   scenario: "baseline" | "upside" | "downside"
+  /** Lease expiry string from OM (e.g., "July 2029", "May 2045") */
+  leaseExpiry?: string | null
 }
 
 interface MetricConfig {
@@ -52,11 +54,11 @@ const METRICS: MetricConfig[] = [
   { id: "population_total", label: "Population", unit: "" },
 ]
 
-// House styling colors - main region violet, peers indigo/sky
-const MAIN_COLOR = "#7c3aed" // violet-600
+// Chart colors - matching regional comparison
+const MAIN_COLOR = "#7c3aed" // violet-600 (purple - main region)
 const PEER_COLORS = [
-  "#6366f1", // indigo-500
-  "#0ea5e9", // sky-500
+  "#0ea5e9", // sky-500 (blue)
+  "#6366f1", // indigo-500 (dark pink/indigo)
 ]
 
 // =============================================================================
@@ -68,11 +70,19 @@ export function GPComparisonSection({
   regionName,
   year,
   scenario,
+  leaseExpiry,
 }: GPComparisonSectionProps) {
   const { theme } = useTheme()
   const isDarkMode = theme === "dark"
   const gridStroke = isDarkMode ? "#333333" : "#E5E7EB"
   const textColor = isDarkMode ? "#9ca3af" : "#6b7280"
+  
+  // Parse lease expiry year from string like "July 2029" or "May 2045"
+  const leaseExpiryYear = useMemo(() => {
+    if (!leaseExpiry) return null
+    const match = leaseExpiry.match(/\b(20\d{2})\b/)
+    return match ? parseInt(match[1], 10) : null
+  }, [leaseExpiry])
 
   // State
   const [selectedMetric, setSelectedMetric] = useState<string>(METRICS[0].id)
@@ -162,12 +172,9 @@ export function GPComparisonSection({
     return bases
   }, [mainData, peersData, baseYear])
 
-  // Determine forecast start year
-  const forecastStartYear = useMemo(() => {
-    const mainFcstYears = mainData.filter(d => d.type === "forecast").map(d => d.year)
-    if (mainFcstYears.length > 0) return Math.min(...mainFcstYears)
-    return 2025
-  }, [mainData])
+  // Forecast starts FROM the base year (index year) - the index point is the transition
+  // This ensures dashed lines begin at the index year, not the year after
+  const forecastStartYear = baseYear
 
   // Build indexed chart data with historical/forecast split
   const chartData = useMemo(() => {
@@ -209,7 +216,7 @@ export function GPComparisonSection({
     return Array.from(yearMap.values()).sort((a, b) => a.year - b.year)
   }, [mainData, peersData, baseValues, forecastStartYear])
 
-  // Calculate Y-axis domain
+  // Calculate Y-axis domain (tighter truncation to emphasize differences)
   const yDomain = useMemo(() => {
     const allValues: number[] = []
     chartData.forEach(row => {
@@ -220,38 +227,72 @@ export function GPComparisonSection({
         if (row[`peer${i}_fcst`] != null) allValues.push(row[`peer${i}_fcst`])
       })
     })
-    if (allValues.length === 0) return [90, 110]
+    if (allValues.length === 0) return [95, 105]
     const min = Math.min(...allValues)
     const max = Math.max(...allValues)
-    const padding = (max - min) * 0.2
+    const padding = (max - min) * 0.08 // Tighter padding for more truncated view
     return [
-      Math.floor((min - padding) / 5) * 5,
-      Math.ceil((max + padding) / 5) * 5
+      Math.floor((min - padding) / 2) * 2,
+      Math.ceil((max + padding) / 2) * 2
     ]
   }, [chartData, peersData])
 
-  // Bar chart data for forecast year comparison
-  const forecastYear = year + 2
+  // Bar chart data for absolute comparison at base year (last historical)
   const barData = useMemo(() => {
-    const fcstRow = chartData.find(d => d.year === forecastYear)
-    if (!fcstRow) return []
-    
     const data: { name: string; value: number; color: string; isMain: boolean }[] = []
-    const mainVal = fcstRow.main_fcst ?? fcstRow.main_hist
-    if (mainVal != null) {
-      data.push({ name: regionName, value: mainVal, color: MAIN_COLOR, isMain: true })
+    
+    // Get main region value at base year
+    const mainPoint = mainData.find(d => d.year === baseYear)
+    if (mainPoint) {
+      data.push({ name: regionName, value: mainPoint.value, color: MAIN_COLOR, isMain: true })
     }
+    
+    // Get peer values at base year
     peersData.forEach((peer, i) => {
-      const peerVal = fcstRow[`peer${i}_fcst`] ?? fcstRow[`peer${i}_hist`]
-      if (peerVal != null) {
-        data.push({ name: peer.name, value: peerVal, color: PEER_COLORS[i % PEER_COLORS.length], isMain: false })
+      const peerPoint = peer.data.find(d => d.year === baseYear)
+      if (peerPoint) {
+        data.push({ name: peer.name, value: peerPoint.value, color: PEER_COLORS[i % PEER_COLORS.length], isMain: false })
       }
     })
+    
     return data.sort((a, b) => b.value - a.value)
-  }, [chartData, forecastYear, regionName, peersData])
+  }, [mainData, peersData, baseYear, regionName])
 
   // Format indexed value for tooltip
   const formatIndexValue = (value: number) => value.toFixed(1)
+  
+  // Format absolute value based on metric
+  const formatAbsoluteValue = (value: number) => {
+    const metric = selectedMetricConfig
+    if (!metric) return value.toLocaleString()
+    
+    if (metric.unit === '£') {
+      // Income per head - format as currency
+      return `£${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+    } else if (metric.unit === '£m') {
+      // GVA - format as £Xm or £X.Xbn
+      if (value >= 1000) {
+        return `£${(value / 1000).toFixed(1)}bn`
+      }
+      return `£${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}m`
+    } else if (metric.unit === 'jobs') {
+      // Employment - format with k/m suffix
+      if (value >= 1000000) {
+        return `${(value / 1000000).toFixed(2)}m`
+      } else if (value >= 1000) {
+        return `${(value / 1000).toFixed(0)}k`
+      }
+      return value.toLocaleString()
+    } else {
+      // Population or other - format with k/m suffix
+      if (value >= 1000000) {
+        return `${(value / 1000000).toFixed(2)}m`
+      } else if (value >= 1000) {
+        return `${(value / 1000).toFixed(0)}k`
+      }
+      return value.toLocaleString()
+    }
+  }
 
   // Custom tooltip for line chart
   const LineTooltip = ({ active, payload, label }: any) => {
@@ -283,9 +324,11 @@ export function GPComparisonSection({
     return (
       <div className="bg-popover/95 backdrop-blur-sm border border-border rounded-lg shadow-lg p-3 text-xs">
         <p className="font-semibold text-foreground mb-1">{data?.name}</p>
-        <p style={{ color: data?.color }}>{forecastYear} Index: {formatIndexValue(data?.value)}</p>
+        <p style={{ color: data?.color }}>
+          {selectedMetricConfig?.label}: {formatAbsoluteValue(data?.value)}
+        </p>
         <p className="text-muted-foreground mt-1">
-          vs {baseYear}: {data?.value > 100 ? '+' : ''}{(data?.value - 100).toFixed(1)}%
+          As of {baseYear}
         </p>
       </div>
     )
@@ -300,7 +343,7 @@ export function GPComparisonSection({
         <div>
           <h3 className="text-lg font-semibold text-foreground">Regional Comparison</h3>
           <p className="text-sm text-muted-foreground">
-            {regionName} vs peer markets · Indexed trajectory through {forecastYear}
+            {regionName} vs peer markets · Indexed from {baseYear}
           </p>
         </div>
       </div>
@@ -364,6 +407,40 @@ export function GPComparisonSection({
                   />
                   <RechartsTooltip content={<LineTooltip />} />
                   <ReferenceLine y={100} stroke={gridStroke} strokeDasharray="2 2" />
+                  {/* Vertical forecast start line */}
+                  <ReferenceLine 
+                    x={forecastStartYear} 
+                    stroke={textColor} 
+                    strokeDasharray="4 4" 
+                    strokeOpacity={0.6}
+                    label={{ 
+                      value: 'Forecast', 
+                      position: 'insideTopLeft', 
+                      fontSize: 9, 
+                      fill: textColor,
+                      opacity: 0.7,
+                      dx: 4
+                    }}
+                  />
+                  
+                  {/* Lease expiry / WAULT marker */}
+                  {leaseExpiryYear && leaseExpiryYear >= (year - 10) && leaseExpiryYear <= (year + 10) && (
+                    <ReferenceLine 
+                      x={leaseExpiryYear} 
+                      stroke="#f59e0b"
+                      strokeDasharray="6 3" 
+                      strokeOpacity={0.8}
+                      strokeWidth={1.5}
+                      label={{ 
+                        value: 'Lease Expiry', 
+                        position: 'insideTopLeft', 
+                        fontSize: 9, 
+                        fill: '#f59e0b',
+                        opacity: 0.9,
+                        dx: 4
+                      }}
+                    />
+                  )}
                   
                   {/* Peer lines - historical (solid) */}
                   {peersData.map((peer, i) => (
@@ -439,24 +516,24 @@ export function GPComparisonSection({
             </div>
           </div>
 
-          {/* Bar Chart - Forecast Year Comparison */}
+          {/* Bar Chart - Absolute Comparison at Base Year */}
           {barData.length > 0 && (
             <div className="pt-4 border-t border-border/30">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  {forecastYear} Forecast Comparison
+                  {baseYear} {selectedMetricConfig?.label} Comparison
                 </span>
               </div>
               <div className="h-[120px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 40, left: 10, bottom: 5 }}>
+                  <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 50, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} opacity={0.3} horizontal={false} />
                     <XAxis 
                       type="number" 
-                      domain={[Math.min(yDomain[0], 95), Math.max(yDomain[1], 105)]}
                       tick={{ fontSize: 10, fill: textColor }}
                       axisLine={{ stroke: gridStroke }}
                       tickLine={{ stroke: gridStroke }}
+                      tickFormatter={(value) => formatAbsoluteValue(value)}
                     />
                     <YAxis 
                       type="category" 
@@ -467,7 +544,6 @@ export function GPComparisonSection({
                       width={90}
                     />
                     <RechartsTooltip content={<BarTooltip />} cursor={{ fill: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }} />
-                    <ReferenceLine x={100} stroke={gridStroke} strokeDasharray="2 2" />
                     <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={24}>
                       {barData.map((entry, index) => (
                         <Cell 

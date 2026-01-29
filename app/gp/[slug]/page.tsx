@@ -126,7 +126,7 @@ function GPHeader({
                 {assetClass}
               </span>
             )}
-            {tenantSector && tenantSector !== "other" && (
+            {tenantSector && tenantSector !== "other" && assetClass?.toLowerCase() !== SECTOR_LABELS[tenantSector].toLowerCase() && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400 text-xs font-medium">
                 <SectorIcon sector={tenantSector} className="h-3 w-3" />
                 {SECTOR_LABELS[tenantSector]}
@@ -463,6 +463,7 @@ function GPPageContent() {
             regionName={asset.region_name}
             year={year}
             scenario={scenario}
+            leaseExpiry={asset.lease_expiry}
           />
         </div>
         
