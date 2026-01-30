@@ -96,14 +96,13 @@ export default async function AssetsPage() {
               <span className="text-sm text-muted-foreground">
                 {(dealAssets?.length ?? 0) + (portfolioAssets?.length ?? 0)} assets
               </span>
-              {/* Future: Add new asset button */}
-              {/* <Link
-                href="/admin/assets/new"
-                className="inline-flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+              <Link
+                href="/admin/site/new"
+                className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
               >
                 <Plus className="h-4 w-4" />
-                New Asset
-              </Link> */}
+                New Site Evaluation
+              </Link>
             </div>
           </div>
         </div>
