@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react"
 import { useParams } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
-import { Loader2, Sparkles, ExternalLink, Building2, BarChart3, ShoppingBag, Briefcase, Home, Dumbbell, Warehouse, UtensilsCrossed } from "lucide-react"
+import { Loader2, Sparkles, ExternalLink, Building2, BarChart3, ShoppingBag, Briefcase, Home, Dumbbell, Warehouse, UtensilsCrossed, User } from "lucide-react"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { REGIONS, type Scenario } from "@/lib/metrics.config"
 import { fetchSeries, type DataPoint } from "@/lib/data-service"
@@ -17,6 +17,7 @@ import { NotableFlags } from "@/components/notable-flags"
 import { MetricInteractionInsights } from "@/components/metric-interaction-insights"
 import { GPComparisonSection } from "@/components/gp-comparison-section"
 import { inferTenantSector, SECTOR_LABELS, type TenantSector } from "@/lib/tenant-sector"
+import { CompanyLogo } from "@/components/company-logo"
 
 // -----------------------------------------------------------------------------
 // Types
@@ -43,6 +44,8 @@ interface AssetPageData {
   yield: string | null
   sq_ft: number | null
   tenant: string | null
+  tenant_logo_url: string | null
+  portfolio_owner: string | null
   lease_expiry: string | null
   key_stats: string[] | null
   created_at: string
@@ -96,6 +99,8 @@ interface GPHeaderProps {
   yieldInfo?: string | null
   sqFt?: number | null
   tenant?: string | null
+  tenantLogoUrl?: string | null
+  portfolioOwner?: string | null
   archetype?: string | null
   tenantSector?: TenantSector
 }
@@ -111,6 +116,8 @@ function GPHeader({
   yieldInfo,
   sqFt,
   tenant,
+  tenantLogoUrl,
+  portfolioOwner,
   archetype,
   tenantSector,
 }: GPHeaderProps) {
@@ -195,10 +202,24 @@ function GPHeader({
               <span className="text-sm font-medium text-foreground">{sqFt.toLocaleString()} sq ft</span>
             </div>
           )}
-          {tenant && (
+          {(tenant || tenantLogoUrl) && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground uppercase">Tenant</span>
-              <span className="text-sm font-medium text-foreground">{tenant}</span>
+              <CompanyLogo 
+                domain={tenantLogoUrl}
+                name={tenant || portfolioOwner} 
+                size={40} 
+                showFallback={true}
+                fallback={
+                  <div className="p-2 rounded-lg bg-purple-500/10">
+                    <User className="h-4 w-4 text-purple-400" />
+                  </div>
+                }
+                className="rounded-lg"
+              />
+              <div>
+                <div className="text-xs text-muted-foreground">{tenant ? "Tenant" : "Portfolio"}</div>
+                <div className="text-sm font-semibold text-foreground">{tenant || portfolioOwner}</div>
+              </div>
             </div>
           )}
         </div>
@@ -267,7 +288,9 @@ function GPPageContent() {
           broker_contact: null,
           price_guidance: null,
           yield: null,
-          tenant: null,
+          tenant: portfolioData.tenant ?? null,
+          tenant_logo_url: portfolioData.tenant_logo_url ?? null,
+          portfolio_owner: portfolioData.portfolio_owner ?? null,
           lease_expiry: null,
           key_stats: null,
           page_type: null,
@@ -464,6 +487,8 @@ function GPPageContent() {
               yieldInfo={asset.yield}
               sqFt={asset.sq_ft}
               tenant={asset.tenant}
+              tenantLogoUrl={asset.tenant_logo_url}
+              portfolioOwner={asset.portfolio_owner}
               archetype={archetype}
               tenantSector={tenantSector}
             />

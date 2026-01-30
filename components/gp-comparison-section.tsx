@@ -63,6 +63,37 @@ const PEER_COLORS = [
 ]
 
 // =============================================================================
+// Custom Y-axis tick for bar chart - defined outside component for stable reference
+// =============================================================================
+
+interface BarYAxisTickProps {
+  x?: number
+  y?: number
+  payload?: { value: string }
+  regionName: string
+  isDarkMode: boolean
+  textColor: string
+}
+
+function BarYAxisTick({ x, y, payload, regionName, isDarkMode, textColor }: BarYAxisTickProps) {
+  if (!payload) return null
+  const isMainRegion = payload.value === regionName
+  return (
+    <text
+      x={x}
+      y={y}
+      dy={4}
+      textAnchor="end"
+      fill={isMainRegion ? (isDarkMode ? "#fff" : "#000") : textColor}
+      fontSize={9}
+      fontWeight={isMainRegion ? 600 : 400}
+    >
+      {payload.value}
+    </text>
+  )
+}
+
+// =============================================================================
 // GP Comparison Section Component
 // =============================================================================
 
@@ -390,23 +421,12 @@ export function GPComparisonSection({
 
   const selectedMetricConfig = METRICS.find(m => m.id === selectedMetric)
 
-  // Custom Y-axis tick for bar chart - bolds the main region
-  const BarYAxisTick = ({ x, y, payload }: any) => {
-    const isMainRegion = payload.value === regionName
-    return (
-      <text
-        x={x}
-        y={y}
-        dy={4}
-        textAnchor="end"
-        fill={isMainRegion ? (isDarkMode ? "#fff" : "#000") : textColor}
-        fontSize={9}
-        fontWeight={isMainRegion ? 600 : 400}
-      >
-        {payload.value}
-      </text>
-    )
-  }
+  // Memoized tick component props for stable reference
+  const tickProps = useMemo(() => ({
+    regionName,
+    isDarkMode,
+    textColor
+  }), [regionName, isDarkMode, textColor])
 
   return (
     <div className="space-y-6">
@@ -608,7 +628,7 @@ export function GPComparisonSection({
                     <YAxis 
                       type="category" 
                       dataKey="name"
-                      tick={<BarYAxisTick />}
+                      tick={(props) => <BarYAxisTick {...props} {...tickProps} />}
                       axisLine={{ stroke: gridStroke }}
                       tickLine={false}
                       width={160}
