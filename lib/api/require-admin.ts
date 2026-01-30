@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server"
 import { createSupabaseServerClient } from "@/lib/supabase-server"
-import { isAdminEmail } from "@/lib/admin"
+import { isAdminEmailAsync } from "@/lib/admin"
 
 /**
  * Server-side guard that requires the user to be an admin.
+ * Checks against the authorized_users Supabase table.
  * Returns 401 if not authenticated, 403 if not an admin.
  */
 export async function requireAdmin() {
@@ -17,7 +18,8 @@ export async function requireAdmin() {
     }
   }
 
-  if (!isAdminEmail(data.user.email)) {
+  const isAdmin = await isAdminEmailAsync(data.user.email)
+  if (!isAdmin) {
     return {
       user: null,
       response: NextResponse.json(
