@@ -18,7 +18,7 @@ import {
 import { REGIONS } from "@/lib/metrics.config"
 import { fetchSeries, type DataPoint } from "@/lib/data-service"
 import { cn } from "@/lib/utils"
-import { getSiblings, getRegionInfo, getParent } from "@/lib/region-hierarchy"
+import { getSiblings, getRegionInfo, getParent, getPeerLADsInSameITL2 } from "@/lib/region-hierarchy"
 
 // =============================================================================
 // Types
@@ -91,24 +91,23 @@ export function GPComparisonSection({
   const [peersData, setPeersData] = useState<PeerData[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // Get peer regions: sibling ITL3s within the same ITL2 parent
-  // This ensures we compare to regions with grouped forecasts (same ITL2)
+  // Get peer regions: other LADs within the same ITL2 for LAD codes,
+  // or sibling ITL3s within the same ITL2 for ITL3 codes
   const peerRegions = useMemo(() => {
-    // Use the region hierarchy to get true siblings (same parent ITL2)
-    let siblings = getSiblings(regionCode)
-    let regionInfo = getRegionInfo(regionCode)
+    const regionInfo = getRegionInfo(regionCode)
     
-    // If no direct siblings (e.g., LAD with only one LAD in its ITL3),
-    // traverse up to the parent ITL3 and get its siblings instead
-    if (siblings.length === 0 && regionInfo?.level === "LAD") {
-      const parentITL3 = getParent(regionCode)
-      if (parentITL3 && parentITL3.level === "ITL3") {
-        siblings = getSiblings(parentITL3.code)
-        regionInfo = getRegionInfo(parentITL3.code)
+    // For LAD codes, get other LADs in the same ITL2 (not parent ITL3s)
+    if (regionInfo?.level === "LAD") {
+      const peerLADs = getPeerLADsInSameITL2(regionCode)
+      if (peerLADs.length > 0) {
+        return peerLADs.slice(0, 2)
       }
     }
     
-    // If still no siblings (e.g., Cornwall is sole ITL3 in its ITL2),
+    // For ITL3 codes, get sibling ITL3s in the same ITL2
+    let siblings = getSiblings(regionCode)
+    
+    // If no direct siblings (e.g., Cornwall is sole ITL3 in its ITL2),
     // go up to ITL2 and get sibling ITL2s within the same ITL1
     if (siblings.length === 0 && regionInfo?.level === "ITL3") {
       const parentITL2 = getParent(regionCode.length === 5 ? regionCode.slice(0, 4) : regionCode)

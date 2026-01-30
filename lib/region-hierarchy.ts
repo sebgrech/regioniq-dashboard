@@ -300,6 +300,33 @@ export function getSiblingCodes(code: string): string[] {
 }
 
 /**
+ * Get peer LADs within the same ITL2 region (excluding self)
+ * This is useful for comparing a LAD to other LADs in its economic region.
+ * 
+ * @example
+ * getPeerLADsInSameITL2("E09000032") // Other LADs in Inner London - West (Wandsworth's ITL2)
+ * // Returns: Kensington & Chelsea, Hammersmith & Fulham, Westminster, City of London, Camden
+ */
+export function getPeerLADsInSameITL2(ladCode: string): Array<{ code: string; name: string }> {
+  const region = hierarchy.regions[ladCode]
+  if (!region) return []
+  
+  // Find the ITL2 ancestor
+  const itl2 = getITL2Ancestor(ladCode)
+  if (!itl2) return []
+  
+  // Get all LADs in that ITL2
+  const allLADsInITL2 = getLADs(itl2.code)
+  
+  // Filter out self and return with names
+  return allLADsInITL2
+    .filter(code => code !== ladCode)
+    .map(code => hierarchy.regions[code])
+    .filter(Boolean)
+    .map(r => ({ code: r.code, name: r.name }))
+}
+
+/**
  * Get all regions at the same level with a shared ITL1 ancestor
  * (Useful for broader comparisons)
  * 

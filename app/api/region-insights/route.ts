@@ -339,14 +339,26 @@ function getConclusions(signals: SignalResult[]): string[] {
  * Convert outcome to strength (1-4 dots)
  * Extended traffic light system with purple tier for extreme:
  * - 4 = Extreme (purple) - major outliers like City of London, ultra-high productivity
- * - 3 = High/Rising (green)
+ * - 3 = High/Rising (green) - positive for occupiers
  * - 2 = Neutral (amber)
- * - 1 = Low/Falling (red)
+ * - 1 = Low/Falling (red) - negative for occupiers
  * 
  * Note: extreme_high and extreme_low both map to strength=4 (purple)
  * The distinction is semantic (direction), not visual strength
+ * 
+ * INVERTED for labour_capacity: slack (low) is good for occupiers, tight (high) is bad
  */
-function outcomeToStrength(outcome: string): 1 | 2 | 3 | 4 {
+function outcomeToStrength(outcome: string, signalId?: string): 1 | 2 | 3 | 4 {
+  // Invert for labour_capacity: slack (low) = available workforce = good
+  // tight (high) = hiring constraints = bad
+  if (signalId === "labour_capacity") {
+    if (outcome === "low") return 3      // Green - available workforce, easy to hire
+    if (outcome === "high") return 1     // Red - tight market, hard to hire
+    if (outcome === "neutral") return 2  // Amber - balanced
+    return 2
+  }
+  
+  // Standard mapping for other signals
   if (outcome === "extreme" || outcome === "extreme_high" || outcome === "extreme_low") return 4 // Purple
   if (outcome === "high" || outcome === "rising") return 3   // Green
   if (outcome === "neutral") return 2                        // Amber
@@ -492,7 +504,7 @@ function signalsToUI(
         id: s.id,
         label: SIGNAL_LABELS[s.id] || s.label,
         outcome: s.outcome,
-        strength: outcomeToStrength(s.outcome),
+        strength: outcomeToStrength(s.outcome, s.id),
         detail: s.detail.slice(0, 60),
         robustness: persistence.holdsIn
       }
@@ -576,11 +588,25 @@ export async function POST(request: NextRequest) {
     const implications = deriveImplications(signalsForImplications, population)
     
     // Get conclusions
-    const characterConclusions = getConclusions(characterSignals)
+    let characterConclusions = getConclusions(characterSignals)
+    
+    // For balanced economies with no outlier character signals, provide a richer fallback
+    // This ensures regional centres like Newcastle/Norwich get meaningful headlines
+    if (characterConclusions.length === 0 && archetype) {
+      // Use archetype conclusion as the character context for balanced economies
+      if (archetype.id === "balanced_economy" || archetype.id === "labour_slack" || archetype.id === "tight_labour_market") {
+        // Check how many signals are neutral to determine if this is truly a balanced economy
+        const neutralCharacterCount = characterSignals.filter(s => s.outcome === "neutral").length
+        if (neutralCharacterCount >= 2) {
+          // Provide a richer context for balanced regional centres
+          characterConclusions = ["Diversified regional economy with balanced employment and productivity"]
+        }
+      }
+    }
     
     // Check if this is an extreme employment hub
     // For extreme hubs, growth_composition conclusions are structurally irrelevant
-    // (e.g., City of London with 500k jobs and 10k residents — pop growth % comparisons are meaningless)
+    // (e.g., City of London with 500k jobs and 10k residents, pop growth % comparisons are meaningless)
     const employmentDensitySignal = signals.find(s => s.id === "employment_density")
     const isExtremeEmploymentHub = employmentDensitySignal?.outcome === "extreme"
     

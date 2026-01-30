@@ -105,10 +105,10 @@ export const REGION_SIGNALS: SignalConfig[] = [
       low: 0.5            // <50% = mismatch between output and resident purchasing power
     },
     conclusions: {
-      extreme_high: "Affluent residential area — resident incomes exceed local economic output per head",
-      extreme_low: "Major output centre — economic value flows to non-resident stakeholders",
+      extreme_high: "Affluent residential area where resident incomes exceed local economic output per head",
+      extreme_low: "Major output centre where economic value flows to non-resident stakeholders",
       high: "Strong resident incomes relative to local output",
-      low: "Resident incomes are low relative to local output — purchasing power does not match headline GVA",
+      low: "Resident incomes are low relative to local output, purchasing power does not match headline GVA",
       neutral: "Resident incomes broadly aligned with local output"
     },
     detail: "{value}% income-to-output ratio"
@@ -159,7 +159,7 @@ export const REGION_SIGNALS: SignalConfig[] = [
       low: 45000       // <£45k per job = volume-driven
     },
     conclusions: {
-      extreme: "Ultra-high productivity economy — finance, energy, or specialist cluster",
+      extreme: "Ultra-high productivity economy with finance, energy, or specialist cluster",
       high: "High value-add economy with productivity-led growth",
       low: "Volume-driven employment base with labour-led growth",
       neutral: "Productivity broadly in line with national average"
@@ -183,8 +183,8 @@ export const REGION_SIGNALS: SignalConfig[] = [
       low: -1.0    // Pop growth > jobs growth by 1pp+
     },
     conclusions: {
-      high: "Employment growth outpacing population — commuter inflow indicator",
-      low: "Population growth outpacing jobs — residential pressure building",
+      high: "Employment growth outpacing population, indicating commuter inflow",
+      low: "Population growth outpacing jobs, residential pressure building",
       neutral: "Growth balanced across population and employment"
     },
     detail: "Population {popGrowth}%, Employment {empGrowth}%, GVA {gvaGrowth}%"

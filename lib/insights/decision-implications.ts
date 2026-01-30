@@ -156,7 +156,7 @@ const IMPLICATION_RULES: ImplicationRule[] = [
   {
     id: "residential_pressure_building",
     conditions: [{ signalId: "growth_composition", outcomes: ["low"] }],
-    text: "Population growth outpacing jobs — residential pressure building",
+    text: "Population growth outpacing jobs, residential pressure building",
     priority: 80,
     relevantFor: ["residential", "LA", "infrastructure"]
   },
@@ -193,13 +193,89 @@ const IMPLICATION_RULES: ImplicationRule[] = [
     text: "Expansion less constrained by hiring",
     priority: 92,
     relevantFor: ["CRE", "LA", "infrastructure"]
+  },
+
+  // ===========================================================================
+  // Contextual Combinations for Neutral Pairings (Priority 70-80)
+  // These fire for meaningful signal pairings that aren't outliers individually
+  // ===========================================================================
+  {
+    id: "regional_centre_profile",
+    conditions: [
+      { signalId: "employment_density", outcomes: ["neutral"] },
+      { signalId: "productivity_strength", outcomes: ["neutral"] }
+    ],
+    text: "Established regional centre with diversified economic base",
+    priority: 75,
+    relevantFor: ["CRE", "retail", "LA"]
+  },
+  {
+    id: "stable_residential_demand",
+    conditions: [
+      { signalId: "income_capture", outcomes: ["neutral"] },
+      { signalId: "growth_composition", outcomes: ["neutral"] }
+    ],
+    text: "Stable local demand with no acute growth pressures",
+    priority: 72,
+    relevantFor: ["residential", "retail", "LA"]
+  },
+  {
+    id: "workforce_stability",
+    conditions: [
+      { signalId: "labour_capacity", outcomes: ["neutral"] },
+      { signalId: "growth_composition", outcomes: ["neutral"] }
+    ],
+    text: "Workforce supply aligned with economic growth",
+    priority: 70,
+    relevantFor: ["CRE", "LA", "infrastructure"]
+  },
+
+  // ===========================================================================
+  // Neutral-State Singles (Priority 55-65)
+  // These fire when specific signals are neutral, providing objective context
+  // Only shown when higher-priority rules don't fire
+  // ===========================================================================
+  {
+    id: "balanced_employment_base",
+    conditions: [{ signalId: "employment_density", outcomes: ["neutral"] }],
+    text: "Daytime and residential demand are roughly balanced",
+    priority: 60,
+    relevantFor: ["CRE", "retail", "residential"]
+  },
+  {
+    id: "aligned_income_output",
+    conditions: [{ signalId: "income_capture", outcomes: ["neutral"] }],
+    text: "Resident purchasing power tracks local economic activity",
+    priority: 58,
+    relevantFor: ["retail", "residential", "LA"]
+  },
+  {
+    id: "standard_productivity",
+    conditions: [{ signalId: "productivity_strength", outcomes: ["neutral"] }],
+    text: "Productivity in line with national benchmarks",
+    priority: 56,
+    relevantFor: ["CRE", "LA"]
+  },
+  {
+    id: "balanced_growth_trajectory",
+    conditions: [{ signalId: "growth_composition", outcomes: ["neutral"] }],
+    text: "Population and employment growing at similar rates",
+    priority: 55,
+    relevantFor: ["residential", "LA", "infrastructure"]
+  },
+  {
+    id: "moderate_labour_market",
+    conditions: [{ signalId: "labour_capacity", outcomes: ["neutral"] }],
+    text: "Labour market neither tight nor slack",
+    priority: 55,
+    relevantFor: ["CRE", "LA"]
   }
 ]
 
 // =============================================================================
 // Rules to suppress for extreme employment hubs
 // For major employment hubs, growth_composition and labour_capacity are
-// structurally irrelevant — the workforce is drawn from a regional labour market
+// structurally irrelevant as the workforce is drawn from a regional labour market
 // =============================================================================
 
 const SUPPRESS_FOR_EXTREME_HUBS = new Set([
@@ -212,7 +288,7 @@ const SUPPRESS_FOR_EXTREME_HUBS = new Set([
 
 // =============================================================================
 // Population threshold for statistical confidence
-// Small LADs have noisy data — flag implications as lower confidence
+// Small LADs have noisy data so flag implications as lower confidence
 // =============================================================================
 
 const SMALL_LAD_POPULATION_THRESHOLD = 20000
@@ -260,7 +336,7 @@ export function deriveImplications(
       
       // Add small LAD caveat for rate-based implications
       if (isSmallLAD && (rule.id === "hiring_constraints" || rule.id === "labour_availability")) {
-        text = text + " (small population — limited data confidence)"
+        text = text + " (small population, limited data confidence)"
       }
       
       matched.push({

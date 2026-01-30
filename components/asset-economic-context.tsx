@@ -19,7 +19,7 @@ import { Badge } from "@/components/ui/badge"
 import { VerdictVisual } from "@/components/place-insights/verdict-visual"
 import { fetchSeries, type DataPoint } from "@/lib/data-service"
 import { REGIONS } from "@/lib/metrics.config"
-import { getSiblings, getRegionInfo, getParent } from "@/lib/region-hierarchy"
+import { getSiblings, getRegionInfo, getParent, getPeerLADsInSameITL2 } from "@/lib/region-hierarchy"
 import {
   LineChart,
   Line,
@@ -40,6 +40,8 @@ import {
   TooltipContent, 
   TooltipTrigger 
 } from "@/components/ui/tooltip"
+import { DemandContextCard } from "@/components/demand-context-card"
+import { inferTenantSector, type TenantSector } from "@/lib/tenant-sector"
 
 // =============================================================================
 // Types (same as PlaceInsights)
@@ -62,7 +64,7 @@ interface AssetEconomicContextProps {
   tenantSector?: "retail" | "office" | "residential" | "leisure" | "industrial" | "f_and_b" | "other"
 }
 
-interface SignalForUI {
+export interface SignalForUI {
   id: string
   label: string
   outcome: "high" | "low" | "neutral" | "rising" | "falling" | "extreme" | "extreme_high" | "extreme_low"
@@ -548,7 +550,8 @@ function getImplicationIcon(id: string, text: string): typeof Sun {
 // =============================================================================
 
 // Explanation text for each implication - explains "why" on hover
-// All 17 implication IDs with economically defensible explanations
+// All 25 implication IDs with economically defensible explanations
+// (17 original + 3 contextual combinations + 5 neutral-state)
 const IMPLICATION_EXPLANATIONS: Record<string, string> = {
   // Employment Density implications
   "major_hub_worker_spend": "Extreme employment density (jobs far exceed local population) means the area functions as a regional employment centre. Daytime economic activity is dominated by workers commuting in, not local residents.",
@@ -558,7 +561,7 @@ const IMPLICATION_EXPLANATIONS: Record<string, string> = {
   
   // Income Capture implications
   "affluent_commuter_base": "Resident incomes significantly exceed local economic output per head. This indicates high earners commuting to employment elsewhere, returning disposable income to the local area.",
-  "local_spending_power": "Income capture is high — residents retain a significant share of economic value generated locally. This supports consumer-facing uses as household spending power aligns with local economic activity.",
+  "local_spending_power": "Income capture is high: residents retain a significant share of economic value generated locally. This supports consumer-facing uses as household spending power aligns with local economic activity.",
   "output_centre_spend": "Very low income capture means economic output flows to non-resident stakeholders. Local residents have limited purchasing power; retail depends on worker spend during business hours.",
   "value_leakage": "Low income capture indicates a disconnect between local output and resident incomes. Economic value leaks to neighbouring areas through commuting patterns or corporate structures.",
   
@@ -578,11 +581,23 @@ const IMPLICATION_EXPLANATIONS: Record<string, string> = {
   "consumer_hub_opportunity": "Combination of low employment density and high income capture indicates an affluent residential catchment. Residents have strong purchasing power but commute elsewhere for work.",
   "tight_market_constraints": "High employment density combined with high labour utilisation creates acute hiring competition. New occupiers face structural recruitment constraints.",
   "growth_opportunity": "Low labour utilisation combined with employment-led growth indicates available workforce capacity in a growing employment market. Favourable conditions for occupier expansion.",
+  
+  // Contextual combination implications (neutral pairings)
+  "regional_centre_profile": "Balanced employment density and productivity indicate an established regional centre. The economy is diversified across sectors rather than dominated by a single high-value or low-value cluster.",
+  "stable_residential_demand": "Income capture and growth patterns are balanced, indicating predictable demand dynamics. Neither rapid residential pressure nor value leakage is distorting the local market.",
+  "workforce_stability": "Labour market capacity matches economic growth rates. Workforce supply is sufficient for current expansion without creating acute hiring constraints.",
+  
+  // Neutral-state implications
+  "balanced_employment_base": "Employment density near 1.0 means jobs roughly match working-age residents. The area functions as neither a pure employment hub nor a dormitory suburb, with mixed daytime and evening footfall patterns.",
+  "aligned_income_output": "Resident incomes track local economic output, indicating neither significant value leakage to other areas nor an affluent commuter population. Local spending power aligns with local economic activity.",
+  "standard_productivity": "GVA per job aligns with national averages, indicating a diversified economy without extreme sector concentration. Space demand follows typical employment-to-absorption ratios.",
+  "balanced_growth_trajectory": "Population and employment are growing at similar rates, indicating stable demand dynamics without acute residential pressure or employment-led expansion.",
+  "moderate_labour_market": "Employment rates are within normal ranges, indicating a functional labour market without acute constraints. New occupiers can recruit locally with typical competitive dynamics.",
 }
 
 // Get explanation for an implication based on ID
 function getImplicationExplanation(id: string, _text: string): string {
-  // Direct ID match (covers all 17 implication IDs)
+  // Direct ID match (covers all 25 implication IDs)
   if (IMPLICATION_EXPLANATIONS[id]) return IMPLICATION_EXPLANATIONS[id]
   
   // Default for any edge cases
@@ -705,7 +720,7 @@ function generatePositioningBullets(
     if (isStrong) {
       bullets.push({
         id: "income",
-        text: `${regionName} shows ${incomeSignal.outcome === "high" ? "strong" : "notable"} income retention — ${incomeSignal.detail}`,
+        text: `${regionName} shows ${incomeSignal.outcome === "high" ? "strong" : "notable"} income retention: ${incomeSignal.detail}`,
         relevance: tenant ? "tenant covenant strength" : "buyer income demographics"
       })
     }
@@ -845,38 +860,40 @@ export function AssetEconomicContext({
     async function fetchPeerData() {
       setPeersLoading(true)
       
-      // Find peer regions: sibling ITL3s within the same ITL2 parent
-      // This ensures we compare to regions with grouped forecasts (same ITL2)
+      // Find peer regions: other LADs within the same ITL2 for LAD codes,
+      // or sibling ITL3s within the same ITL2 for ITL3 codes
       let peerRegions: { code: string; name: string }[] = []
+      const regionInfo = getRegionInfo(regionCode)
       
-      // Use the region hierarchy to get true siblings (same parent ITL2)
-      let siblings = getSiblings(regionCode)
-      let regionInfo = getRegionInfo(regionCode)
-      
-      // If no direct siblings (e.g., LAD with only one LAD in its ITL3),
-      // traverse up to the parent ITL3 and get its siblings instead
-      if (siblings.length === 0 && regionInfo?.level === "LAD") {
-        const parentITL3 = getParent(regionCode)
-        if (parentITL3 && parentITL3.level === "ITL3") {
-          siblings = getSiblings(parentITL3.code)
-          regionInfo = getRegionInfo(parentITL3.code)
+      // For LAD codes, get other LADs in the same ITL2 (not parent ITL3s)
+      if (regionInfo?.level === "LAD") {
+        const peerLADs = getPeerLADsInSameITL2(regionCode)
+        if (peerLADs.length > 0) {
+          peerRegions = peerLADs.slice(0, 2)
         }
       }
       
-      // If still no siblings (e.g., Cornwall is sole ITL3 in its ITL2),
-      // go up to ITL2 and get sibling ITL2s within the same ITL1
-      if (siblings.length === 0 && regionInfo?.level === "ITL3") {
-        const itl2Code = regionCode.length === 5 ? regionCode.slice(0, 4) : regionCode
-        const parentITL2 = getParent(itl2Code)
-        if (parentITL2 && parentITL2.level === "ITL2") {
-          siblings = getSiblings(parentITL2.code)
+      // For ITL3 codes or if no LAD peers found
+      if (peerRegions.length === 0) {
+        let siblings = getSiblings(regionCode)
+        
+        // If no direct siblings (e.g., Cornwall is sole ITL3 in its ITL2),
+        // go up to ITL2 and get sibling ITL2s within the same ITL1
+        if (siblings.length === 0 && regionInfo?.level === "ITL3") {
+          const itl2Code = regionCode.length === 5 ? regionCode.slice(0, 4) : regionCode
+          const parentITL2 = getParent(itl2Code)
+          if (parentITL2 && parentITL2.level === "ITL2") {
+            siblings = getSiblings(parentITL2.code)
+          }
+        }
+        
+        if (siblings.length > 0) {
+          peerRegions = siblings.slice(0, 2).map(s => ({ code: s.code, name: s.name }))
         }
       }
       
-      if (siblings.length > 0) {
-        peerRegions = siblings.slice(0, 2).map(s => ({ code: s.code, name: s.name }))
-      } else {
-        // Fallback: if no siblings found in hierarchy, use REGIONS config
+      // Fallback: if no peers found, use REGIONS config
+      if (peerRegions.length === 0) {
         const regionConfig = REGIONS.find((r) => r.code === regionCode)
         if (regionConfig) {
           if (regionConfig.level === "ITL3") {
@@ -1053,55 +1070,69 @@ export function AssetEconomicContext({
         </div>
       </div>
       
-      {/* Signal chips - grouped by category */}
-      <div className="space-y-4">
-        {/* Economic structure */}
-        {structureSignals.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Economic structure
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {structureSignals.map((signal, i) => (
-                <div 
-                  key={signal.id}
-                  className="animate-in fade-in-0 slide-in-from-bottom-2"
-                  style={{ animationDelay: `${i * 60}ms`, animationFillMode: "backwards" }}
-                >
-                  <SignalChipMini 
-                    label={SIGNAL_LABELS[signal.id] || signal.label}
-                    strength={signal.strength}
-                    detail={signal.detail}
-                  />
-                </div>
-              ))}
+      {/* Signal chips - grouped by category, with Demand Context card */}
+      <div className="flex gap-4">
+        {/* Signals - left side */}
+        <div className="flex-1 space-y-4">
+          {/* Economic structure */}
+          {structureSignals.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Economic structure
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {structureSignals.map((signal, i) => (
+                  <div 
+                    key={signal.id}
+                    className="animate-in fade-in-0 slide-in-from-bottom-2"
+                    style={{ animationDelay: `${i * 60}ms`, animationFillMode: "backwards" }}
+                  >
+                    <SignalChipMini 
+                      label={SIGNAL_LABELS[signal.id] || signal.label}
+                      strength={signal.strength}
+                      detail={signal.detail}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+          
+          {/* Labour capacity */}
+          {capacitySignals.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Labour capacity
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {capacitySignals.map((signal, i) => (
+                  <div 
+                    key={signal.id}
+                    className="animate-in fade-in-0 slide-in-from-bottom-2"
+                    style={{ animationDelay: `${(structureSignals.length + i) * 60}ms`, animationFillMode: "backwards" }}
+                  >
+                    <SignalChipMini 
+                      label={SIGNAL_LABELS[signal.id] || signal.label}
+                      strength={signal.strength}
+                      detail={signal.detail}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
         
-        {/* Labour capacity */}
-        {capacitySignals.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Labour capacity
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {capacitySignals.map((signal, i) => (
-                <div 
-                  key={signal.id}
-                  className="animate-in fade-in-0 slide-in-from-bottom-2"
-                  style={{ animationDelay: `${(structureSignals.length + i) * 60}ms`, animationFillMode: "backwards" }}
-                >
-                  <SignalChipMini 
-                    label={SIGNAL_LABELS[signal.id] || signal.label}
-                    strength={signal.strength}
-                    detail={signal.detail}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
+        {/* Demand Context card - right side (temporarily hidden, code preserved) */}
+        {/* TODO: Re-enable when ready
+        {ui.signals && ui.signals.length > 0 && (
+          <DemandContextCard
+            sector={(tenantSector as TenantSector) || inferTenantSector(tenant)}
+            signals={ui.signals}
+            regionName={regionName}
+          />
         )}
+        */}
       </div>
       
       {/* Asset-Specific Positioning Insights - Enhanced with animations */}
@@ -1236,37 +1267,40 @@ export function AssetComparisonCharts({
     async function fetchPeerData() {
       setPeersLoading(true)
       
-      // Find peer regions: sibling ITL3s within the same ITL2 parent
+      // Find peer regions: other LADs within the same ITL2 for LAD codes,
+      // or sibling ITL3s within the same ITL2 for ITL3 codes
       let peerRegions: { code: string; name: string }[] = []
+      const regionInfo = getRegionInfo(regionCode)
       
-      // Use the region hierarchy to get true siblings (same parent ITL2)
-      let siblings = getSiblings(regionCode)
-      let regionInfo = getRegionInfo(regionCode)
-      
-      // If no direct siblings (e.g., LAD with only one LAD in its ITL3),
-      // traverse up to the parent ITL3 and get its siblings instead
-      if (siblings.length === 0 && regionInfo?.level === "LAD") {
-        const parentITL3 = getParent(regionCode)
-        if (parentITL3 && parentITL3.level === "ITL3") {
-          siblings = getSiblings(parentITL3.code)
-          regionInfo = getRegionInfo(parentITL3.code)
+      // For LAD codes, get other LADs in the same ITL2 (not parent ITL3s)
+      if (regionInfo?.level === "LAD") {
+        const peerLADs = getPeerLADsInSameITL2(regionCode)
+        if (peerLADs.length > 0) {
+          peerRegions = peerLADs.slice(0, 2)
         }
       }
       
-      // If still no siblings (e.g., Cornwall is sole ITL3 in its ITL2),
-      // go up to ITL2 and get sibling ITL2s within the same ITL1
-      if (siblings.length === 0 && regionInfo?.level === "ITL3") {
-        const itl2Code = regionCode.length === 5 ? regionCode.slice(0, 4) : regionCode
-        const parentITL2 = getParent(itl2Code)
-        if (parentITL2 && parentITL2.level === "ITL2") {
-          siblings = getSiblings(parentITL2.code)
+      // For ITL3 codes or if no LAD peers found
+      if (peerRegions.length === 0) {
+        let siblings = getSiblings(regionCode)
+        
+        // If no direct siblings (e.g., Cornwall is sole ITL3 in its ITL2),
+        // go up to ITL2 and get sibling ITL2s within the same ITL1
+        if (siblings.length === 0 && regionInfo?.level === "ITL3") {
+          const itl2Code = regionCode.length === 5 ? regionCode.slice(0, 4) : regionCode
+          const parentITL2 = getParent(itl2Code)
+          if (parentITL2 && parentITL2.level === "ITL2") {
+            siblings = getSiblings(parentITL2.code)
+          }
+        }
+        
+        if (siblings.length > 0) {
+          peerRegions = siblings.slice(0, 2).map(s => ({ code: s.code, name: s.name }))
         }
       }
       
-      if (siblings.length > 0) {
-        peerRegions = siblings.slice(0, 2).map(s => ({ code: s.code, name: s.name }))
-      } else {
-        // Fallback: if no siblings found in hierarchy, use REGIONS config
+      // Fallback: if no peers found, use REGIONS config
+      if (peerRegions.length === 0) {
         const regionConfig = REGIONS.find((r) => r.code === regionCode)
         if (regionConfig) {
           if (regionConfig.level === "ITL3") {
