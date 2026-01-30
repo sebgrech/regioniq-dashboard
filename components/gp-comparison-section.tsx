@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useTheme } from "next-themes"
 import {
   LineChart,
@@ -421,12 +421,15 @@ export function GPComparisonSection({
 
   const selectedMetricConfig = METRICS.find(m => m.id === selectedMetric)
 
-  // Memoized tick component props for stable reference
-  const tickProps = useMemo(() => ({
-    regionName,
-    isDarkMode,
-    textColor
-  }), [regionName, isDarkMode, textColor])
+  // Memoized tick renderer for stable reference - prevents Recharts re-render issues
+  const renderBarYAxisTick = useCallback((props: any) => (
+    <BarYAxisTick 
+      {...props} 
+      regionName={regionName}
+      isDarkMode={isDarkMode}
+      textColor={textColor}
+    />
+  ), [regionName, isDarkMode, textColor])
 
   return (
     <div className="space-y-6">
@@ -628,7 +631,7 @@ export function GPComparisonSection({
                     <YAxis 
                       type="category" 
                       dataKey="name"
-                      tick={(props) => <BarYAxisTick {...props} {...tickProps} />}
+                      tick={{ fontSize: 9, fill: textColor }}
                       axisLine={{ stroke: gridStroke }}
                       tickLine={false}
                       width={160}
