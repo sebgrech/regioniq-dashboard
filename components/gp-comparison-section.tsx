@@ -18,7 +18,7 @@ import {
 import { REGIONS } from "@/lib/metrics.config"
 import { fetchSeries, type DataPoint } from "@/lib/data-service"
 import { cn } from "@/lib/utils"
-import { getSiblings, getRegionInfo, getParent, getPeerLADsInSameITL2 } from "@/lib/region-hierarchy"
+import { getSiblings, getRegionInfo, getParent, getPeerLADsWithFallback } from "@/lib/region-hierarchy"
 
 // =============================================================================
 // Types
@@ -127,9 +127,9 @@ export function GPComparisonSection({
   const peerRegions = useMemo(() => {
     const regionInfo = getRegionInfo(regionCode)
     
-    // For LAD codes, get other LADs in the same ITL2 (not parent ITL3s)
+    // For LAD codes, get other LADs in the same ITL2 (with ITL1 fallback if needed)
     if (regionInfo?.level === "LAD") {
-      const peerLADs = getPeerLADsInSameITL2(regionCode)
+      const peerLADs = getPeerLADsWithFallback(regionCode, 2)
       if (peerLADs.length > 0) {
         return peerLADs.slice(0, 2)
       }

@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react"
 import { useParams } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
-import { Loader2, MapPin, Building2, BarChart3, Sparkles, ExternalLink } from "lucide-react"
+import { Loader2, MapPin, Building2, Sparkles, ExternalLink } from "lucide-react"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { REGIONS, type Scenario } from "@/lib/metrics.config"
 import { fetchSeries, type DataPoint } from "@/lib/data-service"
@@ -14,6 +14,7 @@ import { createClient } from "@supabase/supabase-js"
 import { AssetCatchmentMap } from "@/components/asset-catchment-map"
 import { AssetEconomicContext } from "@/components/asset-economic-context"
 import { NotableFlags } from "@/components/notable-flags"
+import { MetricInteractionInsights } from "@/components/metric-interaction-insights"
 import { GPComparisonSection } from "@/components/gp-comparison-section"
 import { CompanyLogo } from "@/components/company-logo"
 
@@ -74,8 +75,8 @@ function SiteHeader({
   archetype,
 }: SiteHeaderProps) {
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-card/50 backdrop-blur-sm border border-border/50">
-      <div className="relative p-6 md:p-8">
+    <div className="relative overflow-hidden rounded-2xl bg-card/50 backdrop-blur-sm border border-border/50 h-full min-h-[260px]">
+      <div className="relative p-6 md:p-8 h-full flex flex-col">
         {/* Top row: Asset class badge + Archetype + Brand */}
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -92,7 +93,7 @@ function SiteHeader({
             )}
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 text-xs font-medium">
               <Sparkles className="h-3 w-3" />
-              Site Evaluation
+              Economic Profile
             </span>
           </div>
           
@@ -132,11 +133,14 @@ function SiteHeader({
 
         {/* Address if site name is different */}
         {siteName && siteName !== address && (
-          <p className="text-sm text-muted-foreground mb-4">{address}</p>
+          <p className="text-sm text-muted-foreground">{address}</p>
         )}
 
+        {/* Spacer to push metrics to bottom */}
+        <div className="flex-grow" />
+
         {/* Quick metrics */}
-        <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-border/30">
+        <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-border/30 mt-4">
           {sqFt && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground uppercase">Size</span>
@@ -161,11 +165,12 @@ function SitePageContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Metrics data for NotableFlags
+  // Metrics data for NotableFlags and MetricInteractionInsights
   const [allMetricsData, setAllMetricsData] = useState<{
     metricId: string
     data: DataPoint[]
   }[]>([])
+  const [metricsLoading, setMetricsLoading] = useState(true)
   
   // Archetype for header badge
   const [archetype, setArchetype] = useState<string | null>(null)
@@ -201,10 +206,12 @@ function SitePageContent() {
     }
   }, [slug])
 
-  // Fetch metrics data for NotableFlags
+  // Fetch metrics data for NotableFlags and MetricInteractionInsights
   useEffect(() => {
     const fetchMetrics = async () => {
       if (!site) return
+      
+      setMetricsLoading(true)
 
       const metricsToFetch = [
         "population_total",
@@ -229,6 +236,7 @@ function SitePageContent() {
       )
 
       setAllMetricsData(results)
+      setMetricsLoading(false)
     }
 
     fetchMetrics()
@@ -306,31 +314,41 @@ function SitePageContent() {
             <Link href="https://regioniq.io" className="flex items-center gap-2.5">
               <div className="relative h-9 w-9 flex-shrink-0">
                 <Image
-                  src="/globe.svg"
+                  src="/x.png"
                   alt="RegionIQ"
                   fill
-                  className="object-contain"
+                  className="object-contain dark:hidden"
+                  priority
+                />
+                <Image
+                  src="/Frame 11.png"
+                  alt="RegionIQ"
+                  fill
+                  className="object-contain hidden dark:block"
                   priority
                 />
               </div>
-              <span className="text-lg font-semibold text-foreground tracking-tight hidden sm:inline">
-                RegionIQ
-              </span>
+              <span className="text-lg font-bold text-foreground tracking-tight">RegionIQ</span>
             </Link>
-            
-            {/* Divider + Page indicator */}
-            <div className="flex items-center gap-3">
-              <div className="h-6 w-px bg-border/50" />
-              <div className="flex items-center justify-center">
-                <span className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 text-xs font-medium text-center">
-                  <BarChart3 className="h-3 w-3" />
-                  Site Evaluation
-                </span>
+
+            <div className="h-6 w-px bg-border/60" />
+
+            {/* Economic Profile label */}
+            <div className="flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-emerald-400" />
+              <span className="text-lg font-semibold text-foreground">Economic Profile</span>
+            </div>
+
+            {/* Region badge */}
+            <div className="hidden sm:flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-primary/10 border border-primary/20">
+                <Building2 className="h-4 w-4 text-primary" />
               </div>
+              <span className="text-base font-semibold text-foreground">{site.region_name}</span>
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-3">
             <ThemeToggle />
             <Link
               href="https://regioniq.io"
@@ -372,7 +390,7 @@ function SitePageContent() {
                 address={site.address}
                 year={year}
                 scenario={scenario}
-                className="h-[280px] lg:h-full lg:min-h-[320px]"
+                className="h-[260px] lg:h-full lg:min-h-[260px]"
               />
             </div>
           )}
@@ -401,19 +419,31 @@ function SitePageContent() {
           </div>
         </div>
 
-        {/* Notable Economic Flags */}
-        {allMetricsData.length > 0 && (
-          <div className="mt-8">
-            <h2 className="text-lg font-semibold text-foreground mb-4">Economic Indicators</h2>
+        {/* Selected Economic Indicators */}
+        <div className="mt-8">
+          <p className="text-sm text-muted-foreground/70 mb-3 font-medium">
+            Selected economic indicators
+          </p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <NotableFlags
               regionCode={uiRegionCode}
               regionName={site.region_name}
               year={year}
-              scenario={scenario}
               allMetricsData={allMetricsData}
+              isLoading={metricsLoading || allMetricsData.length === 0}
+              minimal
+            />
+
+            <MetricInteractionInsights
+              allMetricsData={allMetricsData}
+              year={year}
+              regionName={site.region_name}
+              currentMetricId="population_total"
+              isLoading={metricsLoading || allMetricsData.length === 0}
+              minimal
             />
           </div>
-        )}
+        </div>
 
         {/* Notes section if present */}
         {site.notes && (

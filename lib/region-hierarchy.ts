@@ -327,6 +327,54 @@ export function getPeerLADsInSameITL2(ladCode: string): Array<{ code: string; na
 }
 
 /**
+ * Get peer LADs for comparison, with automatic fallback to ITL1 if ITL2 has too few peers.
+ * Returns at least `minPeers` LADs when possible.
+ * 
+ * Fallback logic:
+ * 1. First try ITL2 peers (same economic sub-region)
+ * 2. If fewer than minPeers, expand to ITL1 peers (same country/macro-region)
+ * 
+ * @example
+ * getPeerLADsWithFallback("S12000033", 2) // Aberdeen City
+ * // ITL2 (TLM5) only has Aberdeenshire, so falls back to Scottish ITL1 peers
+ * // Returns: Aberdeenshire, Dundee City (or other Scottish LADs)
+ */
+export function getPeerLADsWithFallback(
+  ladCode: string,
+  minPeers: number = 2
+): Array<{ code: string; name: string }> {
+  const region = hierarchy.regions[ladCode]
+  if (!region) return []
+
+  // First try ITL2 peers
+  const itl2Peers = getPeerLADsInSameITL2(ladCode)
+  
+  // If we have enough peers, return them
+  if (itl2Peers.length >= minPeers) {
+    return itl2Peers.slice(0, minPeers)
+  }
+
+  // Not enough ITL2 peers, fall back to ITL1
+  const itl1 = getITL1Ancestor(ladCode)
+  if (!itl1) return itl2Peers // Return what we have
+
+  // Get all LADs in the ITL1 (same country/macro-region)
+  const allLADsInITL1 = getLADs(itl1.code)
+  
+  // Filter out self and existing ITL2 peers, then add to fill the gap
+  const itl2PeerCodes = new Set(itl2Peers.map(p => p.code))
+  const additionalPeers = allLADsInITL1
+    .filter(code => code !== ladCode && !itl2PeerCodes.has(code))
+    .map(code => hierarchy.regions[code])
+    .filter(Boolean)
+    .map(r => ({ code: r.code, name: r.name }))
+
+  // Combine ITL2 peers with additional ITL1 peers
+  const combined = [...itl2Peers, ...additionalPeers]
+  return combined.slice(0, minPeers)
+}
+
+/**
  * Get all regions at the same level with a shared ITL1 ancestor
  * (Useful for broader comparisons)
  * 

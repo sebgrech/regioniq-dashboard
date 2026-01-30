@@ -19,7 +19,7 @@ import { Badge } from "@/components/ui/badge"
 import { VerdictVisual } from "@/components/place-insights/verdict-visual"
 import { fetchSeries, type DataPoint } from "@/lib/data-service"
 import { REGIONS } from "@/lib/metrics.config"
-import { getSiblings, getRegionInfo, getParent, getPeerLADsInSameITL2 } from "@/lib/region-hierarchy"
+import { getSiblings, getRegionInfo, getParent, getPeerLADsWithFallback } from "@/lib/region-hierarchy"
 import {
   LineChart,
   Line,
@@ -865,9 +865,9 @@ export function AssetEconomicContext({
       let peerRegions: { code: string; name: string }[] = []
       const regionInfo = getRegionInfo(regionCode)
       
-      // For LAD codes, get other LADs in the same ITL2 (not parent ITL3s)
+      // For LAD codes, get other LADs in the same ITL2 (with ITL1 fallback if needed)
       if (regionInfo?.level === "LAD") {
-        const peerLADs = getPeerLADsInSameITL2(regionCode)
+        const peerLADs = getPeerLADsWithFallback(regionCode, 2)
         if (peerLADs.length > 0) {
           peerRegions = peerLADs.slice(0, 2)
         }
@@ -1272,9 +1272,9 @@ export function AssetComparisonCharts({
       let peerRegions: { code: string; name: string }[] = []
       const regionInfo = getRegionInfo(regionCode)
       
-      // For LAD codes, get other LADs in the same ITL2 (not parent ITL3s)
+      // For LAD codes, get other LADs in the same ITL2 (with ITL1 fallback if needed)
       if (regionInfo?.level === "LAD") {
-        const peerLADs = getPeerLADsInSameITL2(regionCode)
+        const peerLADs = getPeerLADsWithFallback(regionCode, 2)
         if (peerLADs.length > 0) {
           peerRegions = peerLADs.slice(0, 2)
         }
