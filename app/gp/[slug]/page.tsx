@@ -441,6 +441,12 @@ function GPPageContent() {
 
             <div className="h-6 w-px bg-border/60" />
 
+            {/* Asset Analysis - larger text */}
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-purple-400" />
+              <span className="text-lg font-semibold text-foreground">Asset Analysis</span>
+            </div>
+
             {/* Broker logo (if available) */}
             {asset.broker && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">

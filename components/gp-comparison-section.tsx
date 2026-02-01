@@ -483,22 +483,31 @@ export function GPComparisonSection({
   // Custom tooltip for line chart
   const LineTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null
-    const isForecast = label >= forecastStartYear
+    const isForecast = label > forecastStartYear
+    
+    // Deduplicate by region name - at transition years, both hist and fcst may have values
+    const uniqueEntries = new Map<string, { name: string; value: number; color: string }>()
+    payload.forEach((entry: any) => {
+      if (entry.value == null) return
+      const name = entry.dataKey.includes('main') 
+        ? regionName 
+        : peersData[parseInt(entry.dataKey.replace(/peer(\d+).*/, '$1'))]?.name || 'Peer'
+      // Only keep the first entry per region (historical takes precedence over forecast)
+      if (!uniqueEntries.has(name)) {
+        uniqueEntries.set(name, { name, value: entry.value, color: entry.color })
+      }
+    })
+    
     return (
       <div className="bg-popover/95 backdrop-blur-sm border border-border rounded-lg shadow-lg p-3 text-xs">
         <p className="font-semibold text-foreground mb-1">
           {label} {isForecast && <span className="text-muted-foreground font-normal">(forecast)</span>}
         </p>
-        {payload.map((entry: any, i: number) => {
-          const name = entry.dataKey.includes('main') 
-            ? regionName 
-            : peersData[parseInt(entry.dataKey.replace(/peer(\d+).*/, '$1'))]?.name || 'Peer'
-          return (
-            <p key={i} style={{ color: entry.color }}>
-              {name}: {formatIndexValue(entry.value)}
-            </p>
-          )
-        })}
+        {Array.from(uniqueEntries.values()).map((entry, i) => (
+          <p key={i} style={{ color: entry.color }}>
+            {entry.name}: {formatIndexValue(entry.value)}
+          </p>
+        ))}
       </div>
     )
   }
