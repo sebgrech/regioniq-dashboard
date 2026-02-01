@@ -415,6 +415,7 @@ function SitePageContent() {
               regionName={site.region_name}
               year={year}
               scenario={scenario}
+              assetClass={site.asset_class}
             />
           </div>
         </div>

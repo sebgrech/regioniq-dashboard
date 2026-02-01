@@ -153,7 +153,7 @@ export default async function AssetsPage() {
                       Sell-side
                     </Link>
                     <Link
-                      href={`/gp/${asset.slug}`}
+                      href={`/a/${asset.slug}`}
                       className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
                     >
                       <TrendingUp className="h-3 w-3" />
@@ -270,7 +270,7 @@ export default async function AssetsPage() {
                         Sell
                       </Link>
                       <Link
-                        href={`/gp/${asset.slug}`}
+                        href={`/a/${asset.slug}`}
                         className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
                         title="Buy-side view"
                       >

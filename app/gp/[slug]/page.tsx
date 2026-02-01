@@ -441,11 +441,19 @@ function GPPageContent() {
 
             <div className="h-6 w-px bg-border/60" />
 
-            {/* Economic Profile label */}
-            <div className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-emerald-400" />
-              <span className="text-lg font-semibold text-foreground">Economic Profile</span>
-            </div>
+            {/* Broker logo (if available) */}
+            {asset.broker && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="opacity-60">via</span>
+                <CompanyLogo 
+                  domain={asset.broker_contact?.domain}
+                  name={asset.broker} 
+                  size={36} 
+                  showFallback={false}
+                  className="rounded-md grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all"
+                />
+              </div>
+            )}
 
             {/* Region badge */}
             <div className="hidden sm:flex items-center gap-2">
@@ -517,6 +525,7 @@ function GPPageContent() {
             year={year}
             scenario={scenario}
             leaseExpiry={asset.lease_expiry}
+            assetClass={asset.asset_class}
           />
         </div>
         

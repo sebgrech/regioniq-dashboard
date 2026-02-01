@@ -31,12 +31,18 @@ interface GPComparisonSectionProps {
   scenario: "baseline" | "upside" | "downside"
   /** Lease expiry string from OM (e.g., "July 2029", "May 2045") */
   leaseExpiry?: string | null
+  /** Asset class - used to show additional metrics for specific asset types */
+  assetClass?: string | null
 }
 
 interface MetricConfig {
   id: string
   label: string
   unit: string
+  /** If true, this metric is computed from other metrics */
+  computed?: boolean
+  /** Source metric IDs for computed metrics */
+  sourceMetrics?: string[]
 }
 
 interface PeerData {
@@ -48,12 +54,21 @@ interface PeerData {
 // Constants
 // =============================================================================
 
-const METRICS: MetricConfig[] = [
+const BASE_METRICS: MetricConfig[] = [
   { id: "gdhi_per_head_gbp", label: "Income per Head", unit: "£" },
   { id: "nominal_gva_mn_gbp", label: "GVA", unit: "£m" },
   { id: "emp_total_jobs", label: "Employment", unit: "jobs" },
   { id: "population_total", label: "Population", unit: "" },
 ]
+
+// Additional metric for industrial assets
+const GVA_PER_JOB_METRIC: MetricConfig = {
+  id: "gva_per_job",
+  label: "GVA per Job",
+  unit: "£/job",
+  computed: true,
+  sourceMetrics: ["nominal_gva_mn_gbp", "emp_total_jobs"],
+}
 
 // Chart colors - matching regional comparison
 const MAIN_COLOR = "#7c3aed" // violet-600 (purple - main region)
@@ -103,11 +118,21 @@ export function GPComparisonSection({
   year,
   scenario,
   leaseExpiry,
+  assetClass,
 }: GPComparisonSectionProps) {
   const { theme } = useTheme()
   const isDarkMode = theme === "dark"
   const gridStroke = isDarkMode ? "#333333" : "#E5E7EB"
   const textColor = isDarkMode ? "#9ca3af" : "#6b7280"
+  
+  // Determine which metrics to show based on asset class
+  const METRICS = useMemo(() => {
+    const isIndustrial = assetClass?.toLowerCase() === "industrial"
+    if (isIndustrial) {
+      return [...BASE_METRICS, GVA_PER_JOB_METRIC]
+    }
+    return BASE_METRICS
+  }, [assetClass])
   
   // Parse lease expiry year from string like "July 2029" or "May 2045"
   const leaseExpiryYear = useMemo(() => {
@@ -117,7 +142,7 @@ export function GPComparisonSection({
   }, [leaseExpiry])
 
   // State
-  const [selectedMetric, setSelectedMetric] = useState<string>(METRICS[0].id)
+  const [selectedMetric, setSelectedMetric] = useState<string>(BASE_METRICS[0].id)
   const [mainData, setMainData] = useState<{ year: number; value: number; type?: "historical" | "forecast" }[]>([])
   const [peersData, setPeersData] = useState<PeerData[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -184,49 +209,119 @@ export function GPComparisonSection({
     return sameLevel.slice(0, 2).map(r => ({ code: r.code, name: r.name }))
   }, [regionCode])
 
+  // Helper: Compute GVA per job from GVA and Employment data
+  const computeGvaPerJob = (
+    gvaData: { year: number; value: number; type?: "historical" | "forecast" }[],
+    empData: { year: number; value: number; type?: "historical" | "forecast" }[]
+  ) => {
+    const empByYear = new Map(empData.map(d => [d.year, d]))
+    return gvaData
+      .filter(d => empByYear.has(d.year))
+      .map(d => {
+        const emp = empByYear.get(d.year)!
+        // GVA is in £m, employment is jobs count
+        // GVA per job = (GVA * 1,000,000) / jobs
+        const gvaPerJob = emp.value > 0 ? (d.value * 1_000_000) / emp.value : 0
+        return { year: d.year, value: gvaPerJob, type: d.type }
+      })
+  }
+
   // Fetch data when metric changes
   useEffect(() => {
     async function fetchData() {
       setIsLoading(true)
       
+      const metricConfig = METRICS.find(m => m.id === selectedMetric)
+      const isComputedMetric = metricConfig?.computed && selectedMetric === "gva_per_job"
+      
       try {
-        // Fetch main region series
-        const mainSeries = await fetchSeries({
-          metricId: selectedMetric,
-          region: regionCode,
-          scenario,
-        })
-        
-        const processedMainData = mainSeries
-          .filter(d => d.year >= year - 10 && d.year <= year + 10)
-          .sort((a, b) => a.year - b.year)
-          .map(d => ({ year: d.year, value: d.value, type: d.type }))
-        
-        setMainData(processedMainData)
-        
-        // Fetch peer series
-        const peers: PeerData[] = []
-        for (const peer of peerRegions) {
-          try {
-            const peerSeries = await fetchSeries({
-              metricId: selectedMetric,
-              region: peer.code,
-              scenario,
-            })
-            const peerData = peerSeries
-              .filter(d => d.year >= year - 10 && d.year <= year + 10)
-              .sort((a, b) => a.year - b.year)
-              .map(d => ({ year: d.year, value: d.value, type: d.type }))
-            
-            if (peerData.length > 0) {
-              peers.push({ name: peer.name, data: peerData })
+        if (isComputedMetric) {
+          // Fetch both GVA and Employment for computed metric
+          const [gvaSeries, empSeries] = await Promise.all([
+            fetchSeries({ metricId: "nominal_gva_mn_gbp", region: regionCode, scenario }),
+            fetchSeries({ metricId: "emp_total_jobs", region: regionCode, scenario }),
+          ])
+          
+          const processedGva = gvaSeries
+            .filter(d => d.year >= year - 10 && d.year <= year + 10)
+            .sort((a, b) => a.year - b.year)
+            .map(d => ({ year: d.year, value: d.value, type: d.type }))
+          
+          const processedEmp = empSeries
+            .filter(d => d.year >= year - 10 && d.year <= year + 10)
+            .sort((a, b) => a.year - b.year)
+            .map(d => ({ year: d.year, value: d.value, type: d.type }))
+          
+          const computedMain = computeGvaPerJob(processedGva, processedEmp)
+          setMainData(computedMain)
+          
+          // Fetch peer series for computed metric
+          const peers: PeerData[] = []
+          for (const peer of peerRegions) {
+            try {
+              const [peerGva, peerEmp] = await Promise.all([
+                fetchSeries({ metricId: "nominal_gva_mn_gbp", region: peer.code, scenario }),
+                fetchSeries({ metricId: "emp_total_jobs", region: peer.code, scenario }),
+              ])
+              
+              const peerGvaData = peerGva
+                .filter(d => d.year >= year - 10 && d.year <= year + 10)
+                .sort((a, b) => a.year - b.year)
+                .map(d => ({ year: d.year, value: d.value, type: d.type }))
+              
+              const peerEmpData = peerEmp
+                .filter(d => d.year >= year - 10 && d.year <= year + 10)
+                .sort((a, b) => a.year - b.year)
+                .map(d => ({ year: d.year, value: d.value, type: d.type }))
+              
+              const computedPeer = computeGvaPerJob(peerGvaData, peerEmpData)
+              if (computedPeer.length > 0) {
+                peers.push({ name: peer.name, data: computedPeer })
+              }
+            } catch (err) {
+              // Skip this peer if fetch fails
             }
-          } catch (err) {
-            // Skip this peer if fetch fails
           }
+          setPeersData(peers)
+        } else {
+          // Standard metric fetch
+          const mainSeries = await fetchSeries({
+            metricId: selectedMetric,
+            region: regionCode,
+            scenario,
+          })
+          
+          const processedMainData = mainSeries
+            .filter(d => d.year >= year - 10 && d.year <= year + 10)
+            .sort((a, b) => a.year - b.year)
+            .map(d => ({ year: d.year, value: d.value, type: d.type }))
+          
+          setMainData(processedMainData)
+          
+          // Fetch peer series
+          const peers: PeerData[] = []
+          for (const peer of peerRegions) {
+            try {
+              const peerSeries = await fetchSeries({
+                metricId: selectedMetric,
+                region: peer.code,
+                scenario,
+              })
+              const peerData = peerSeries
+                .filter(d => d.year >= year - 10 && d.year <= year + 10)
+                .sort((a, b) => a.year - b.year)
+                .map(d => ({ year: d.year, value: d.value, type: d.type }))
+              
+              if (peerData.length > 0) {
+                peers.push({ name: peer.name, data: peerData })
+              }
+            } catch (err) {
+              // Skip this peer if fetch fails
+            }
+          }
+          
+          setPeersData(peers)
         }
-        
-        setPeersData(peers)
       } catch (err) {
         console.error(`Failed to fetch data for ${selectedMetric}:`, err)
       } finally {
@@ -235,7 +330,7 @@ export function GPComparisonSection({
     }
     
     fetchData()
-  }, [selectedMetric, regionCode, scenario, year, peerRegions])
+  }, [selectedMetric, regionCode, scenario, year, peerRegions, METRICS])
 
   // Find base year (last historical year) for indexing
   const baseYear = useMemo(() => {
@@ -360,6 +455,12 @@ export function GPComparisonSection({
         return `£${(value / 1000).toFixed(1)}bn`
       }
       return `£${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}m`
+    } else if (metric.unit === '£/job') {
+      // GVA per job - format as currency
+      if (value >= 1000) {
+        return `£${(value / 1000).toFixed(1)}k`
+      }
+      return `£${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
     } else if (metric.unit === 'jobs') {
       // Employment - format with k/m suffix
       if (value >= 1000000) {
