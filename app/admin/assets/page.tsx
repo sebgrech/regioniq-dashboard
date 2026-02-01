@@ -2,9 +2,48 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin"
 import { requireAdmin } from "@/lib/api/require-admin"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { ExternalLink, Plus, Building2, MapPin, TrendingUp, Briefcase } from "lucide-react"
+import { 
+  ExternalLink, 
+  Plus, 
+  Building2, 
+  MapPin, 
+  TrendingUp, 
+  Briefcase,
+  ShoppingBag,
+  Home,
+  Dumbbell,
+  Warehouse,
+  UtensilsCrossed,
+  type LucideIcon
+} from "lucide-react"
 
 export const dynamic = "force-dynamic"
+
+// Helper to get icon based on asset class
+function getAssetClassIcon(assetClass: string | null): LucideIcon {
+  if (!assetClass) return Building2
+  
+  const normalized = assetClass.toLowerCase().trim()
+  
+  switch (normalized) {
+    case "retail":
+      return ShoppingBag
+    case "office":
+      return Briefcase
+    case "residential":
+      return Home
+    case "leisure":
+      return Dumbbell
+    case "industrial":
+      return Warehouse
+    case "f&b":
+    case "food & beverage":
+    case "restaurant":
+      return UtensilsCrossed
+    default:
+      return Building2
+  }
+}
 
 interface AssetPage {
   id: string
@@ -124,7 +163,10 @@ export default async function AssetsPage() {
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2">
                       <div className="p-1.5 rounded-lg bg-primary/10">
-                        <Building2 className="h-4 w-4 text-primary" />
+                        {(() => {
+                          const Icon = getAssetClassIcon(asset.asset_class)
+                          return <Icon className="h-4 w-4 text-primary" />
+                        })()}
                       </div>
                       <span className="text-xs font-medium text-muted-foreground">
                         {asset.asset_class || asset.asset_type || "Asset"}
@@ -183,7 +225,10 @@ export default async function AssetsPage() {
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2">
                       <div className="p-1.5 rounded-lg bg-emerald-500/10">
-                        <Building2 className="h-4 w-4 text-emerald-500" />
+                        {(() => {
+                          const Icon = getAssetClassIcon(asset.asset_class)
+                          return <Icon className="h-4 w-4 text-emerald-500" />
+                        })()}
                       </div>
                       <span className="text-xs font-medium text-muted-foreground">
                         {asset.asset_class || asset.asset_type || "Asset"}
