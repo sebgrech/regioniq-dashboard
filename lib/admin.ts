@@ -8,60 +8,59 @@ const FALLBACK_ADMIN_EMAILS = [
 ]
 
 // =============================================================================
-// Server-side cache for authorized users
+// Server-side cache for users with assets access
 // =============================================================================
 
-let cachedAuthorizedUsers: Map<string, string> | null = null
+let cachedAssetsUsers: Set<string> | null = null
 let cacheTime = 0
 const CACHE_TTL = 60 * 1000 // 1 minute
 
 /**
- * Refresh the cache of authorized users from Supabase
+ * Refresh the cache of users with assets access from allowed_emails table
  */
-async function refreshCache(): Promise<Map<string, string>> {
+async function refreshCache(): Promise<Set<string>> {
   try {
     const supabase = createSupabaseAdminClient()
     const { data, error } = await supabase
-      .from("authorized_users")
-      .select("email, role")
+      .from("allowed_emails")
+      .select("email")
+      .eq("assets_access", true)
     
     if (error) {
-      console.error("Failed to fetch authorized users:", error)
+      console.error("Failed to fetch allowed_emails:", error)
       // Return fallback on error
-      return new Map(FALLBACK_ADMIN_EMAILS.map(e => [e.toLowerCase(), "admin"]))
+      return new Set(FALLBACK_ADMIN_EMAILS.map(e => e.toLowerCase()))
     }
     
-    const userMap = new Map<string, string>()
+    const userSet = new Set<string>()
     for (const user of data || []) {
-      userMap.set(user.email.toLowerCase(), user.role)
+      userSet.add(user.email.toLowerCase())
     }
     
     // Always include fallback admins
     for (const email of FALLBACK_ADMIN_EMAILS) {
-      if (!userMap.has(email.toLowerCase())) {
-        userMap.set(email.toLowerCase(), "admin")
-      }
+      userSet.add(email.toLowerCase())
     }
     
-    cachedAuthorizedUsers = userMap
+    cachedAssetsUsers = userSet
     cacheTime = Date.now()
     
-    return userMap
+    return userSet
   } catch (err) {
-    console.error("Error refreshing authorized users cache:", err)
-    return new Map(FALLBACK_ADMIN_EMAILS.map(e => [e.toLowerCase(), "admin"]))
+    console.error("Error refreshing assets access cache:", err)
+    return new Set(FALLBACK_ADMIN_EMAILS.map(e => e.toLowerCase()))
   }
 }
 
 /**
- * Get cached authorized users, refreshing if stale
+ * Get cached users with assets access, refreshing if stale
  */
-async function getCachedUsers(): Promise<Map<string, string>> {
+async function getCachedAssetsUsers(): Promise<Set<string>> {
   const now = Date.now()
-  if (!cachedAuthorizedUsers || now - cacheTime > CACHE_TTL) {
+  if (!cachedAssetsUsers || now - cacheTime > CACHE_TTL) {
     return refreshCache()
   }
-  return cachedAuthorizedUsers
+  return cachedAssetsUsers
 }
 
 // =============================================================================
@@ -69,17 +68,14 @@ async function getCachedUsers(): Promise<Map<string, string>> {
 // =============================================================================
 
 /**
- * Check if an email belongs to an admin user (ASYNC - for server-side use)
- * Queries Supabase authorized_users table with caching.
+ * Check if an email has assets access (ASYNC - for server-side use)
+ * Queries Supabase allowed_emails table with caching.
  */
 export async function isAdminEmailAsync(email: string | null | undefined): Promise<boolean> {
   if (!email) return false
   
-  const users = await getCachedUsers()
-  const role = users.get(email.toLowerCase())
-  
-  // Admin role or assets role both get admin access
-  return role === "admin" || role === "assets"
+  const users = await getCachedAssetsUsers()
+  return users.has(email.toLowerCase())
 }
 
 /**
@@ -95,20 +91,10 @@ export function isAdminEmail(email: string | null | undefined): boolean {
 }
 
 /**
- * Get user role from authorized_users table (ASYNC)
- */
-export async function getUserRole(email: string | null | undefined): Promise<string | null> {
-  if (!email) return null
-  
-  const users = await getCachedUsers()
-  return users.get(email.toLowerCase()) || null
-}
-
-/**
- * Invalidate the cache (call after updating authorized_users table)
+ * Invalidate the cache (call after updating allowed_emails table)
  */
 export function invalidateAuthCache(): void {
-  cachedAuthorizedUsers = null
+  cachedAssetsUsers = null
   cacheTime = 0
 }
 
