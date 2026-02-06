@@ -275,9 +275,9 @@ export default function LandingPage() {
       </div>
 
       <div className="relative z-10 grid min-h-screen grid-cols-1 lg:grid-cols-2">
-        {/* LEFT PANEL (visual) */}
+        {/* LEFT PANEL (visual) — hidden on mobile, shown on lg+ */}
         <div
-          className="relative overflow-hidden"
+          className="relative overflow-hidden hidden lg:block"
         >
           {/* Ambient light (monochrome) */}
           <div
