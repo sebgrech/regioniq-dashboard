@@ -405,6 +405,7 @@ function SitePageContent() {
             scenario={scenario}
             ladCode={site.region_code}
             assetType={site.asset_class}
+            assetClass={site.asset_class}
             hideCharts
           />
           

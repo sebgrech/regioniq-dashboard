@@ -545,6 +545,7 @@ function GPPageContent() {
             scenario={scenario}
             ladCode={asset.region_code}
             assetType={asset.asset_type}
+            assetClass={asset.asset_class}
             tenant={asset.tenant}
             yieldInfo={asset.yield}
             hideCharts

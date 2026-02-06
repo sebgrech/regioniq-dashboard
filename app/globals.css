@@ -3,6 +3,11 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Default 105% zoom for optimal viewing experience */
+html {
+  zoom: 1.05;
+}
+
 :root {
   /* ═══════════════════════════════════════════════════════════════════════════
      HERO / AURORA BACKGROUND TOKENS

@@ -13,8 +13,10 @@ import {
   Briefcase, 
   Activity,
   Target,
-  ArrowRight
+  ArrowRight,
+  Banknote
 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { VerdictVisual } from "@/components/place-insights/verdict-visual"
 import { fetchSeries, type DataPoint } from "@/lib/data-service"
@@ -56,6 +58,7 @@ interface AssetEconomicContextProps {
   ladCode?: string
   /** Asset metadata for positioning insights */
   assetType?: string | null
+  assetClass?: string | null
   tenant?: string | null
   yieldInfo?: string | null
   /** Hide the LAD comparison charts (render separately via AssetComparisonCharts) */
@@ -112,6 +115,101 @@ const SIGNAL_LABELS: Record<string, string> = {
   labour_capacity: "Workforce capacity",
   productivity_strength: "Output per job",
   growth_composition: "Growth balance",
+}
+
+// =============================================================================
+// Shared Hover Tooltip - Used by SignalChipMini and PositioningBulletItem
+// =============================================================================
+
+function HoverTooltip({ 
+  show, 
+  children,
+  position = "below"
+}: { 
+  show: boolean
+  children: React.ReactNode
+  position?: "below" | "above-right"
+}) {
+  if (!show) return null
+  
+  return (
+    <div className={cn(
+      "absolute z-20",
+      "px-3 py-2 rounded-lg shadow-lg",
+      "text-sm text-foreground bg-popover border border-border",
+      "w-max max-w-[280px]",
+      "animate-in fade-in-0 zoom-in-95 duration-150",
+      position === "below" && "top-full left-0 mt-1.5",
+      position === "above-right" && "bottom-full right-0 mb-1.5"
+    )}>
+      {children}
+    </div>
+  )
+}
+
+// =============================================================================
+// Positioning Bullet - Uses shared HoverTooltip
+// =============================================================================
+
+// Icon mapping for each signal type
+// Icons for signals and implications
+const SIGNAL_ICONS: Record<string, LucideIcon> = {
+  // Signal IDs
+  employment_density: Building2,
+  income_capture: Banknote,
+  labour_capacity: Users,
+  productivity_strength: Briefcase,
+  growth_composition: TrendingUp,
+  // Implication IDs - mapped to relevant icons
+  employment_hub: Building2,
+  daytime_footfall: Building2,
+  dormitory_location: Home,
+  commuter_uplift: Users,
+  value_leakage: Banknote,
+  hiring_constraints: Users,
+  labour_availability: Users,
+  productivity_led_growth: Briefcase,
+  labour_led_growth: Briefcase,
+  employment_growth_leading: TrendingUp,
+  residential_pressure_building: Home,
+  consumer_hub_opportunity: ShoppingBag,
+  tight_market_constraints: Users,
+  growth_opportunity: TrendingUp,
+  regional_centre_profile: Building2,
+  stable_residential_demand: TrendingUp,
+  workforce_stability: Users,
+  balanced_employment_base: Building2,
+  aligned_income_output: Banknote,
+}
+
+function PositioningBulletItem({ 
+  bullet, 
+  index,
+}: { 
+  bullet: { text: string; signalId?: string }
+  index: number
+}) {
+  // Get the appropriate icon for this signal
+  const Icon = bullet.signalId ? SIGNAL_ICONS[bullet.signalId] : Target
+  const FinalIcon = Icon || Target
+  
+  return (
+    <div 
+      className="group relative flex items-start gap-4 p-3 rounded-lg bg-background/50 border border-border/30 hover:border-primary/30 hover:bg-background/80 transition-all duration-300 animate-in fade-in-0 slide-in-from-bottom-3 cursor-default"
+      style={{ animationDelay: `${200 + index * 120}ms`, animationFillMode: "backwards" }}
+    >
+      {/* Icon indicator based on signal type */}
+      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 group-hover:scale-110 transition-all duration-300">
+        <FinalIcon className="h-3.5 w-3.5 text-primary" />
+      </div>
+      
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-foreground leading-relaxed">
+          {bullet.text}
+        </p>
+      </div>
+    </div>
+  )
 }
 
 // =============================================================================
@@ -179,17 +277,11 @@ function SignalChipMini({
         </div>
       </button>
       
-      {/* Detail tooltip on hover/click */}
-      {detail && showDetail && (
-        <div className={cn(
-          "absolute top-full left-0 mt-1.5 z-20",
-          "px-3 py-2 rounded-lg shadow-lg",
-          "text-sm text-foreground bg-popover border border-border",
-          "w-max max-w-[280px]",
-          "animate-in fade-in-0 zoom-in-95 duration-150"
-        )}>
+      {/* Detail tooltip on hover/click - uses shared component */}
+      {detail && (
+        <HoverTooltip show={showDetail} position="below">
           {detail}
-        </div>
+        </HoverTooltip>
       )}
     </div>
   )
@@ -698,110 +790,81 @@ function ImplicationCard({ text, id, index }: { text: string; id: string; index:
 
 
 // =============================================================================
-// Asset Positioning Insights Generator
+// Positioning Bullet Type & Asset-Aware Scoring
 // =============================================================================
 
 interface PositioningBullet {
   id: string
   text: string
-  relevance: string // e.g., "tenant covenant", "rent review", "exit pricing"
+  signalId: string
+  score: number
 }
 
-function generatePositioningBullets(
+// Implication priority weights by asset type - higher = more important for that asset
+// Maps implication IDs to priority weights for each asset lens
+const IMPLICATION_PRIORITY_BY_ASSET: Record<string, Record<string, number>> = {
+  office: {
+    // Productivity-related implications are most relevant for office
+    productivity_led_growth: 100,
+    labour_led_growth: 95,
+    hiring_constraints: 85,
+    labour_availability: 80,
+    tight_market_constraints: 90,
+    growth_opportunity: 85,
+    employment_hub: 75,
+    regional_centre_profile: 70,
+  },
+  retail: {
+    // Footfall and spending power matter most for retail
+    employment_hub: 100,
+    daytime_footfall: 100,
+    consumer_hub_opportunity: 95,
+    commuter_uplift: 90,
+    dormitory_location: 85,
+    value_leakage: 80,
+  },
+  industrial: {
+    // Labour availability is critical for industrial
+    labour_availability: 100,
+    hiring_constraints: 95,
+    growth_opportunity: 90,
+    tight_market_constraints: 85,
+  },
+  residential: {
+    // Income and demographic factors matter for residential
+    consumer_hub_opportunity: 100,
+    stable_residential_demand: 95,
+    residential_pressure_building: 90,
+    dormitory_location: 85,
+    value_leakage: 80,
+  },
+  leisure: {
+    // Spending power and footfall for leisure
+    consumer_hub_opportunity: 100,
+    employment_hub: 95,
+    daytime_footfall: 90,
+    commuter_uplift: 85,
+  },
+}
+
+// Default weights for implications not specifically mapped
+const DEFAULT_IMPLICATION_PRIORITY = 50
+
+/**
+ * Resolves asset lens from metadata
+ */
+function resolveAssetLens(
   assetType: string | null | undefined,
-  tenant: string | null | undefined,
-  signals: SignalForUI[],
-  implications: { id: string; text: string; relevantFor: string[] }[],
-  regionName: string
-): PositioningBullet[] {
-  const bullets: PositioningBullet[] = []
-  const type = assetType?.toLowerCase() || ""
-  
-  // Find relevant signals
-  const incomeSignal = signals.find(s => s.id === "income_retention")
-  const jobDraw = signals.find(s => s.id === "job_draw")
-  const workforceCapacity = signals.find(s => s.id === "workforce_capacity")
-  const outputPerJob = signals.find(s => s.id === "output_per_job")
-  
-  // Income-related bullet (relevant for most asset types)
-  if (incomeSignal) {
-    const isStrong = incomeSignal.strength >= 3
-    if (isStrong) {
-      bullets.push({
-        id: "income",
-        text: `${regionName} shows ${incomeSignal.outcome === "high" ? "strong" : "notable"} income retention: ${incomeSignal.detail}`,
-        relevance: tenant ? "tenant covenant strength" : "buyer income demographics"
-      })
-    }
-  }
-  
-  // Labour market bullet (especially relevant for logistics, retail, office)
-  if (workforceCapacity && (type.includes("logistics") || type.includes("industrial") || type.includes("retail") || type.includes("warehouse"))) {
-    bullets.push({
-      id: "labour",
-      text: workforceCapacity.detail,
-      relevance: "operational staffing costs"
-    })
-  }
-  
-  // Job draw for office assets
-  if (jobDraw && type.includes("office")) {
-    bullets.push({
-      id: "jobdraw",
-      text: jobDraw.detail,
-      relevance: "tenant demand drivers"
-    })
-  }
-  
-  // Output per job for industrial/logistics
-  if (outputPerJob && (type.includes("industrial") || type.includes("logistics"))) {
-    bullets.push({
-      id: "productivity",
-      text: outputPerJob.detail,
-      relevance: "regional productivity context"
-    })
-  }
-  
-  // Add relevant implications (non-presumptuous ones)
-  const relevantImplications = implications.filter(impl => {
-    const lowerText = impl.text.toLowerCase()
-    // Retail assets care about consumer signals
-    if ((type.includes("retail") || type.includes("shop")) && 
-        (lowerText.includes("spending") || lowerText.includes("retail") || lowerText.includes("consumer"))) {
-      return true
-    }
-    // Office assets care about employment signals
-    if (type.includes("office") && 
-        (lowerText.includes("office") || lowerText.includes("employment") || lowerText.includes("workforce"))) {
-      return true
-    }
-    // Residential assets care about housing signals
-    if ((type.includes("resi") || type.includes("residential") || type.includes("btl") || type.includes("pbsa")) && 
-        (lowerText.includes("resident") || lowerText.includes("housing") || lowerText.includes("population"))) {
-      return true
-    }
-    // Logistics/industrial care about capacity
-    if ((type.includes("logistics") || type.includes("industrial") || type.includes("warehouse")) && 
-        (lowerText.includes("hiring") || lowerText.includes("labour") || lowerText.includes("workforce"))) {
-      return true
-    }
-    return false
-  })
-  
-  // Add first relevant implication
-  if (relevantImplications.length > 0 && bullets.length < 3) {
-    const impl = relevantImplications[0]
-    bullets.push({
-      id: impl.id,
-      text: impl.text,
-      relevance: type.includes("retail") ? "consumer catchment" :
-                 type.includes("office") ? "occupier market" :
-                 type.includes("resi") ? "rental demand" :
-                 "market context"
-    })
-  }
-  
-  return bullets.slice(0, 3) // Max 3 bullets
+  assetClass: string | null | undefined,
+  tenantSector: string | null | undefined
+): string {
+  const type = (assetType || assetClass || tenantSector || "").toLowerCase()
+  if (type.includes("office")) return "office"
+  if (type.includes("retail") || type.includes("f&b") || type.includes("food") || type.includes("shop")) return "retail"
+  if (type.includes("industrial") || type.includes("logistics") || type.includes("warehouse")) return "industrial"
+  if (type.includes("resi") || type.includes("apartment") || type.includes("housing") || type.includes("btl")) return "residential"
+  if (type.includes("leisure") || type.includes("hotel") || type.includes("gym") || type.includes("cinema")) return "leisure"
+  return "general"
 }
 
 // =============================================================================
@@ -823,6 +886,7 @@ export function AssetEconomicContext({
   scenario,
   ladCode,
   assetType,
+  assetClass,
   tenant,
   yieldInfo,
   hideCharts = false,
@@ -1014,11 +1078,29 @@ export function AssetEconomicContext({
     ui?.signals?.filter(s => CAPACITY_SIGNALS.includes(s.id)) ?? []
   , [ui?.signals])
   
-  // Generate asset-specific positioning bullets (MUST be before any returns)
+  // Generate asset-specific positioning bullets from implications (MUST be before any returns)
+  // Score each implication based on asset type, pick the highest-scoring one
   const positioningBullets = useMemo(() => {
-    if (!ui?.signals) return []
-    return generatePositioningBullets(assetType, tenant, ui.signals, implications, regionName)
-  }, [assetType, tenant, ui?.signals, implications, regionName])
+    if (!implications || implications.length === 0) return []
+    
+    // Resolve asset lens for scoring
+    const lens = resolveAssetLens(assetType, assetClass, tenantSector)
+    const assetPriorities = IMPLICATION_PRIORITY_BY_ASSET[lens] || {}
+    
+    // Score each implication based on asset-type relevance
+    const scoredImplications = implications.map(impl => ({
+      id: impl.id,
+      text: impl.text,
+      signalId: impl.id,
+      // Use asset-specific priority if available, otherwise default
+      score: assetPriorities[impl.id] ?? DEFAULT_IMPLICATION_PRIORITY,
+    }))
+    
+    // Sort by score and pick the highest
+    scoredImplications.sort((a, b) => b.score - a.score)
+    
+    return scoredImplications.length > 0 ? [scoredImplications[0]] : []
+  }, [implications, assetType, assetClass, tenantSector])
   
   // Loading state - premium shimmer (AFTER all hooks)
   if (isLoading) {
@@ -1145,8 +1227,8 @@ export function AssetEconomicContext({
       </div>
       
       {/* Asset-Specific Positioning Insights - Enhanced with animations */}
-      {positioningBullets.length > 0 && assetType && (
-        <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/8 via-primary/3 to-transparent">
+      {positioningBullets.length > 0 && (
+        <div className="relative overflow-visible rounded-xl border border-primary/20 bg-gradient-to-br from-primary/8 via-primary/3 to-transparent">
           {/* Animated gradient glow */}
           <div 
             className="absolute -top-24 -right-24 w-48 h-48 rounded-full blur-3xl opacity-20 animate-pulse"
@@ -1164,7 +1246,7 @@ export function AssetEconomicContext({
                   Key datapoints for positioning
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {assetType}
+                  {assetType || assetClass || "Economic Positioning"}
                 </p>
               </div>
             </div>
@@ -1172,22 +1254,11 @@ export function AssetEconomicContext({
             {/* Bullets with staggered animations */}
             <div className="space-y-3 pt-1">
               {positioningBullets.map((bullet, i) => (
-                <div 
+                <PositioningBulletItem
                   key={bullet.id}
-                  className="group relative flex items-start gap-4 p-3 rounded-lg bg-background/50 border border-border/30 hover:border-primary/30 hover:bg-background/80 transition-all duration-300 animate-in fade-in-0 slide-in-from-bottom-3"
-                  style={{ animationDelay: `${200 + i * 120}ms`, animationFillMode: "backwards" }}
-                >
-                  {/* Animated number indicator */}
-                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 group-hover:scale-110 transition-all duration-300">
-                    <span className="text-xs font-bold text-primary">{i + 1}</span>
-                  </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground leading-relaxed">
-                      {bullet.text}
-                    </p>
-                  </div>
-                </div>
+                  bullet={bullet}
+                  index={i}
+                />
               ))}
             </div>
           </div>
