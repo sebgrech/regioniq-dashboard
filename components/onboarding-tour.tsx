@@ -25,13 +25,23 @@ function getRect(el: Element | null): Rect | null {
   const r = el.getBoundingClientRect()
   // If the element is display:none or detached, the rect will be 0.
   if (!r || (r.width === 0 && r.height === 0)) return null
-  return { left: r.left, top: r.top, width: r.width, height: r.height }
+  // Account for CSS zoom on the html element
+  const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1
+  return { 
+    left: r.left / zoom, 
+    top: r.top / zoom, 
+    width: r.width / zoom, 
+    height: r.height / zoom 
+  }
 }
 
 function getTopObstructionPx(): number {
+  // Account for CSS zoom on the html element
+  const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1
+  
   // Primary sticky header we control.
   const topbar = document.getElementById("tour-topbar")
-  const topbarH = topbar ? topbar.getBoundingClientRect().height : 0
+  const topbarH = topbar ? topbar.getBoundingClientRect().height / zoom : 0
 
   // Also include any other sticky/fixed elements at the top (e.g., secondary nav),
   // but avoid double-counting the topbar itself.
@@ -41,8 +51,8 @@ function getTopObstructionPx(): number {
     if (topbar && el === topbar) return
     const r = el.getBoundingClientRect()
     // Only count if it's actually at/near the top and visible.
-    if (r.height > 0 && r.bottom > 0 && r.top <= 1) {
-      extra += r.height
+    if (r.height > 0 && r.bottom > 0 && r.top <= zoom) {
+      extra += r.height / zoom
     }
   })
 
@@ -53,9 +63,16 @@ function ensureElementFullyInView(el: HTMLElement) {
   const margin = 16
   const topObstruction = getTopObstructionPx()
   const viewTop = topObstruction + margin
-  const viewBottom = window.innerHeight - margin
+  // Account for CSS zoom on the html element
+  const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1
+  const viewBottom = (window.innerHeight / zoom) - margin
 
-  const rect = el.getBoundingClientRect()
+  const r = el.getBoundingClientRect()
+  const rect = { 
+    top: r.top / zoom, 
+    bottom: r.bottom / zoom, 
+    height: r.height / zoom 
+  }
   const available = Math.max(1, viewBottom - viewTop)
   const tall = rect.height > available
 
@@ -274,7 +291,10 @@ export function OnboardingTour(props: {
   // Keep viewport dims updated for anchoring.
   useEffect(() => {
     if (!open) return
-    const update = () => setViewport({ w: window.innerWidth, h: window.innerHeight })
+    const update = () => {
+      const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1
+      setViewport({ w: window.innerWidth / zoom, h: window.innerHeight / zoom })
+    }
     update()
     window.addEventListener("resize", update, { passive: true })
     return () => window.removeEventListener("resize", update)
