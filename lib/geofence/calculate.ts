@@ -58,6 +58,51 @@ const BOUNDARY_CONFIG: Record<CatchmentLevel, BoundaryConfig> = {
 }
 
 // ---------------------------------------------------------------------------
+// MSOA human-readable names (House of Commons Library names)
+// ---------------------------------------------------------------------------
+
+let msoaNamesCache: Map<string, string> | null = null
+let msoaNamesPromise: Promise<Map<string, string>> | null = null
+
+/**
+ * Load the MSOA human-readable names lookup (HCL names).
+ * Maps codes like "E02006534" to names like "Hillside" instead of "Adur 001".
+ */
+async function loadMSOANames(): Promise<Map<string, string>> {
+  if (msoaNamesCache) return msoaNamesCache
+  if (msoaNamesPromise) return msoaNamesPromise
+
+  msoaNamesPromise = (async () => {
+    try {
+      const useCDN =
+        process.env.NODE_ENV === "production" &&
+        process.env.NEXT_PUBLIC_USE_CDN !== "false"
+      const url = useCDN
+        ? `${R2_CDN_BASE}/boundaries/msoa-names.json`
+        : "/boundaries/msoa-names.json"
+
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`Failed to load MSOA names: ${res.status}`)
+
+      const data: Record<string, string> = await res.json()
+      const map = new Map(Object.entries(data))
+      msoaNamesCache = map
+      console.log(`[Geofence] Loaded ${map.size} MSOA human-readable names`)
+      return map
+    } catch (error) {
+      console.warn("[Geofence] MSOA names load failed, using default names")
+      const map = new Map<string, string>()
+      msoaNamesCache = map
+      return map
+    } finally {
+      msoaNamesPromise = null
+    }
+  })()
+
+  return msoaNamesPromise
+}
+
+// ---------------------------------------------------------------------------
 // GeoJSON cache (per level)
 // ---------------------------------------------------------------------------
 
@@ -93,6 +138,12 @@ export async function loadBoundaries(
 
       const raw = await response.json()
       const normalised = normaliseFeatures(raw, config)
+
+      // Apply human-readable names for MSOA
+      if (level === "MSOA") {
+        await applyMSOANames(normalised)
+      }
+
       boundaryCache.set(level, normalised)
       console.log(
         `[Geofence] Loaded ${normalised.features.length} ${level} features`
@@ -111,6 +162,12 @@ export async function loadBoundaries(
       }
       const raw = await fallbackResponse.json()
       const normalised = normaliseFeatures(raw, config)
+
+      // Apply human-readable names for MSOA
+      if (level === "MSOA") {
+        await applyMSOANames(normalised)
+      }
+
       boundaryCache.set(level, normalised)
       return normalised
     } finally {
@@ -145,6 +202,29 @@ function normaliseFeatures(
 }
 
 /**
+ * Override MSOA feature names with human-readable HCL names.
+ * e.g. "Adur 001" → "Hillside", "Allerdale 012" → "Keswick & Derwent Valley"
+ */
+async function applyMSOANames(
+  fc: RegionFeatureCollection
+): Promise<void> {
+  const nameMap = await loadMSOANames()
+  if (nameMap.size === 0) return
+
+  let overridden = 0
+  for (const feature of fc.features) {
+    const hclName = nameMap.get(feature.properties.code)
+    if (hclName) {
+      feature.properties.name = hclName
+      overridden++
+    }
+  }
+  console.log(
+    `[Geofence] Applied HCL names to ${overridden}/${fc.features.length} MSOA features`
+  )
+}
+
+/**
  * Clear the boundary cache for a specific level or all levels.
  */
 export function clearBoundaryCache(level?: CatchmentLevel): void {
@@ -154,6 +234,8 @@ export function clearBoundaryCache(level?: CatchmentLevel): void {
   } else {
     boundaryCache.clear()
     boundaryPromises.clear()
+    msoaNamesCache = null
+    msoaNamesPromise = null
   }
 }
 

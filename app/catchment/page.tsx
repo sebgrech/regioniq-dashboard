@@ -139,6 +139,13 @@ function CatchmentContent() {
   const [circleRadius, setCircleRadius] = useState(10) // km
   const [catchmentLevel, setCatchmentLevel] = useState<CatchmentLevel>("MSOA")
   const [mapStyleOption, setMapStyleOption] = useState<MapStyleOption>("streets")
+
+  // Year range and forecast availability per level
+  const LEVEL_YEAR_CONFIG: Record<CatchmentLevel, { min: number; max: number; hasForecasts: boolean }> = {
+    LAD:  { min: YEARS.min, max: YEARS.max, hasForecasts: true },
+    MSOA: { min: YEARS.min, max: 2024,      hasForecasts: false },
+  }
+  const levelYearConfig = LEVEL_YEAR_CONFIG[catchmentLevel]
   const [mounted, setMounted] = useState(false)
   
   // Source region (from dashboard context)
@@ -149,6 +156,16 @@ function CatchmentContent() {
 
   // Track mount state for hydration
   useEffect(() => setMounted(true), [])
+
+  // Clamp year and reset scenario when switching catchment level
+  useEffect(() => {
+    if (year > levelYearConfig.max) {
+      setYear(levelYearConfig.max)
+    }
+    if (!levelYearConfig.hasForecasts && scenario !== "baseline") {
+      setScenario("baseline")
+    }
+  }, [catchmentLevel]) // eslint-disable-line react-hooks/exhaustive-deps
   
   // Load source region from URL param or localStorage
   useEffect(() => {
@@ -410,8 +427,8 @@ function CatchmentContent() {
               </SelectTrigger>
               <SelectContent>
                 {Array.from(
-                  { length: YEARS.max - YEARS.min + 1 },
-                  (_, i) => YEARS.min + i
+                  { length: levelYearConfig.max - levelYearConfig.min + 1 },
+                  (_, i) => levelYearConfig.min + i
                 ).map((y) => (
                   <SelectItem key={y} value={String(y)}>
                     {y}
@@ -421,23 +438,25 @@ function CatchmentContent() {
             </Select>
           </div>
 
-          {/* Scenario selector */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Scenario:</span>
-            <Select
-              value={scenario}
-              onValueChange={(v: string) => setScenario(v as Scenario)}
-            >
-              <SelectTrigger className="w-28 h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="baseline">Baseline</SelectItem>
-                <SelectItem value="upside">Upside</SelectItem>
-                <SelectItem value="downside">Downside</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Scenario selector — only for levels with forecasts */}
+          {levelYearConfig.hasForecasts && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Scenario:</span>
+              <Select
+                value={scenario}
+                onValueChange={(v: string) => setScenario(v as Scenario)}
+              >
+                <SelectTrigger className="w-28 h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="baseline">Baseline</SelectItem>
+                  <SelectItem value="upside">Upside</SelectItem>
+                  <SelectItem value="downside">Downside</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <ThemeToggle />
         </div>
@@ -461,24 +480,31 @@ function CatchmentContent() {
             />
 
             {/* Granularity toggle */}
-            <div className="mt-3 flex items-center justify-between p-2.5 rounded-lg bg-muted/50">
-              <div className="flex items-center gap-2">
-                <Grid3X3 className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-sm font-medium">
-                  {catchmentLevel === "MSOA" ? "Neighbourhood" : "District"}
-                </span>
+            <div className="mt-3 p-2.5 rounded-lg bg-muted/50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Grid3X3 className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-sm font-medium">
+                    {catchmentLevel === "MSOA" ? "Neighbourhood" : "District"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground">
+                    {catchmentLevel === "MSOA" ? "High res" : "Standard"}
+                  </span>
+                  <Switch
+                    checked={catchmentLevel === "MSOA"}
+                    onCheckedChange={(checked) =>
+                      setCatchmentLevel(checked ? "MSOA" : "LAD")
+                    }
+                  />
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted-foreground">
-                  {catchmentLevel === "MSOA" ? "High res" : "Standard"}
-                </span>
-                <Switch
-                  checked={catchmentLevel === "MSOA"}
-                  onCheckedChange={(checked) =>
-                    setCatchmentLevel(checked ? "MSOA" : "LAD")
-                  }
-                />
-              </div>
+              <p className="text-[10px] text-muted-foreground mt-1.5">
+                {catchmentLevel === "MSOA"
+                  ? "Historical data (2010\u20132024)"
+                  : "Historical & forecast (2010\u20132050)"}
+              </p>
             </div>
 
             {/* Circle radius control (when in circle mode) */}

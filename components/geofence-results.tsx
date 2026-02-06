@@ -468,31 +468,43 @@ export function GeofenceResults({
           </div>
         )}
 
+        {/* Data unavailable notice */}
+        {result.dataUnavailable && (
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/80 border border-border text-xs text-muted-foreground">
+            <Info className="h-4 w-4 shrink-0 mt-0.5" />
+            <p>
+              Your catchment covers {result.regions_used}{" "}
+              {isMSOA ? "neighbourhoods" : "areas"} but metric data could
+              not be retrieved. Try drawing a smaller area.
+            </p>
+          </div>
+        )}
+
         {/* Summary metrics grid */}
         <div className="grid grid-cols-2 gap-3">
           <MetricSummaryCard
             title="Population"
             value={formatted.population}
             icon={Users}
-            color="#3b82f6"
+            color={result.dataUnavailable ? "#9ca3af" : "#3b82f6"}
             compact={compact}
           />
           {isMSOA ? (
             <MetricSummaryCard
               title="Avg Household Income"
               value={formatted.income}
-              subtitle="Population-weighted average"
+              subtitle={result.dataUnavailable ? undefined : "Population-weighted average"}
               icon={PoundSterling}
-              color="#22c55e"
+              color={result.dataUnavailable ? "#9ca3af" : "#22c55e"}
               compact={compact}
             />
           ) : (
             <MetricSummaryCard
               title="Household Income"
               value={formatted.gdhi}
-              subtitle="Total GDHI"
+              subtitle={result.dataUnavailable ? undefined : "Total GDHI"}
               icon={PoundSterling}
-              color="#22c55e"
+              color={result.dataUnavailable ? "#9ca3af" : "#22c55e"}
               compact={compact}
             />
           )}
@@ -500,16 +512,16 @@ export function GeofenceResults({
             title="Employment"
             value={formatted.employment}
             icon={Briefcase}
-            color="#f59e0b"
+            color={result.dataUnavailable ? "#9ca3af" : "#f59e0b"}
             compact={compact}
           />
           {isMSOA ? (
             <MetricSummaryCard
               title="GVA"
               value={formatted.gva}
-              subtitle="Gross Value Added"
+              subtitle={result.dataUnavailable ? undefined : "Gross Value Added"}
               icon={TrendingUp}
-              color="#8b5cf6"
+              color={result.dataUnavailable ? "#9ca3af" : "#8b5cf6"}
               compact={compact}
             />
           ) : (
@@ -525,7 +537,7 @@ export function GeofenceResults({
         </div>
 
         {/* MSOA: show region count as a small badge below the grid */}
-        {isMSOA && (
+        {isMSOA && !result.dataUnavailable && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <MapPin className="h-3.5 w-3.5" />
             <span>{formatted.regions} contributing to estimate</span>
@@ -533,24 +545,28 @@ export function GeofenceResults({
         )}
 
         {/* Methodology note */}
-        <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 text-xs text-muted-foreground">
-          <Info className="h-4 w-4 shrink-0 mt-0.5" />
-          <p>
-            Values are area-weighted estimates based on the proportion of each{" "}
-            {methodologyAreaLabel} within your catchment.{" "}
-            {result.breakdown.some((c) => c.weight < 1) && (
-              <span className="font-medium">
-                Some areas are only partially included.
-              </span>
-            )}
-          </p>
-        </div>
+        {!result.dataUnavailable && (
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 text-xs text-muted-foreground">
+            <Info className="h-4 w-4 shrink-0 mt-0.5" />
+            <p>
+              Values are area-weighted estimates based on the proportion of each{" "}
+              {methodologyAreaLabel} within your catchment.{" "}
+              {result.breakdown.some((c) => c.weight < 1) && (
+                <span className="font-medium">
+                  Some areas are only partially included.
+                </span>
+              )}
+            </p>
+          </div>
+        )}
 
         {/* Income variation chart (MSOA only) */}
-        {isMSOA && <IncomeVariationChart breakdown={result.breakdown} />}
+        {isMSOA && !result.dataUnavailable && (
+          <IncomeVariationChart breakdown={result.breakdown} />
+        )}
 
         {/* Region breakdown (collapsible) */}
-        {result.breakdown.length > 0 && (
+        {result.breakdown.length > 0 && !result.dataUnavailable && (
           <Collapsible open={isBreakdownOpen} onOpenChange={setIsBreakdownOpen}>
             <CollapsibleTrigger asChild>
               <Button

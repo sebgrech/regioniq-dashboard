@@ -83,6 +83,8 @@ export interface GeofenceResult {
   breakdown: RegionContribution[]
   /** If the system fell back to a different level (e.g. MSOA -> LAD for Scotland/NI) */
   fallbackReason?: string
+  /** True when regions were identified but metric data could not be retrieved */
+  dataUnavailable?: boolean
 }
 
 /** State for the geofence drawing/calculation workflow */

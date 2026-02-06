@@ -87,56 +87,122 @@ async function fetchMetrics(
   const metricIds = Object.values(AGGREGATION_METRICS[level])
 
   try {
-    let data: any[] | null = null
+    let data: any[] = []
+
+    // Batch codes into chunks to avoid exceeding PostgREST URL length limits.
+    // Each MSOA code is ~10 chars; with 200 codes per batch the URL stays well
+    // under the typical 8KB limit.
+    const BATCH_SIZE = 200
+    const batches: string[][] = []
+    for (let i = 0; i < codes.length; i += BATCH_SIZE) {
+      batches.push(codes.slice(i, i + BATCH_SIZE))
+    }
+
+    console.log(
+      `[Geofence] Fetching ${level} metrics for ${codes.length} codes in ${batches.length} batch(es)`
+    )
 
     if (level === "MSOA") {
-      // MSOA metrics have different latest years per metric.
-      // Fetch all rows for the requested codes (without period filter),
-      // then take the latest period per (region_code, metric_id).
-      const { data: rows, error } = await supabase
-        .from(table)
-        .select("region_code, metric_id, period, value, ci_lower, ci_upper, data_type")
-        .in("region_code", codes)
-        .in("metric_id", metricIds)
-        .order("period", { ascending: false })
+      // MSOA metrics have different latest periods (pop: 2021/2024, GVA: 2022,
+      // income: 2023, employment: 2024). We query per-metric to avoid hitting
+      // Supabase's default 1000-row server cap (PGRST_MAX_ROWS), which silently
+      // truncates results when fetching all periods for many codes at once.
+      //
+      // Strategy: for each metric, discover the latest period from a sample code,
+      // then fetch all codes for that specific (metric, period) combination.
+      // This returns exactly 1 row per code per metric — well within any limit.
 
-      if (error) {
-        console.error("[Geofence] Supabase query error:", error)
-        throw new Error(`Failed to fetch ${level} metrics: ${error.message}`)
+      // Step 1: Discover latest period per metric from a sample code
+      const sampleCode = codes[0]
+      const latestPeriods = new Map<string, number>()
+
+      const periodResults = await Promise.all(
+        metricIds.map(async (metricId) => {
+          const { data: rows } = await supabase
+            .from(table)
+            .select("period")
+            .eq("region_code", sampleCode)
+            .eq("metric_id", metricId)
+            .order("period", { ascending: false })
+            .limit(1)
+
+          const period = rows?.[0]?.period ?? null
+          return { metricId, period }
+        })
+      )
+
+      for (const { metricId, period } of periodResults) {
+        if (period != null) {
+          latestPeriods.set(metricId, period)
+        }
       }
 
-      // Deduplicate: keep only the latest period per (region_code, metric_id)
-      const seen = new Set<string>()
-      data = (rows ?? []).filter((row: any) => {
-        const key = `${row.region_code}::${row.metric_id}`
-        if (seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
+      console.log(
+        `[Geofence] MSOA latest periods: ${[...latestPeriods.entries()]
+          .map(([m, p]) => `${m}=${p}`)
+          .join(", ")}`
+      )
+
+      // Step 2: For each metric × batch, fetch with the specific period
+      const allFetches: Promise<any[]>[] = []
+
+      for (const [metricId, period] of latestPeriods) {
+        for (const batch of batches) {
+          allFetches.push(
+            (async () => {
+              const { data: rows, error } = await supabase
+                .from(table)
+                .select("region_code, metric_id, period, value, ci_lower, ci_upper, data_type")
+                .in("region_code", batch)
+                .eq("metric_id", metricId)
+                .eq("period", period)
+
+              if (error) {
+                console.error(`[Geofence] MSOA batch error (${metricId}):`, error)
+                return []
+              }
+              return rows ?? []
+            })()
+          )
+        }
+      }
+
+      const fetchResults = await Promise.all(allFetches)
+      data = fetchResults.flat()
     } else {
-      // LAD: single period query (existing behaviour)
-      const { data: rows, error } = await supabase
-        .from(table)
-        .select("region_code, metric_id, value, ci_lower, ci_upper, data_type")
-        .in("region_code", codes)
-        .eq("period", year)
-        .in("metric_id", metricIds)
+      // LAD: single period query, still batched for safety
+      const batchResults = await Promise.all(
+        batches.map(async (batch) => {
+          const { data: rows, error } = await supabase
+            .from(table)
+            .select("region_code, metric_id, value, ci_lower, ci_upper, data_type")
+            .in("region_code", batch)
+            .eq("period", year)
+            .in("metric_id", metricIds)
 
-      if (error) {
-        console.error("[Geofence] Supabase query error:", error)
-        throw new Error(`Failed to fetch ${level} metrics: ${error.message}`)
-      }
+          if (error) {
+            console.error("[Geofence] Supabase batch query error:", error)
+            throw new Error(`Failed to fetch ${level} metrics: ${error.message}`)
+          }
+          return rows ?? []
+        })
+      )
 
-      data = rows ?? []
+      data = batchResults.flat()
     }
 
     if (!data || data.length === 0) {
       console.warn(
-        `[Geofence] No metric data found for ${level} regions:`,
+        `[Geofence] No metric data found for ${level} regions ` +
+          `(${codes.length} codes, table=${table}):`,
         codes.slice(0, 5)
       )
       return results
     }
+
+    console.log(
+      `[Geofence] Raw query returned ${data.length} rows for ${codes.length} ${level} regions`
+    )
 
     const metrics = AGGREGATION_METRICS[level]
 
@@ -179,8 +245,19 @@ async function fetchMetrics(
       }
     }
 
+    // Diagnostic: count how many regions have each metric populated
+    const metricCounts: Record<string, number> = {}
+    for (const [, vals] of results) {
+      if (vals.population != null) metricCounts["population"] = (metricCounts["population"] ?? 0) + 1
+      if (vals.employment != null) metricCounts["employment"] = (metricCounts["employment"] ?? 0) + 1
+      if (vals.gdhi_per_head != null) metricCounts["gdhi"] = (metricCounts["gdhi"] ?? 0) + 1
+      if (vals.gva != null) metricCounts["gva"] = (metricCounts["gva"] ?? 0) + 1
+      if (vals.income != null) metricCounts["income"] = (metricCounts["income"] ?? 0) + 1
+    }
+
     console.log(
-      `[Geofence] Fetched metrics for ${results.size} ${level} regions, ${data.length} data points`
+      `[Geofence] Fetched metrics for ${results.size} ${level} regions, ${data.length} data points. ` +
+        `Coverage: ${JSON.stringify(metricCounts)}`
     )
     return results
   } catch (error) {
@@ -202,6 +279,8 @@ interface AggregationResult {
     average_income: number
   }
   breakdown: RegionContribution[]
+  /** True when regions were found but no metric data was available */
+  dataUnavailable: boolean
 }
 
 /**
@@ -271,6 +350,11 @@ function aggregateMetrics(
   const averageIncome =
     incomeDenominator > 0 ? incomeNumerator / incomeDenominator : 0
 
+  // Detect if regions were found but no actual metric data came back
+  const hasAnyData = breakdown.some(
+    (r) => r.population > 0 || r.employment > 0
+  )
+
   return {
     totals: {
       population: Math.round(totalPopulation),
@@ -280,6 +364,7 @@ function aggregateMetrics(
       average_income: Math.round(averageIncome),
     },
     breakdown,
+    dataUnavailable: !hasAnyData && breakdown.length > 0,
   }
 }
 
@@ -340,18 +425,29 @@ export async function calculateGeofenceResult(
   const metrics = await fetchMetrics(regionCodes, effectiveLevel, year, scenario)
 
   // Step 3: Aggregate metrics
-  const { totals, breakdown } = aggregateMetrics(weights, metrics, effectiveLevel)
+  const { totals, breakdown, dataUnavailable } = aggregateMetrics(
+    weights,
+    metrics,
+    effectiveLevel
+  )
 
   const elapsed = performance.now() - startTime
   const levelLabel = effectiveLevel === "MSOA" ? "MSOAs" : "LADs"
-  console.log(
-    `[Geofence] Calculation complete in ${elapsed.toFixed(0)}ms: ` +
-      `${breakdown.length} ${levelLabel}, pop=${totals.population.toLocaleString()}, ` +
-      (effectiveLevel === "LAD"
-        ? `gdhi=\u00A3${(totals.gdhi_total / 1e9).toFixed(2)}B, `
-        : `gva=\u00A3${totals.gva.toFixed(1)}M, avg_income=\u00A3${totals.average_income.toLocaleString()}, `) +
-      `jobs=${totals.employment.toLocaleString()}`
-  )
+
+  if (dataUnavailable) {
+    console.warn(
+      `[Geofence] ${breakdown.length} ${levelLabel} intersected but no metric data retrieved (${elapsed.toFixed(0)}ms)`
+    )
+  } else {
+    console.log(
+      `[Geofence] Calculation complete in ${elapsed.toFixed(0)}ms: ` +
+        `${breakdown.length} ${levelLabel}, pop=${totals.population.toLocaleString()}, ` +
+        (effectiveLevel === "LAD"
+          ? `gdhi=\u00A3${(totals.gdhi_total / 1e9).toFixed(2)}B, `
+          : `gva=\u00A3${totals.gva.toFixed(1)}M, avg_income=\u00A3${totals.average_income.toLocaleString()}, `) +
+        `jobs=${totals.employment.toLocaleString()}`
+    )
+  }
 
   return {
     level: effectiveLevel,
@@ -361,6 +457,7 @@ export async function calculateGeofenceResult(
     scenario,
     breakdown,
     fallbackReason,
+    dataUnavailable,
   }
 }
 
@@ -388,6 +485,18 @@ export function formatGeofenceResult(result: GeofenceResult): {
 
   const regionLabel =
     result.level === "MSOA" ? "neighbourhoods" : "local authorities"
+
+  // When data is unavailable, show dashes instead of misleading zeros
+  if (result.dataUnavailable) {
+    return {
+      population: "\u2014",
+      gdhi: "\u2014",
+      employment: "\u2014",
+      regions: `${result.regions_used} ${regionLabel}`,
+      gva: "\u2014",
+      income: "\u2014",
+    }
+  }
 
   return {
     population: `${formatNumber(result.population)} people`,
