@@ -4,10 +4,11 @@
  * GeofenceResults
  * 
  * Displays aggregated metrics for a geofence catchment area.
- * Shows population, GDHI, employment totals with breakdown by LAD.
+ * Shows population, GDHI/income, employment, GVA totals with
+ * breakdown by region (LAD or MSOA).
  */
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import {
   Users,
   PoundSterling,
@@ -21,7 +22,18 @@ import {
   FileText,
   FileSpreadsheet,
   Presentation,
+  TrendingUp,
+  AlertTriangle,
 } from "lucide-react"
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  Cell,
+} from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -45,7 +57,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import type { GeofenceResult, LADContribution, Geofence } from "@/lib/geofence"
+import type { GeofenceResult, RegionContribution, Geofence } from "@/lib/geofence"
 import { formatGeofenceResult } from "@/lib/geofence"
 import { exportCatchmentCSV, exportCatchmentPPTX, exportCatchmentXLSX } from "@/lib/geofence/export"
 
@@ -131,12 +143,12 @@ function MetricSummaryCard({
   )
 }
 
-/** LAD breakdown row */
-function LADBreakdownRow({
+/** Region breakdown row (works for both LAD and MSOA) */
+function RegionBreakdownRow({
   contribution,
   maxWeight,
 }: {
-  contribution: LADContribution
+  contribution: RegionContribution
   maxWeight: number
 }) {
   const weightPercent = (contribution.weight / maxWeight) * 100
@@ -165,7 +177,7 @@ function LADBreakdownRow({
             <TooltipContent>
               <p>
                 {contribution.intersectionAreaKm2.toFixed(1)} km² of{" "}
-                {contribution.ladAreaKm2.toFixed(1)} km² included
+                {contribution.regionAreaKm2.toFixed(1)} km² included
               </p>
             </TooltipContent>
           </Tooltip>
@@ -177,6 +189,115 @@ function LADBreakdownRow({
         <span>{formatNumber(contribution.employment)} jobs</span>
       </div>
     </div>
+  )
+}
+
+// Sequential blue ramp for the income variation chart
+const INCOME_COLORS = [
+  "#1e3a5f", "#1e4976", "#1e588d", "#2067a4", "#2276bb",
+  "#3385c6", "#4494d1", "#55a3dc", "#6bb2e7", "#82c1f2",
+]
+
+/** Income variation horizontal bar chart (MSOA only) */
+function IncomeVariationChart({
+  breakdown,
+}: {
+  breakdown: RegionContribution[]
+}) {
+  const chartData = useMemo(() => {
+    return breakdown
+      .filter((c) => c.income > 0)
+      .sort((a, b) => b.income - a.income)
+      .map((c) => ({
+        name: c.name,
+        income: Math.round(c.income),
+      }))
+  }, [breakdown])
+
+  if (chartData.length < 3) return null
+
+  const maxIncome = chartData[0]?.income ?? 0
+  const minIncome = chartData[chartData.length - 1]?.income ?? 0
+
+  return (
+    <Collapsible>
+      <CollapsibleTrigger asChild>
+        <Button
+          variant="ghost"
+          className="w-full justify-between h-auto py-2"
+        >
+          <span className="text-sm font-medium">
+            Income variation across neighbourhoods
+          </span>
+          <ChevronDown className="h-4 w-4" />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="rounded-md border p-3">
+          <div className="text-xs text-muted-foreground mb-2">
+            Household income ranges from{" "}
+            <span className="font-medium">
+              £{minIncome.toLocaleString()}
+            </span>{" "}
+            to{" "}
+            <span className="font-medium">
+              £{maxIncome.toLocaleString()}
+            </span>
+          </div>
+          <ResponsiveContainer
+            width="100%"
+            height={Math.min(chartData.length * 28 + 20, 400)}
+          >
+            <BarChart
+              data={chartData}
+              layout="vertical"
+              margin={{ top: 0, right: 10, left: 0, bottom: 0 }}
+            >
+              <XAxis
+                type="number"
+                tickFormatter={(v) => `£${formatNumber(v)}`}
+                fontSize={10}
+                tick={{ fill: "var(--muted-foreground)" }}
+              />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={140}
+                fontSize={10}
+                tick={{ fill: "var(--muted-foreground)" }}
+                tickLine={false}
+              />
+              <RechartsTooltip
+                formatter={(value: number) => [
+                  `£${value.toLocaleString()}`,
+                  "Household Income",
+                ]}
+                contentStyle={{
+                  backgroundColor: "var(--card)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "8px",
+                  fontSize: "12px",
+                }}
+              />
+              <Bar dataKey="income" radius={[0, 4, 4, 0]}>
+                {chartData.map((_, index) => {
+                  const colorIdx = Math.floor(
+                    (index / Math.max(chartData.length - 1, 1)) *
+                      (INCOME_COLORS.length - 1)
+                  )
+                  return (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={INCOME_COLORS[colorIdx]}
+                    />
+                  )
+                })}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 
@@ -212,7 +333,6 @@ export function GeofenceResults({
     if (!result) return
     setIsExporting(true)
     try {
-      // Title intentionally omitted for now (user asked for “just the metric boxes”).
       await exportCatchmentPPTX({ result, geofence })
     } catch (err) {
       console.error("Export failed:", err)
@@ -281,6 +401,14 @@ export function GeofenceResults({
     )
   }
 
+  // Determine labels based on level
+  const isMSOA = result.level === "MSOA"
+  const regionLabel = isMSOA ? "Neighbourhoods" : "Local Authorities"
+  const breakdownLabel = isMSOA
+    ? "View breakdown by neighbourhood"
+    : "View breakdown by local authority"
+  const methodologyAreaLabel = isMSOA ? "neighbourhood" : "local authority"
+
   // Format the result
   const formatted = formatGeofenceResult(result)
   const maxWeight = Math.max(...result.breakdown.map((c) => c.weight), 0.01)
@@ -290,11 +418,11 @@ export function GeofenceResults({
       <CardHeader className={cn("py-2 px-4", compact ? "py-2 px-4" : undefined)}>
         <div className="flex flex-col gap-1.5">
           {/* Top row: Title */}
-        <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-xl font-semibold">
-            <MapPin className="h-5 w-5 text-primary" />
-            Catchment Analysis
-          </CardTitle>
+              <MapPin className="h-5 w-5 text-primary" />
+              Catchment Analysis
+            </CardTitle>
           </div>
           {/* Bottom row: Badge + Export */}
           <div className="flex items-center justify-between gap-2">
@@ -310,7 +438,7 @@ export function GeofenceResults({
                     <Download className="h-3.5 w-3.5" />
                   )}
                   <span className="ml-1.5 text-xs">Export</span>
-              </Button>
+                </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={handleExportCSV}>
@@ -332,6 +460,14 @@ export function GeofenceResults({
       </CardHeader>
 
       <CardContent className={cn("space-y-4", compact ? "p-4 pt-2" : undefined)}>
+        {/* Fallback notice */}
+        {result.fallbackReason && (
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 text-xs text-yellow-800 dark:text-yellow-200">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            <p>{result.fallbackReason}</p>
+          </div>
+        )}
+
         {/* Summary metrics grid */}
         <div className="grid grid-cols-2 gap-3">
           <MetricSummaryCard
@@ -341,14 +477,25 @@ export function GeofenceResults({
             color="#3b82f6"
             compact={compact}
           />
-          <MetricSummaryCard
-            title="Household Income"
-            value={formatted.gdhi}
-            subtitle="Total GDHI"
-            icon={PoundSterling}
-            color="#22c55e"
-            compact={compact}
-          />
+          {isMSOA ? (
+            <MetricSummaryCard
+              title="Avg Household Income"
+              value={formatted.income}
+              subtitle="Population-weighted average"
+              icon={PoundSterling}
+              color="#22c55e"
+              compact={compact}
+            />
+          ) : (
+            <MetricSummaryCard
+              title="Household Income"
+              value={formatted.gdhi}
+              subtitle="Total GDHI"
+              icon={PoundSterling}
+              color="#22c55e"
+              compact={compact}
+            />
+          )}
           <MetricSummaryCard
             title="Employment"
             value={formatted.employment}
@@ -356,22 +503,41 @@ export function GeofenceResults({
             color="#f59e0b"
             compact={compact}
           />
-          <MetricSummaryCard
-            title="Local Authorities"
-            value={formatted.regions}
-            subtitle="Contributing to estimate"
-            icon={MapPin}
-            color="#8b5cf6"
-            compact={compact}
-          />
+          {isMSOA ? (
+            <MetricSummaryCard
+              title="GVA"
+              value={formatted.gva}
+              subtitle="Gross Value Added"
+              icon={TrendingUp}
+              color="#8b5cf6"
+              compact={compact}
+            />
+          ) : (
+            <MetricSummaryCard
+              title={regionLabel}
+              value={formatted.regions}
+              subtitle="Contributing to estimate"
+              icon={MapPin}
+              color="#8b5cf6"
+              compact={compact}
+            />
+          )}
         </div>
+
+        {/* MSOA: show region count as a small badge below the grid */}
+        {isMSOA && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <MapPin className="h-3.5 w-3.5" />
+            <span>{formatted.regions} contributing to estimate</span>
+          </div>
+        )}
 
         {/* Methodology note */}
         <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 text-xs text-muted-foreground">
           <Info className="h-4 w-4 shrink-0 mt-0.5" />
           <p>
-            Values are area-weighted estimates based on the proportion of each
-            local authority within your catchment.{" "}
+            Values are area-weighted estimates based on the proportion of each{" "}
+            {methodologyAreaLabel} within your catchment.{" "}
             {result.breakdown.some((c) => c.weight < 1) && (
               <span className="font-medium">
                 Some areas are only partially included.
@@ -380,7 +546,10 @@ export function GeofenceResults({
           </p>
         </div>
 
-        {/* LAD breakdown (collapsible) */}
+        {/* Income variation chart (MSOA only) */}
+        {isMSOA && <IncomeVariationChart breakdown={result.breakdown} />}
+
+        {/* Region breakdown (collapsible) */}
         {result.breakdown.length > 0 && (
           <Collapsible open={isBreakdownOpen} onOpenChange={setIsBreakdownOpen}>
             <CollapsibleTrigger asChild>
@@ -389,7 +558,7 @@ export function GeofenceResults({
                 className="w-full justify-between h-auto py-2"
               >
                 <span className="text-sm font-medium">
-                  View breakdown by local authority
+                  {breakdownLabel}
                 </span>
                 {isBreakdownOpen ? (
                   <ChevronUp className="h-4 w-4" />
@@ -401,7 +570,7 @@ export function GeofenceResults({
             <CollapsibleContent>
               <ScrollArea className="h-[300px] rounded-md border p-3">
                 {result.breakdown.map((contribution) => (
-                  <LADBreakdownRow
+                  <RegionBreakdownRow
                     key={contribution.code}
                     contribution={contribution}
                     maxWeight={maxWeight}
@@ -442,6 +611,8 @@ export function GeofenceResultsInline({
   }
 
   const formatted = formatGeofenceResult(result)
+  const isMSOA = result.level === "MSOA"
+  const regionLabel = isMSOA ? "neighbourhoods" : "LADs"
 
   return (
     <div className={cn("flex flex-wrap gap-3 text-sm", className)}>
@@ -451,7 +622,9 @@ export function GeofenceResultsInline({
       </div>
       <div className="flex items-center gap-1.5">
         <PoundSterling className="h-4 w-4 text-green-500" />
-        <span className="font-medium">{formatted.gdhi}</span>
+        <span className="font-medium">
+          {isMSOA ? formatted.income : formatted.gdhi}
+        </span>
       </div>
       <div className="flex items-center gap-1.5">
         <Briefcase className="h-4 w-4 text-amber-500" />
@@ -459,9 +632,10 @@ export function GeofenceResultsInline({
       </div>
       <div className="flex items-center gap-1.5 text-muted-foreground">
         <MapPin className="h-4 w-4" />
-        <span>{result.regions_used} LADs</span>
+        <span>
+          {result.regions_used} {regionLabel}
+        </span>
       </div>
     </div>
   )
 }
-

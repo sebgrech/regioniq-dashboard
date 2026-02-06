@@ -5,6 +5,7 @@
  * 
  * React hook for managing geofence state and calculating aggregated metrics.
  * Handles the full lifecycle of drawing, calculating, and displaying results.
+ * Supports both LAD and MSOA boundary levels.
  */
 
 import { useState, useCallback, useRef, useEffect } from "react"
@@ -12,6 +13,7 @@ import type { Polygon, MultiPolygon } from "geojson"
 import type { Scenario } from "@/lib/metrics.config"
 import {
   type DrawMode,
+  type CatchmentLevel,
   type Geofence,
   type GeofenceResult,
   type GeofenceState,
@@ -19,7 +21,7 @@ import {
   createCirclePolygon,
   calculateGeofenceResult,
   validateGeofencePolygon,
-  loadLADGeoJson,
+  loadBoundaries,
 } from "@/lib/geofence"
 
 function toRad(deg: number): number {
@@ -83,6 +85,8 @@ interface UseGeofenceOptions {
   year: number
   /** Scenario for forecast data */
   scenario: Scenario
+  /** Catchment boundary level (LAD or MSOA) */
+  level?: CatchmentLevel
   /** Auto-calculate when geofence changes */
   autoCalculate?: boolean
   /** Callback when calculation completes */
@@ -108,7 +112,7 @@ interface UseGeofenceReturn {
   clear: () => void
   /** Manually trigger calculation */
   calculate: () => Promise<void>
-  /** Preload LAD GeoJSON (call on mount for faster first calculation) */
+  /** Preload boundary GeoJSON (call on mount for faster first calculation) */
   preload: () => void
 }
 
@@ -122,7 +126,14 @@ const initialState: GeofenceState = {
 }
 
 export function useGeofence(options: UseGeofenceOptions): UseGeofenceReturn {
-  const { year, scenario, autoCalculate = true, onResult, onError } = options
+  const {
+    year,
+    scenario,
+    level = "MSOA",
+    autoCalculate = true,
+    onResult,
+    onError,
+  } = options
   
   const [state, setState] = useState<GeofenceState>(initialState)
   
@@ -257,7 +268,12 @@ export function useGeofence(options: UseGeofenceOptions): UseGeofenceReturn {
     setState((prev) => ({ ...prev, isCalculating: true, error: null }))
     
     try {
-      const result = await calculateGeofenceResult(state.geofence, year, scenario)
+      const result = await calculateGeofenceResult(
+        state.geofence,
+        year,
+        scenario,
+        level
+      )
       
       setState((prev) => ({
         ...prev,
@@ -275,14 +291,14 @@ export function useGeofence(options: UseGeofenceOptions): UseGeofenceReturn {
       }))
       onError?.(errorMessage)
     }
-  }, [state.geofence, year, scenario, onResult, onError])
+  }, [state.geofence, year, scenario, level, onResult, onError])
   
-  // Preload LAD GeoJSON
+  // Preload boundary GeoJSON for the selected level
   const preload = useCallback(() => {
-    loadLADGeoJson().catch((error) => {
+    loadBoundaries(level).catch((error) => {
       console.warn("[useGeofence] Preload failed:", error)
     })
-  }, [])
+  }, [level])
   
   // Auto-calculate when geofence changes
   useEffect(() => {
@@ -292,14 +308,14 @@ export function useGeofence(options: UseGeofenceOptions): UseGeofenceReturn {
     }
   }, [state.geofence, state.isCalculating, calculate])
   
-  // Recalculate when year/scenario changes (if we have a geofence)
+  // Recalculate when year/scenario/level changes (if we have a geofence)
   useEffect(() => {
     if (state.geofence && state.result && !state.isCalculating) {
       calculate()
     }
-    // Only trigger on year/scenario changes, not on geofence changes
+    // Only trigger on year/scenario/level changes, not on geofence changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, scenario])
+  }, [year, scenario, level])
   
   return {
     state,
@@ -313,4 +329,3 @@ export function useGeofence(options: UseGeofenceOptions): UseGeofenceReturn {
     preload,
   }
 }
-

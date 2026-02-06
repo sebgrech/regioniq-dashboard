@@ -11,7 +11,7 @@ import { Suspense, useState, useEffect, useCallback, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Map, useMap } from "@vis.gl/react-mapbox"  // useMap used in FitToSourceRegion
 import { Source, Layer } from "@vis.gl/react-mapbox"
-import { Loader2, ArrowLeft, Map as MapIcon, Info, Layers, Sun, Moon, Satellite, MapPinned } from "lucide-react"
+import { Loader2, ArrowLeft, Map as MapIcon, Info, Layers, Sun, Moon, Satellite, MapPinned, Grid3X3 } from "lucide-react"
 import type { FeatureCollection, Feature, Geometry } from "geojson"
 import { useTheme } from "next-themes"
 import Image from "next/image"
@@ -31,6 +31,8 @@ import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import { YEARS, type Scenario } from "@/lib/metrics.config"
+import type { CatchmentLevel } from "@/lib/geofence"
+import { Switch } from "@/components/ui/switch"
 
 import "mapbox-gl/dist/mapbox-gl.css"
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css"
@@ -135,6 +137,7 @@ function CatchmentContent() {
     (scenarioParam as Scenario) || "baseline"
   )
   const [circleRadius, setCircleRadius] = useState(10) // km
+  const [catchmentLevel, setCatchmentLevel] = useState<CatchmentLevel>("MSOA")
   const [mapStyleOption, setMapStyleOption] = useState<MapStyleOption>("streets")
   const [mounted, setMounted] = useState(false)
   
@@ -234,12 +237,14 @@ function CatchmentContent() {
   } = useGeofence({
     year,
     scenario,
+    level: catchmentLevel,
     autoCalculate: true,
     onResult: (result) => {
       if (result && result.regions_used > 0) {
+        const regionLabel = result.level === "MSOA" ? "neighbourhoods" : "local authorities"
         toast({
           title: "Catchment calculated",
-          description: `${result.regions_used} local authorities • ${Math.round(result.population).toLocaleString()} people`,
+          description: `${result.regions_used} ${regionLabel} • ${Math.round(result.population).toLocaleString()} people`,
         })
       }
     },
@@ -455,6 +460,27 @@ function CatchmentContent() {
               isMapReady={isMapReady}
             />
 
+            {/* Granularity toggle */}
+            <div className="mt-3 flex items-center justify-between p-2.5 rounded-lg bg-muted/50">
+              <div className="flex items-center gap-2">
+                <Grid3X3 className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-sm font-medium">
+                  {catchmentLevel === "MSOA" ? "Neighbourhood" : "District"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-muted-foreground">
+                  {catchmentLevel === "MSOA" ? "High res" : "Standard"}
+                </span>
+                <Switch
+                  checked={catchmentLevel === "MSOA"}
+                  onCheckedChange={(checked) =>
+                    setCatchmentLevel(checked ? "MSOA" : "LAD")
+                  }
+                />
+              </div>
+            </div>
+
             {/* Circle radius control (when in circle mode) */}
             {geofenceState.mode === "circle" && (
               <div className="mt-4 p-3 rounded-lg bg-muted/50">
@@ -506,8 +532,8 @@ function CatchmentContent() {
                           <li>See instant population & economic data</li>
                         </ol>
                         <p className="text-xs">
-                          Values are area-weighted estimates based on LAD
-                          boundaries.
+                          Values are area-weighted estimates based on{" "}
+                          {catchmentLevel === "MSOA" ? "neighbourhood" : "district"} boundaries.
                         </p>
                       </div>
                     </div>
@@ -658,7 +684,8 @@ function CatchmentContent() {
                       Catchment area
                     </span>
                     <Badge variant="secondary" className="font-mono">
-                      {geofenceState.result.regions_used} LADs
+                      {geofenceState.result.regions_used}{" "}
+                      {geofenceState.result.level === "MSOA" ? "neighbourhoods" : "LADs"}
                     </Badge>
                   </div>
                 </div>

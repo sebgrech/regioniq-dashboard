@@ -7,9 +7,12 @@ export const dynamic = "force-dynamic"
 
 const BodySchema = z.object({
   result: z.object({
+    level: z.enum(["LAD", "MSOA"]).optional().default("LAD"),
     population: z.number(),
     gdhi_total: z.number(),
     employment: z.number(),
+    gva: z.number().optional().default(0),
+    average_income: z.number().optional().default(0),
     regions_used: z.number(),
     year: z.number(),
     scenario: z.string(),
@@ -84,6 +87,10 @@ export async function POST(req: NextRequest) {
       icon: "users" | "pound" | "briefcase" | "mappin"
     }
 
+    const isMSOA = result.level === "MSOA"
+    const regionLabel = isMSOA ? "Neighbourhoods" : "Local Authorities"
+    const regionValue = `${result.regions_used} ${isMSOA ? "neighbourhoods" : "local authorities"}`
+
     const cards: CardSpec[] = [
       {
         title: "Population",
@@ -91,26 +98,42 @@ export async function POST(req: NextRequest) {
         accent: "2DD4BF",
         icon: "users",
       },
-      {
-        title: "Household Income",
-        value: `£${formatCompact(result.gdhi_total)}`,
-        subtitle: "Total GDHI",
-        accent: "2DD4BF",
-        icon: "pound",
-      },
+      isMSOA
+        ? {
+            title: "Avg Household Income",
+            value: `\u00A3${formatCompact(result.average_income)}`,
+            subtitle: "Population-weighted average",
+            accent: "2DD4BF",
+            icon: "pound",
+          }
+        : {
+            title: "Household Income",
+            value: `\u00A3${formatCompact(result.gdhi_total)}`,
+            subtitle: "Total GDHI",
+            accent: "2DD4BF",
+            icon: "pound",
+          },
       {
         title: "Employment",
         value: `${formatCompact(result.employment)} jobs`,
         accent: "2DD4BF",
         icon: "briefcase",
       },
-      {
-        title: "Local Authorities",
-        value: `${result.regions_used} local authorities`,
-        subtitle: "Contributing to estimate",
-        accent: "2DD4BF",
-        icon: "mappin",
-      },
+      isMSOA
+        ? {
+            title: "GVA",
+            value: `\u00A3${formatCompact(result.gva * 1e6)}`,
+            subtitle: "Gross Value Added",
+            accent: "2DD4BF",
+            icon: "mappin",
+          }
+        : {
+            title: regionLabel,
+            value: regionValue,
+            subtitle: "Contributing to estimate",
+            accent: "2DD4BF",
+            icon: "mappin",
+          },
     ]
 
     function addMetricCard(spec: CardSpec, x: number, y: number) {

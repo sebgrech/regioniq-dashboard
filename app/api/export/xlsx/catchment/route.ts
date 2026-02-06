@@ -7,26 +7,33 @@ import ExcelJS from "exceljs"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const LADContributionSchema = z.object({
+const RegionContributionSchema = z.object({
   code: z.string(),
   name: z.string(),
+  level: z.enum(["LAD", "MSOA"]).optional(),
   weight: z.number(),
   intersectionAreaKm2: z.number(),
-  ladAreaKm2: z.number(),
+  regionAreaKm2: z.number(),
   population: z.number(),
   gdhi: z.number(),
   employment: z.number(),
+  gva: z.number().optional().default(0),
+  income: z.number().optional().default(0),
 })
 
 const BodySchema = z.object({
   result: z.object({
+    level: z.enum(["LAD", "MSOA"]).optional().default("LAD"),
     population: z.number(),
     gdhi_total: z.number(),
     employment: z.number(),
+    gva: z.number().optional().default(0),
+    average_income: z.number().optional().default(0),
     regions_used: z.number(),
     year: z.number(),
     scenario: z.string(),
-    breakdown: z.array(LADContributionSchema),
+    breakdown: z.array(RegionContributionSchema),
+    fallbackReason: z.string().optional(),
   }),
   geofence: z.object({
     mode: z.enum(["circle", "polygon", "none"]),
@@ -36,9 +43,9 @@ const BodySchema = z.object({
 })
 
 function formatCurrency(n: number): string {
-  if (n >= 1e9) return `£${(n / 1e9).toFixed(2)}bn`
-  if (n >= 1e6) return `£${(n / 1e6).toFixed(1)}m`
-  return `£${Math.round(n).toLocaleString()}`
+  if (n >= 1e9) return `\u00A3${(n / 1e9).toFixed(2)}bn`
+  if (n >= 1e6) return `\u00A3${(n / 1e6).toFixed(1)}m`
+  return `\u00A3${Math.round(n).toLocaleString()}`
 }
 
 function getPngDimensions(buf: Buffer): { width: number; height: number } | null {
@@ -59,6 +66,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = BodySchema.parse(await req.json())
     const { result, geofence } = body
+    const isMSOA = result.level === "MSOA"
 
     const wb = new ExcelJS.Workbook()
     wb.creator = "RegionIQ"
@@ -89,7 +97,7 @@ export async function POST(req: NextRequest) {
     info.getCell("A2").font = { size: 12, bold: true, color: { argb: "FF374151" } }
     info.mergeCells("A2:D2")
 
-    info.getCell("A3").value = `${result.year} • ${result.scenario}`
+    info.getCell("A3").value = `${result.year} \u2022 ${result.scenario}`
     info.getCell("A3").font = { size: 11, color: { argb: "FF6B7280" } }
     info.mergeCells("A3:D3")
 
@@ -118,16 +126,30 @@ export async function POST(req: NextRequest) {
       c.border = { bottom: { style: "thin", color: { argb: "FFE5E7EB" } } }
     })
 
+    const regionsLabel = isMSOA ? "Neighbourhoods Included" : "LADs Included"
+
     // Build key-value rows (all as strings for consistent formatting)
     const kv: [string, string][] = [
+      ["Granularity", isMSOA ? "MSOA (Neighbourhood)" : "LAD (District)"],
       ["Total Population", Math.round(result.population).toLocaleString()],
-      ["Total GDHI", formatCurrency(result.gdhi_total)],
+    ]
+
+    if (isMSOA) {
+      kv.push(
+        ["Avg Household Income", `\u00A3${Math.round(result.average_income).toLocaleString()}`],
+        ["Total GVA", `\u00A3${result.gva.toFixed(1)}M`],
+      )
+    } else {
+      kv.push(["Total GDHI", formatCurrency(result.gdhi_total)])
+    }
+
+    kv.push(
       ["Total Employment", Math.round(result.employment).toLocaleString()],
-      ["LADs Included", String(result.regions_used)],
+      [regionsLabel, String(result.regions_used)],
       ["Year", String(result.year)],
       ["Scenario", result.scenario],
       ["Export Date", new Date().toISOString().slice(0, 10)],
-    ]
+    )
 
     if (geofence?.center) {
       kv.push(["Center (lng, lat)", `${geofence.center[0].toFixed(4)}, ${geofence.center[1].toFixed(4)}`])
@@ -143,37 +165,52 @@ export async function POST(req: NextRequest) {
       info.getCell(`A${r}`).font = { color: { argb: "FF6B7280" } }
     })
 
-    // ============ LAD Breakdown Sheet ============
-    const breakdown = wb.addWorksheet("LAD Breakdown", { views: [{ state: "frozen", ySplit: 1 }] })
-    const breakdownHeader = [
-      "LAD Code",
-      "LAD Name",
+    // ============ Area Breakdown Sheet ============
+    const sheetName = "Area Breakdown"
+    const breakdown = wb.addWorksheet(sheetName, { views: [{ state: "frozen", ySplit: 1 }] })
+
+    // Build headers dynamically based on level
+    const breakdownHeader: string[] = [
+      "Area Code",
+      "Area Name",
       "Weight (%)",
-      "Intersection (km²)",
-      "LAD Area (km²)",
+      "Intersection (km\u00B2)",
+      "Area (km\u00B2)",
       "Population",
-      "GDHI (£)",
-      "Employment",
     ]
+    if (isMSOA) {
+      breakdownHeader.push("Income (\u00A3)", "GVA (\u00A3M)")
+    } else {
+      breakdownHeader.push("GDHI (\u00A3)")
+    }
+    breakdownHeader.push("Employment")
 
     breakdown.columns = breakdownHeader.map((h) => ({
       header: h,
       key: h,
-      width: h === "LAD Name" ? 28 : h === "LAD Code" ? 14 : 16,
+      width: h === "Area Name" ? 28 : h === "Area Code" ? 14 : 16,
     }))
 
     // Add data rows
-    result.breakdown.forEach((lad) => {
-      breakdown.addRow({
-        "LAD Code": lad.code,
-        "LAD Name": lad.name,
-        "Weight (%)": Math.round(lad.weight * 1000) / 10,
-        "Intersection (km²)": Math.round(lad.intersectionAreaKm2 * 10) / 10,
-        "LAD Area (km²)": Math.round(lad.ladAreaKm2 * 10) / 10,
-        "Population": Math.round(lad.population),
-        "GDHI (£)": Math.round(lad.gdhi),
-        "Employment": Math.round(lad.employment),
-      })
+    result.breakdown.forEach((region) => {
+      const row: Record<string, string | number> = {
+        "Area Code": region.code,
+        "Area Name": region.name,
+        "Weight (%)": Math.round(region.weight * 1000) / 10,
+        "Intersection (km\u00B2)": Math.round(region.intersectionAreaKm2 * 10) / 10,
+        "Area (km\u00B2)": Math.round(region.regionAreaKm2 * 10) / 10,
+        "Population": Math.round(region.population),
+      }
+
+      if (isMSOA) {
+        row["Income (\u00A3)"] = Math.round(region.income)
+        row["GVA (\u00A3M)"] = Math.round((region.gva ?? 0) * 100) / 100
+      } else {
+        row["GDHI (\u00A3)"] = Math.round(region.gdhi)
+      }
+
+      row["Employment"] = Math.round(region.employment)
+      breakdown.addRow(row)
     })
 
     // Style header
@@ -182,19 +219,37 @@ export async function POST(req: NextRequest) {
 
     // Format number columns
     breakdown.getColumn("Population").numFmt = "#,##0"
-    breakdown.getColumn("GDHI (£)").numFmt = "£#,##0"
     breakdown.getColumn("Employment").numFmt = "#,##0"
     breakdown.getColumn("Weight (%)").numFmt = "0.0"
-    breakdown.getColumn("Intersection (km²)").numFmt = "0.0"
-    breakdown.getColumn("LAD Area (km²)").numFmt = "0.0"
+    breakdown.getColumn("Intersection (km\u00B2)").numFmt = "0.0"
+    breakdown.getColumn("Area (km\u00B2)").numFmt = "0.0"
+
+    if (isMSOA) {
+      breakdown.getColumn("Income (\u00A3)").numFmt = "\u00A3#,##0"
+      breakdown.getColumn("GVA (\u00A3M)").numFmt = "0.00"
+    } else {
+      breakdown.getColumn("GDHI (\u00A3)").numFmt = "\u00A3#,##0"
+    }
 
     // Add totals row
     const totalRow = breakdown.rowCount + 2
     breakdown.getCell(`A${totalRow}`).value = "TOTAL"
     breakdown.getCell(`A${totalRow}`).font = { bold: true }
+
+    // Population is always column F
     breakdown.getCell(`F${totalRow}`).value = Math.round(result.population)
-    breakdown.getCell(`G${totalRow}`).value = Math.round(result.gdhi_total)
-    breakdown.getCell(`H${totalRow}`).value = Math.round(result.employment)
+
+    if (isMSOA) {
+      // Income col G = weighted avg (not sum), GVA col H, Employment col I
+      breakdown.getCell(`G${totalRow}`).value = Math.round(result.average_income)
+      breakdown.getCell(`H${totalRow}`).value = result.gva
+      breakdown.getCell(`I${totalRow}`).value = Math.round(result.employment)
+    } else {
+      // GDHI col G, Employment col H
+      breakdown.getCell(`G${totalRow}`).value = Math.round(result.gdhi_total)
+      breakdown.getCell(`H${totalRow}`).value = Math.round(result.employment)
+    }
+
     breakdown.getRow(totalRow).font = { bold: true }
     breakdown.getRow(totalRow).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2FF" } }
 
@@ -215,4 +270,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err?.message || "Export failed" }, { status: 400 })
   }
 }
-
