@@ -90,10 +90,23 @@ async function loadMSOANames(): Promise<Map<string, string>> {
       console.log(`[Geofence] Loaded ${map.size} MSOA human-readable names`)
       return map
     } catch (error) {
-      console.warn("[Geofence] MSOA names load failed, using default names")
-      const map = new Map<string, string>()
-      msoaNamesCache = map
-      return map
+      // Fallback to local file (same pattern as loadBoundaries)
+      console.warn("[Geofence] MSOA names CDN fetch failed, trying local fallback...")
+      try {
+        const fallbackRes = await fetch("/boundaries/msoa-names.json")
+        if (!fallbackRes.ok) throw new Error(`Fallback failed: ${fallbackRes.status}`)
+
+        const data: Record<string, string> = await fallbackRes.json()
+        const map = new Map(Object.entries(data))
+        msoaNamesCache = map
+        console.log(`[Geofence] Loaded ${map.size} MSOA names from local fallback`)
+        return map
+      } catch {
+        console.warn("[Geofence] MSOA names load failed entirely, using default names")
+        const map = new Map<string, string>()
+        msoaNamesCache = map
+        return map
+      }
     } finally {
       msoaNamesPromise = null
     }
