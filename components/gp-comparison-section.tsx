@@ -766,7 +766,7 @@ export function GPComparisonSection({
                       tick={{ fontSize: 10, fill: textColor }}
                       axisLine={{ stroke: gridStroke }}
                       tickLine={false}
-                      width={100}
+                      width={120}
                     />
                     <RechartsTooltip content={<BarTooltip />} cursor={{ fill: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }} />
                     <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={24}>
