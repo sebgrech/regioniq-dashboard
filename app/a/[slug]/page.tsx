@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react"
 import { useParams } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
-import { Loader2, Sparkles, ExternalLink, Building2 } from "lucide-react"
+import { Loader2, BarChart3, ExternalLink, Building2 } from "lucide-react"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { REGIONS, type Scenario } from "@/lib/metrics.config"
 import { fetchSeries, type DataPoint } from "@/lib/data-service"
@@ -186,7 +186,7 @@ function AssetPageContent() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex items-center gap-3">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <span className="text-muted-foreground">Loading asset analysis...</span>
+          <span className="text-muted-foreground">Loading economic profile...</span>
         </div>
       </div>
     )
@@ -243,10 +243,10 @@ function AssetPageContent() {
 
             <div className="h-6 w-px bg-border/60" />
 
-            {/* Asset Analysis - larger text */}
+            {/* Economic Profile - larger text */}
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-purple-400" />
-              <span className="text-lg font-semibold text-foreground">Asset Analysis</span>
+              <BarChart3 className="h-4 w-4 text-purple-400" />
+              <span className="text-lg font-semibold text-foreground">Economic Profile</span>
             </div>
 
             {/* Region badge - shows the LAD being analyzed (mirrors full dashboard style) */}
@@ -273,7 +273,7 @@ function AssetPageContent() {
       </header>
 
       {/* Main Content */}
-      <main id="asset-analysis-content" className="container mx-auto px-4 py-8 max-w-5xl bg-background">
+      <main id="economic-profile-content" className="container mx-auto px-4 py-8 max-w-5xl bg-background">
         {/* Asset Header + Map - Side by side on desktop */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* Asset Header - takes 3/5 on desktop */}

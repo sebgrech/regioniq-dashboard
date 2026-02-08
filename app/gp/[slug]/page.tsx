@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react"
 import { useParams } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
-import { Loader2, Sparkles, ExternalLink, Building2, BarChart3, ShoppingBag, Briefcase, Home, Dumbbell, Warehouse, UtensilsCrossed, User } from "lucide-react"
+import { Loader2, ExternalLink, Building2, BarChart3, ShoppingBag, Briefcase, Home, Dumbbell, Warehouse, UtensilsCrossed, User } from "lucide-react"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { REGIONS, type Scenario } from "@/lib/metrics.config"
 import { fetchSeries, type DataPoint } from "@/lib/data-service"
@@ -441,10 +441,10 @@ function GPPageContent() {
 
             <div className="h-6 w-px bg-border/60" />
 
-            {/* Asset Analysis - larger text */}
+            {/* Economic Profile - larger text */}
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-purple-400" />
-              <span className="text-lg font-semibold text-foreground">Asset Analysis</span>
+              <BarChart3 className="h-4 w-4 text-purple-400" />
+              <span className="text-lg font-semibold text-foreground">Economic Profile</span>
             </div>
 
             {/* Broker logo (if available) */}
