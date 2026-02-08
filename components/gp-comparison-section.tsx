@@ -480,6 +480,28 @@ export function GPComparisonSection({
     }
   }
 
+  // Compact axis tick formatter (avoids long labels like £38,000 on mobile)
+  const formatAxisValue = (value: number) => {
+    const metric = selectedMetricConfig
+    if (!metric) return value.toLocaleString()
+
+    if (metric.unit === '£' || metric.unit === '£/job') {
+      if (value >= 1000) return `£${(value / 1000).toFixed(0)}K`
+      return `£${value}`
+    } else if (metric.unit === '£m') {
+      if (value >= 1000) return `£${(value / 1000).toFixed(1)}bn`
+      return `£${value}m`
+    } else if (metric.unit === 'jobs') {
+      if (value >= 1000000) return `${(value / 1000000).toFixed(1)}m`
+      if (value >= 1000) return `${(value / 1000).toFixed(0)}k`
+      return `${value}`
+    } else {
+      if (value >= 1000000) return `${(value / 1000000).toFixed(1)}m`
+      if (value >= 1000) return `${(value / 1000).toFixed(0)}k`
+      return `${value}`
+    }
+  }
+
   // Custom tooltip for line chart
   const LineTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null
@@ -729,22 +751,22 @@ export function GPComparisonSection({
               </div>
               <div className="h-[120px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 50, left: 10, bottom: 5 }}>
+                  <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} opacity={0.3} horizontal={false} />
                     <XAxis 
                       type="number" 
                       tick={{ fontSize: 10, fill: textColor }}
                       axisLine={{ stroke: gridStroke }}
                       tickLine={{ stroke: gridStroke }}
-                      tickFormatter={(value) => formatAbsoluteValue(value)}
+                      tickFormatter={(value) => formatAxisValue(value)}
                     />
                     <YAxis 
                       type="category" 
                       dataKey="name"
-                      tick={{ fontSize: 9, fill: textColor }}
+                      tick={renderBarYAxisTick}
                       axisLine={{ stroke: gridStroke }}
                       tickLine={false}
-                      width={160}
+                      width={100}
                     />
                     <RechartsTooltip content={<BarTooltip />} cursor={{ fill: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }} />
                     <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={24}>

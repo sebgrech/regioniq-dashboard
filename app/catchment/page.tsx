@@ -138,7 +138,7 @@ function CatchmentContent() {
   )
   const [circleRadius, setCircleRadius] = useState(10) // km
   const [catchmentLevel, setCatchmentLevel] = useState<CatchmentLevel>("MSOA")
-  const [mapStyleOption, setMapStyleOption] = useState<MapStyleOption>("streets")
+  const [mapStyleOption, setMapStyleOption] = useState<MapStyleOption>("auto")
 
   // Year range and forecast availability per level
   const LEVEL_YEAR_CONFIG: Record<CatchmentLevel, { min: number; max: number; hasForecasts: boolean }> = {
@@ -415,28 +415,34 @@ function CatchmentContent() {
           </div>
 
         <div className="flex items-center gap-4">
-          {/* Year selector */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Year:</span>
-            <Select
-              value={String(year)}
-              onValueChange={(v: string) => setYear(parseInt(v))}
-            >
-              <SelectTrigger className="w-24 h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Array.from(
-                  { length: levelYearConfig.max - levelYearConfig.min + 1 },
-                  (_, i) => levelYearConfig.min + i
-                ).map((y) => (
-                  <SelectItem key={y} value={String(y)}>
-                    {y}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Year selector — hidden for MSOA (always uses latest available per metric) */}
+          {levelYearConfig.hasForecasts ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Year:</span>
+              <Select
+                value={String(year)}
+                onValueChange={(v: string) => setYear(parseInt(v))}
+              >
+                <SelectTrigger className="w-24 h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from(
+                    { length: levelYearConfig.max - levelYearConfig.min + 1 },
+                    (_, i) => levelYearConfig.min + i
+                  ).map((y) => (
+                    <SelectItem key={y} value={String(y)}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <Badge variant="secondary" className="h-8 px-3 text-xs font-medium">
+              Latest data
+            </Badge>
+          )}
 
           {/* Scenario selector — only for levels with forecasts */}
           {levelYearConfig.hasForecasts && (
@@ -502,7 +508,7 @@ function CatchmentContent() {
               </div>
               <p className="text-[10px] text-muted-foreground mt-1.5">
                 {catchmentLevel === "MSOA"
-                  ? "Historical data (2010\u20132024)"
+                  ? "Latest available data per metric"
                   : "Historical & forecast (2010\u20132050)"}
               </p>
             </div>
