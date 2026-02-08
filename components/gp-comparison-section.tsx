@@ -763,7 +763,7 @@ export function GPComparisonSection({
                     <YAxis 
                       type="category" 
                       dataKey="name"
-                      tick={renderBarYAxisTick}
+                      tick={{ fontSize: 10, fill: textColor }}
                       axisLine={{ stroke: gridStroke }}
                       tickLine={false}
                       width={100}
