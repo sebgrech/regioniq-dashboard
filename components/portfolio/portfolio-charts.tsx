@@ -123,40 +123,40 @@ export function PortfolioCharts({
   )
 
   return (
-    <div className="space-y-6">
-      {/* Section header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      {/* Section header + metric toggle (inline) */}
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold text-foreground">
+          <h3 className="text-base font-semibold text-foreground">
             Cross-Location Comparison
           </h3>
-          <p className="text-sm text-muted-foreground">
-            All locations indexed from {baseYear} = 100
+          <p className="text-xs text-muted-foreground/70 mt-0.5">
+            Indexed from {baseYear} = 100
           </p>
         </div>
-      </div>
 
-      {/* Metric toggle */}
-      <div className="flex flex-wrap gap-2">
-        {METRICS.map((metric) => (
-          <button
-            key={metric.id}
-            onClick={() => setSelectedMetric(metric.id)}
-            className={cn(
-              "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-              selectedMetric === metric.id
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            {metric.label}
-          </button>
-        ))}
+        {/* Metric toggle — pill-style, Apple-like segmented control */}
+        <div className="flex gap-1 p-0.5 rounded-lg bg-muted/40">
+          {METRICS.map((metric) => (
+            <button
+              key={metric.id}
+              onClick={() => setSelectedMetric(metric.id)}
+              className={cn(
+                "px-3 py-1 rounded-md text-xs font-medium transition-all",
+                selectedMetric === metric.id
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {metric.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Loading */}
       {isLoading && (
-        <div className="space-y-4 p-4 rounded-xl bg-card/50 border border-border/30">
+        <div className="space-y-4 p-5 rounded-2xl bg-card/40 border border-border/30">
           <div className="h-4 w-28 skeleton-shimmer rounded" />
           <div className="h-[280px] w-full skeleton-shimmer rounded" />
           <div className="flex gap-4">
@@ -168,7 +168,7 @@ export function PortfolioCharts({
 
       {/* Charts */}
       {!isLoading && chartData.length > 0 && (
-        <div className="space-y-6 p-5 rounded-xl bg-card/50 border border-border/30">
+        <div className="space-y-6 p-5 rounded-2xl bg-card/40 border border-border/30">
           {/* Line chart */}
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -343,7 +343,7 @@ export function PortfolioCharts({
 
       {/* Empty state */}
       {!isLoading && chartData.length === 0 && (
-        <div className="p-6 rounded-xl bg-muted/30 border border-border/30 text-center">
+        <div className="p-6 rounded-2xl bg-muted/20 border border-border/20 text-center">
           <p className="text-sm text-muted-foreground">
             No data available. Select at least one asset above.
           </p>

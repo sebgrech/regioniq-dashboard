@@ -6,9 +6,11 @@
  * - Pin markers on top of shaded regions
  * - Toggleable boundary layer
  * - Card ↔ map bidirectional hover highlight
+ * - Fullscreen mode via createPortal (mirrors map-scaffold.tsx pattern)
  */
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
+import { createPortal } from "react-dom"
 import { useTheme } from "next-themes"
 import {
   Map as MapboxMap,
@@ -18,10 +20,12 @@ import {
   NavigationControl,
 } from "@vis.gl/react-mapbox"
 import "mapbox-gl/dist/mapbox-gl.css"
-import { MapPin, Loader2, Layers } from "lucide-react"
+import { ArrowLeft, MapPin, Loader2, Layers, Maximize, X } from "lucide-react"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
-import type { PortfolioAssetItem, GeocodedAsset } from "./portfolio-types"
-import { ASSET_COLORS, shortAddress } from "./portfolio-types"
+import Link from "next/link"
+import type { PortfolioAssetItem, GeocodedAsset, RegionSignals } from "./portfolio-types"
+import { ASSET_COLORS, shortAddress, getAssetClassIcon } from "./portfolio-types"
 
 // Stable mapbox lib reference (prevents re-initialization)
 const MAPBOX_LIB = import("mapbox-gl")
@@ -50,6 +54,7 @@ interface PortfolioMapProps {
   toggleAsset: (index: number) => void
   hoveredAssetIndex: number | null
   onAssetHover: (index: number | null) => void
+  signalsMap: Record<string, RegionSignals>
 }
 
 export function PortfolioMap({
@@ -62,12 +67,51 @@ export function PortfolioMap({
   toggleAsset,
   hoveredAssetIndex,
   onAssetHover,
+  signalsMap,
 }: PortfolioMapProps) {
   const { theme } = useTheme()
   const isDarkMode = theme === "dark"
   const mapStyle = isDarkMode
     ? "mapbox://styles/mapbox/navigation-night-v1"
     : "mapbox://styles/mapbox/streets-v12"
+
+  // ---- Fullscreen state ----
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  // Lock body scroll when fullscreen
+  useEffect(() => {
+    if (isFullscreen) {
+      document.body.style.overflow = "hidden"
+      return () => {
+        document.body.style.overflow = ""
+      }
+    }
+  }, [isFullscreen])
+
+  // Escape key to close fullscreen
+  useEffect(() => {
+    if (!isFullscreen) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsFullscreen(false)
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [isFullscreen])
+
+  // Resize map when entering/exiting fullscreen
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    // Small delay to let the portal render before resize
+    const t = setTimeout(() => {
+      map.resize()
+      if (geocodedAssets.length > 0) {
+        fitMapBounds(map, geocodedAssets)
+      }
+    }, 100)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFullscreen])
 
   // ---- LAD boundary state ----
   const [ladGeoData, setLadGeoData] =
@@ -119,7 +163,6 @@ export function PortfolioMap({
   )
 
   // ---- Mapbox style expressions for LAD boundaries ----
-  // Build a "match" expression: [match, [get, LAD24CD], code1, color1, code2, color2, ..., fallback]
   const fillColorExpr = useMemo(() => {
     const entries: (string | string[])[] = []
     assets.forEach((a, i) => {
@@ -148,8 +191,11 @@ export function PortfolioMap({
   const hoveredCode =
     hoveredAssetIndex != null ? assets[hoveredAssetIndex]?.region_code : null
 
-  return (
-    <div className="relative h-full w-full rounded-2xl overflow-hidden border border-border/40">
+  // ===========================================================================
+  // Map content (shared between inline and fullscreen)
+  // ===========================================================================
+  const mapContent = (
+    <>
       {mapLoading ? (
         <div className="w-full h-full bg-muted/30 flex items-center justify-center">
           <div className="flex items-center gap-2 text-muted-foreground">
@@ -217,7 +263,6 @@ export function PortfolioMap({
                   "fill-color": fillColorExpr,
                   "fill-opacity": [
                     "case",
-                    // Hovered asset's region gets brighter
                     hoveredCode
                       ? (["==", ["get", LAD_CODE_PROP], hoveredCode] as any)
                       : false,
@@ -264,20 +309,22 @@ export function PortfolioMap({
                 onClick={() => toggleAsset(assetIndex)}
               >
                 <div
-                  className="relative group cursor-pointer"
+                  className="relative group cursor-pointer animate-pin-drop"
+                  style={{ animationDelay: `${assetIndex * 120}ms` }}
                   onMouseEnter={() => onAssetHover(assetIndex)}
                   onMouseLeave={() => onAssetHover(null)}
                 >
                   {/* Pin */}
                   <div
                     className={cn(
-                      "flex items-center justify-center w-8 h-8 rounded-full border-2 border-white shadow-lg transition-all",
+                      "flex items-center justify-center rounded-full border-2 border-white shadow-lg transition-all",
+                      isFullscreen ? "w-10 h-10" : "w-8 h-8",
                       isVisible ? "scale-100" : "scale-75 opacity-50",
                       isHovered && "scale-110 ring-2 ring-white/60"
                     )}
                     style={{ backgroundColor: color }}
                   >
-                    <MapPin className="h-4 w-4 text-white" />
+                    <MapPin className={cn("text-white", isFullscreen ? "h-5 w-5" : "h-4 w-4")} />
                   </div>
                   {/* Tooltip on hover */}
                   <div
@@ -286,7 +333,10 @@ export function PortfolioMap({
                       isHovered ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                     )}
                   >
-                    <div className="bg-popover/95 backdrop-blur-sm border border-border rounded-lg shadow-lg px-3 py-2 whitespace-nowrap">
+                    <div
+                      className="bg-popover/95 backdrop-blur-sm border border-border rounded-lg shadow-lg px-3 py-2 whitespace-nowrap"
+                      style={{ fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif" }}
+                    >
                       <p className="text-xs font-medium text-foreground">
                         {shortAddress(asset.address, 35)}
                       </p>
@@ -306,7 +356,8 @@ export function PortfolioMap({
       {!mapLoading && geocodedAssets.length > 0 && (
         <button
           className={cn(
-            "absolute bottom-3 left-3 z-10 p-2 rounded-lg border shadow-md transition-all",
+            "absolute z-10 p-2 rounded-lg border shadow-md transition-all",
+            isFullscreen ? "bottom-5 left-5" : "bottom-3 left-3",
             showBoundaries
               ? "bg-primary/90 border-primary text-primary-foreground"
               : "bg-background/80 backdrop-blur-sm border-border/60 text-muted-foreground hover:text-foreground"
@@ -314,7 +365,177 @@ export function PortfolioMap({
           onClick={() => setShowBoundaries((p) => !p)}
           title={showBoundaries ? "Hide boundaries" : "Show LAD boundaries"}
         >
-          <Layers className="h-3.5 w-3.5" />
+          <Layers className={cn(isFullscreen ? "h-4 w-4" : "h-3.5 w-3.5")} />
+        </button>
+      )}
+    </>
+  )
+
+  // ===========================================================================
+  // Fullscreen overlay (portaled to body)
+  // ===========================================================================
+  if (isFullscreen) {
+    return (
+      <>
+        {/* Placeholder so the grid layout doesn't collapse */}
+        <div className="relative h-full w-full rounded-2xl overflow-hidden border border-border/40 bg-muted/20 flex items-center justify-center">
+          <p className="text-xs text-muted-foreground">Map expanded</p>
+        </div>
+
+        {createPortal(
+          <div
+            className="fixed inset-0 z-[9999] bg-background"
+            style={{ fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif" }}
+          >
+            {/* Fullscreen toolbar */}
+            <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-5 py-3 bg-background/80 backdrop-blur-md border-b border-border/40">
+              <div className="flex items-center gap-4">
+                {/* Logo */}
+                <div className="relative h-8 w-8 flex-shrink-0">
+                  <Image
+                    src="/x.png"
+                    alt="RegionIQ"
+                    fill
+                    className="object-contain dark:hidden"
+                    priority
+                  />
+                  <Image
+                    src="/Frame 11.png"
+                    alt="RegionIQ"
+                    fill
+                    className="object-contain hidden dark:block"
+                    priority
+                  />
+                </div>
+
+                {/* Divider */}
+                <div className="h-5 w-px bg-border/50" />
+
+                {/* Back button */}
+                <button
+                  onClick={() => setIsFullscreen(false)}
+                  className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Back
+                </button>
+
+                {/* Divider */}
+                <div className="h-5 w-px bg-border/50" />
+
+                {/* Title */}
+                <h2 className="text-base font-semibold text-foreground tracking-tight">
+                  Portfolio Map
+                </h2>
+                <span className="text-xs text-muted-foreground">
+                  {assets.length} location{assets.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+
+              <button
+                onClick={() => setIsFullscreen(false)}
+                className="p-2 rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+                title="Close fullscreen (Esc)"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Map fills the viewport */}
+            <div className="absolute inset-0 pt-12">
+              <div className="relative w-full h-full">
+                {mapContent}
+              </div>
+            </div>
+
+            {/* Floating asset panel (bottom-right) */}
+            <div className="absolute bottom-5 right-5 z-20 w-[320px] max-h-[calc(100vh-120px)] overflow-y-auto">
+              <div className="rounded-2xl bg-background/90 backdrop-blur-md border border-border/40 shadow-lg overflow-hidden">
+                {/* Asset list */}
+                <div className="divide-y divide-border/30">
+                  {assets.map((asset, i) => {
+                    const color = ASSET_COLORS[i % ASSET_COLORS.length]
+                    const Icon = getAssetClassIcon(asset.asset_class)
+                    const isHovered = hoveredAssetIndex === i
+                    const archetype = signalsMap[asset.region_code]?.archetype
+
+                    return (
+                      <Link
+                        key={asset.id}
+                        href={`/gp/${asset.slug}`}
+                        className={cn(
+                          "flex items-center gap-3 px-3.5 py-3 transition-colors group",
+                          isHovered ? "bg-muted/40" : "hover:bg-muted/20"
+                        )}
+                        onMouseEnter={() => onAssetHover(i)}
+                        onMouseLeave={() => onAssetHover(null)}
+                      >
+                        {/* Color dot */}
+                        <span
+                          className={cn(
+                            "w-2.5 h-2.5 rounded-full flex-shrink-0 transition-transform",
+                            isHovered && "scale-125"
+                          )}
+                          style={{ backgroundColor: color }}
+                        />
+
+                        {/* Icon */}
+                        <div
+                          className="p-1.5 rounded-lg flex-shrink-0"
+                          style={{ backgroundColor: `${color}08` }}
+                        >
+                          <Icon className="h-3.5 w-3.5" style={{ color }} />
+                        </div>
+
+                        {/* Info */}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium text-foreground truncate leading-tight">
+                            {asset.address}
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-muted-foreground truncate">
+                              {asset.region_name}
+                            </span>
+                            {asset.asset_class && (
+                              <span className="text-[10px] text-muted-foreground/50">
+                                · {asset.asset_class}
+                              </span>
+                            )}
+                            {archetype && (
+                              <span className="text-[10px] text-muted-foreground/50">
+                                · {archetype}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+      </>
+    )
+  }
+
+  // ===========================================================================
+  // Normal (inline) view
+  // ===========================================================================
+  return (
+    <div className="relative h-full w-full rounded-2xl overflow-hidden border border-border/40">
+      {mapContent}
+
+      {/* Fullscreen toggle */}
+      {!mapLoading && geocodedAssets.length > 0 && (
+        <button
+          className="absolute top-3 left-3 z-10 p-2 rounded-lg bg-background/80 backdrop-blur-sm border border-border/60 shadow-md text-muted-foreground hover:text-foreground hover:scale-110 transition-all"
+          onClick={() => setIsFullscreen(true)}
+          title="Expand map"
+        >
+          <Maximize className="h-3.5 w-3.5" />
         </button>
       )}
     </div>

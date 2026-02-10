@@ -144,16 +144,16 @@ export function PortfolioSignals({
   return (
     <div>
       <div className="mb-4">
-        <h3 className="text-lg font-semibold text-foreground">
-          Economic Signal Overview
+        <h3 className="text-base font-semibold text-foreground">
+          Economic Signals
         </h3>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground/70 mt-0.5">
           Regional signals across all portfolio locations
         </p>
       </div>
 
       {signalsLoading ? (
-        <div className="p-4 rounded-xl bg-card/50 border border-border/30">
+        <div className="p-5 rounded-2xl bg-card/40 border border-border/30">
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
               <div key={i} className="h-10 w-full skeleton-shimmer rounded" />
@@ -163,23 +163,23 @@ export function PortfolioSignals({
       ) : (
         <>
           <SignalLegend />
-          <div className="overflow-x-auto rounded-xl bg-card/50 border border-border/30">
+          <div className="overflow-x-auto rounded-2xl bg-card/40 border border-border/30">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left p-3 text-xs font-medium text-muted-foreground w-[200px]">
+                <tr className="border-b border-border/40">
+                  <th className="text-left p-3 text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider w-[200px]">
                     Location
                   </th>
-                  <th className="text-left p-3 text-xs font-medium text-muted-foreground w-[120px]">
+                  <th className="text-left p-3 text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider w-[120px]">
                     Archetype
                   </th>
-                  <th className="text-left p-3 text-xs font-medium text-muted-foreground w-[180px]">
+                  <th className="text-left p-3 text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider w-[180px]">
                     Summary
                   </th>
                   {SIGNAL_IDS.map((sid) => (
                     <th
                       key={sid}
-                      className="text-center p-3 text-xs font-medium text-muted-foreground"
+                      className="text-center p-3 text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider"
                     >
                       {SIGNAL_LABELS[sid]}
                     </th>
@@ -195,8 +195,8 @@ export function PortfolioSignals({
                     <tr
                       key={asset.id}
                       className={cn(
-                        "border-b border-border/50 last:border-0 transition-colors",
-                        visible[i] ? "hover:bg-muted/20" : "opacity-50"
+                        "border-b border-border/30 last:border-0 transition-colors",
+                        visible[i] ? "hover:bg-muted/20" : "opacity-40"
                       )}
                     >
                       <td className="p-3">
@@ -218,7 +218,7 @@ export function PortfolioSignals({
                       </td>
                       <td className="p-3">
                         {regionSignals?.archetype ? (
-                          <span className="inline-flex px-2 py-0.5 text-[10px] font-medium bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 rounded-full">
+                          <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-medium bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 rounded-full text-center">
                             {regionSignals.archetype}
                           </span>
                         ) : (

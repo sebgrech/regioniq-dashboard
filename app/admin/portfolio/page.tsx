@@ -159,12 +159,10 @@ export default async function PortfolioPage({ searchParams }: PageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <PortfolioViewV2
-        assets={deduped}
-        ownerFilter={ownerFilter}
-        allOwners={allOwners}
-      />
-    </div>
+    <PortfolioViewV2
+      assets={deduped}
+      ownerFilter={ownerFilter}
+      allOwners={allOwners}
+    />
   )
 }

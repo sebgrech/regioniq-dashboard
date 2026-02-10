@@ -3,24 +3,24 @@
 /**
  * Portfolio View v2 — Orchestrator
  *
- * Layout: Header → KPI Strip → Cards + Map → Charts → Signals
+ * Layout: Header → Cards + Map → Charts → Signals
  * Uses stagger-children CSS for entrance animations.
  * All data flows from a single shared hook.
  */
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import {
   ArrowLeft,
   Building2,
   ChevronDown,
+  LayoutGrid,
   X,
 } from "lucide-react"
 import { CompanyLogo } from "@/components/company-logo"
-import { cn } from "@/lib/utils"
 import type { PortfolioAssetItem } from "./portfolio-types"
 import { usePortfolioData } from "./use-portfolio-data"
-import { PortfolioKpiStrip } from "./portfolio-kpi-strip"
 import { PortfolioMap } from "./portfolio-map"
 import { PortfolioCards } from "./portfolio-cards"
 import { PortfolioCharts } from "./portfolio-charts"
@@ -44,39 +44,114 @@ export function PortfolioViewV2({
   const data = usePortfolioData(assets)
   const [ownerDropdownOpen, setOwnerDropdownOpen] = useState(false)
 
-  return (
-    <div className="max-w-7xl mx-auto px-6 py-8 page-enter">
-      {/* ================================================================ */}
-      {/* Header                                                           */}
-      {/* ================================================================ */}
-      <div className="mb-6 animate-fade-up">
-        <Link
-          href="/admin/assets"
-          className="text-sm text-muted-foreground hover:text-foreground mb-2 inline-flex items-center gap-1"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Assets
-        </Link>
+  // Derived metadata for subtitle — purely factual
+  const uniqueRegionNames = useMemo(
+    () => [...new Set(assets.map((a) => a.region_name))],
+    [assets]
+  )
+  const uniqueRegionCount = uniqueRegionNames.length
+  const uniqueClasses = useMemo(() => {
+    const counts = new Map<string, number>()
+    assets.forEach((a) => {
+      const cls = a.asset_class || "Other"
+      counts.set(cls, (counts.get(cls) ?? 0) + 1)
+    })
+    return [...counts.entries()].map(([cls, n]) => (n > 1 ? `${cls} (${n})` : cls))
+  }, [assets])
 
-        <div className="flex items-center justify-between mt-2">
+  // Editorial line — geography-based, factual, not metric-based
+  const editorialLine = useMemo(() => {
+    if (uniqueClasses.length === 0 || uniqueRegionNames.length === 0) return null
+    const classLabel = uniqueClasses.length === 1
+      ? uniqueClasses[0].replace(/\s*\(\d+\)/, "").toLowerCase()
+      : "mixed-use"
+    if (uniqueRegionNames.length <= 3) {
+      return `${classLabel.charAt(0).toUpperCase() + classLabel.slice(1)} portfolio across ${uniqueRegionNames.join(", ")}`
+    }
+    return `${classLabel.charAt(0).toUpperCase() + classLabel.slice(1)} portfolio across ${uniqueRegionNames.length} regions`
+  }, [uniqueClasses, uniqueRegionNames])
+
+  return (
+    <div className="min-h-screen bg-background page-enter">
+      {/* ================================================================ */}
+      {/* Sticky top nav — logo + title + back (matches GP page pattern)   */}
+      {/* ================================================================ */}
+      <header className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+        <div className="w-full px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
+            {/* RegionIQ logo */}
+            <Link href="https://regioniq.io" className="flex items-center gap-2.5">
+              <div className="relative h-9 w-9 flex-shrink-0">
+                <Image
+                  src="/x.png"
+                  alt="RegionIQ"
+                  fill
+                  className="object-contain dark:hidden"
+                  priority
+                />
+                <Image
+                  src="/Frame 11.png"
+                  alt="RegionIQ"
+                  fill
+                  className="object-contain hidden dark:block"
+                  priority
+                />
+              </div>
+              <span className="text-lg font-bold text-foreground tracking-tight">RegionIQ</span>
+            </Link>
+
+            <div className="h-6 w-px bg-border/60" />
+
+            {/* Page title */}
+            <div className="flex items-center gap-2">
+              <LayoutGrid className="h-4 w-4 text-purple-400" />
+              <span className="text-lg font-semibold text-foreground">Portfolio</span>
+            </div>
+          </div>
+
+          {/* Back to assets */}
+          <Link
+            href="/admin/assets"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Assets
+          </Link>
+        </div>
+      </header>
+
+      {/* ================================================================ */}
+      {/* Content                                                          */}
+      {/* ================================================================ */}
+      <div className="max-w-7xl mx-auto px-6 py-10">
+        {/* Brand card */}
+        <div className="mb-10 animate-fade-up rounded-2xl bg-muted/15 border border-border/30 px-6 py-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
             {/* Owner logo + name (when filtered) */}
             {ownerFilter && (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 <CompanyLogo
                   name={ownerFilter}
-                  size={40}
+                  size={52}
                   showFallback={true}
-                  className="rounded-lg"
+                  className="rounded-xl ring-1 ring-border/30 shadow-sm"
                 />
                 <div>
                   <h1 className="text-2xl font-bold text-foreground tracking-tight">
                     {ownerFilter}
                   </h1>
-                  <p className="text-sm text-muted-foreground">
-                    Portfolio &middot; {assets.length} asset
-                    {assets.length !== 1 ? "s" : ""}
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {assets.length} location{assets.length !== 1 ? "s" : ""}
+                    {" · "}
+                    {uniqueRegionCount} region{uniqueRegionCount !== 1 ? "s" : ""}
+                    {uniqueClasses.length > 0 && ` · ${uniqueClasses.join(", ")}`}
                   </p>
+                  {editorialLine && (
+                    <p className="text-xs text-muted-foreground/50 mt-1">
+                      {editorialLine}
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -87,10 +162,17 @@ export function PortfolioViewV2({
                 <h1 className="text-2xl font-bold text-foreground tracking-tight">
                   Portfolio Overview
                 </h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Cross-location economic comparison &middot; {assets.length}{" "}
-                  assets
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {assets.length} location{assets.length !== 1 ? "s" : ""}
+                  {" · "}
+                  {uniqueRegionCount} region{uniqueRegionCount !== 1 ? "s" : ""}
+                  {uniqueClasses.length > 0 && ` · ${uniqueClasses.join(", ")}`}
                 </p>
+                {editorialLine && (
+                  <p className="text-xs text-muted-foreground/50 mt-1">
+                    {editorialLine}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -160,41 +242,29 @@ export function PortfolioViewV2({
       </div>
 
       {/* ================================================================ */}
-      {/* Sections — staggered entrance                                    */}
+      {/* Sections — staggered entrance, dramatic spacing                  */}
       {/* ================================================================ */}
-      <div className="stagger-children">
-        {/* Section 1: KPI Strip */}
-        <div className="mb-6">
-          <PortfolioKpiStrip
-            assets={assets}
-            seriesMap={data.seriesMap}
-            signalsMap={data.signalsMap}
-            baseYear={data.baseYear}
-            selectedMetricLabel={data.selectedMetricConfig.label}
-            selectedMetricUnit={data.selectedMetricConfig.unit}
-            isLoading={data.isLoading}
-            signalsLoading={data.signalsLoading}
-          />
-        </div>
+      <div className="stagger-children space-y-10">
+        {/* Section 1: Cards (left) + Map (right, matched height) */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
+          {/* Left: Apple-style grouped list */}
+          <div>
+            <PortfolioCards
+              assets={assets}
+              visible={data.visible}
+              signalsMap={data.signalsMap}
+              selectedMetricLabel={data.selectedMetricConfig.label}
+              selectedMetricUnit={data.selectedMetricConfig.unit}
+              metricValueForAsset={data.metricValueForAsset}
+              isLoading={data.isLoading}
+              toggleAsset={data.toggleAsset}
+              hoveredAssetIndex={data.hoveredAssetIndex}
+              onAssetHover={data.setHoveredAssetIndex}
+            />
+          </div>
 
-        {/* Section 2: Cards (left) + Map (right) */}
-        <div className="mb-8 grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
-          {/* Left: compact cards */}
-          <PortfolioCards
-            assets={assets}
-            visible={data.visible}
-            signalsMap={data.signalsMap}
-            selectedMetricLabel={data.selectedMetricConfig.label}
-            selectedMetricUnit={data.selectedMetricConfig.unit}
-            metricValueForAsset={data.metricValueForAsset}
-            isLoading={data.isLoading}
-            toggleAsset={data.toggleAsset}
-            hoveredAssetIndex={data.hoveredAssetIndex}
-            onAssetHover={data.setHoveredAssetIndex}
-          />
-
-          {/* Right: map with LAD boundaries (sticky) */}
-          <div className="lg:sticky lg:top-4 lg:self-start h-[280px] lg:h-[460px]">
+          {/* Right: map — on mobile fixed 280px, on desktop stretches to match cards */}
+          <div className="h-[280px] lg:h-auto rounded-2xl overflow-hidden">
             <PortfolioMap
               assets={assets}
               geocodedAssets={data.geocodedAssets}
@@ -205,12 +275,13 @@ export function PortfolioViewV2({
               toggleAsset={data.toggleAsset}
               hoveredAssetIndex={data.hoveredAssetIndex}
               onAssetHover={data.setHoveredAssetIndex}
+              signalsMap={data.signalsMap}
             />
           </div>
         </div>
 
         {/* Section 3: Charts */}
-        <div className="mb-10">
+        <div>
           <PortfolioCharts
             assets={assets}
             visibleAssets={data.visibleAssets}
@@ -228,7 +299,7 @@ export function PortfolioViewV2({
         </div>
 
         {/* Section 4: Signals */}
-        <div className="mb-10">
+        <div>
           <PortfolioSignals
             assets={assets}
             visible={data.visible}
@@ -236,6 +307,7 @@ export function PortfolioViewV2({
             signalsLoading={data.signalsLoading}
           />
         </div>
+      </div>
       </div>
     </div>
   )

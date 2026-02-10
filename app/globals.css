@@ -412,6 +412,29 @@ html {
 .stagger-children > *:nth-child(10) { animation-delay: calc(var(--stagger-interval) * 9); }
 .stagger-children > *:nth-child(n+11) { animation-delay: calc(var(--stagger-interval) * 10); }
 
+/* Map pin drop-in animation (Google Maps style) */
+@keyframes pinDropIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.05);
+  }
+  80% {
+    transform: translateY(-1px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-pin-drop {
+  animation: pinDropIn 0.4s var(--ease-out-expo) both;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    MICRO-INTERACTIONS - Interactive element polish
    ═══════════════════════════════════════════════════════════════════════════ */
