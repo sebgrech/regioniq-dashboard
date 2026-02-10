@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useTheme } from "next-themes"
 import Link from "next/link"
 import Image from "next/image"
@@ -32,13 +32,19 @@ import {
   EyeOff,
   ChevronDown,
   X,
+  Loader2,
   type LucideIcon,
 } from "lucide-react"
+import { Map as MapboxMap, Marker, NavigationControl } from "@vis.gl/react-mapbox"
+import "mapbox-gl/dist/mapbox-gl.css"
 import { REGIONS, type Scenario } from "@/lib/metrics.config"
 import { fetchSeries } from "@/lib/data-service"
 import { cn } from "@/lib/utils"
 import { CompanyLogo } from "@/components/company-logo"
 import type { PortfolioAssetItem } from "@/app/admin/portfolio/page"
+
+// Stable mapbox lib reference (prevents re-initialization)
+const MAPBOX_LIB = import("mapbox-gl")
 
 // =============================================================================
 // Constants
@@ -65,6 +71,20 @@ const SIGNAL_LABELS: Record<string, string> = {
   labour_capacity: "Workforce",
   productivity_strength: "Productivity",
   growth_composition: "Growth Balance",
+}
+
+/** Plain-English signal digest for a region */
+function signalDigest(signals: Record<string, SignalData>): string {
+  const strong = Object.entries(signals)
+    .filter(([, s]) => s.strength >= 3)
+    .map(([id]) => SIGNAL_LABELS[id])
+  const weak = Object.entries(signals)
+    .filter(([, s]) => s.strength === 1)
+    .map(([id]) => SIGNAL_LABELS[id])
+  const parts: string[] = []
+  if (strong.length) parts.push("Strong " + strong.slice(0, 2).join(" & ").toLowerCase())
+  if (weak.length) parts.push("weak " + weak.slice(0, 1)[0]?.toLowerCase())
+  return parts.join("; ") || "Balanced profile"
 }
 
 // 8-color palette from compare page (Linear/Stripe inspired)
@@ -129,6 +149,12 @@ interface RegionSignals {
   signals: Record<string, SignalData>
 }
 
+interface GeocodedAsset {
+  assetId: string
+  lat: number
+  lng: number
+}
+
 // =============================================================================
 // Format helpers (recycled from GPComparisonSection)
 // =============================================================================
@@ -177,6 +203,11 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
   const [isLoading, setIsLoading] = useState(true)
   const [signalsLoading, setSignalsLoading] = useState(true)
 
+  // ---- Geocoding state for hero map + card thumbnails ----
+  const [geocodedAssets, setGeocodedAssets] = useState<GeocodedAsset[]>([])
+  const [mapLoading, setMapLoading] = useState(true)
+  const mapRef = useRef<any>(null)
+
   const year = new Date().getFullYear()
   const selectedMetricConfig = METRICS.find((m) => m.id === selectedMetric)!
 
@@ -205,6 +236,75 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
       return next
     })
   }, [])
+
+  // =========================================================================
+  // Geocoding: resolve all asset postcodes to lat/lng (once on mount)
+  // =========================================================================
+
+  useEffect(() => {
+    let cancelled = false
+    async function geocodeAll() {
+      setMapLoading(true)
+      const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
+      if (!token) { setMapLoading(false); return }
+
+      const results: GeocodedAsset[] = []
+      await Promise.all(
+        assets.map(async (asset) => {
+          const searchQuery = asset.postcode
+            ? `${asset.postcode}, United Kingdom`
+            : `${asset.address}, United Kingdom`
+          const query = encodeURIComponent(searchQuery)
+          const types = asset.postcode ? "postcode,address" : "address,place,poi"
+          try {
+            const res = await fetch(
+              `https://api.mapbox.com/geocoding/v5/mapbox.places/${query}.json?access_token=${token}&country=GB&types=${types}&limit=1`
+            )
+            if (!res.ok) return
+            const data = await res.json()
+            if (data.features?.length) {
+              const [lng, lat] = data.features[0].center
+              results.push({ assetId: asset.id, lat, lng })
+            }
+          } catch { /* skip */ }
+        })
+      )
+      if (!cancelled) {
+        setGeocodedAssets(results)
+        setMapLoading(false)
+
+        // Auto-fit bounds once map + geocoding are both ready
+        if (results.length > 0 && mapRef.current) {
+          fitMapBounds(mapRef.current, results)
+        }
+      }
+    }
+    geocodeAll()
+    return () => { cancelled = true }
+  }, [assets])
+
+  // Helper: fit map bounds to show all geocoded assets
+  const fitMapBounds = useCallback((map: any, points: GeocodedAsset[]) => {
+    if (!points.length || !map) return
+    try {
+      const lngs = points.map((p) => p.lng)
+      const lats = points.map((p) => p.lat)
+      const sw: [number, number] = [Math.min(...lngs), Math.min(...lats)]
+      const ne: [number, number] = [Math.max(...lngs), Math.max(...lats)]
+      map.fitBounds([sw, ne], { padding: 60, maxZoom: 12, duration: 800 })
+    } catch { /* ignore */ }
+  }, [])
+
+  // Lookup helper: get geocoded coordinates for an asset
+  const getGeoForAsset = useCallback(
+    (assetId: string) => geocodedAssets.find((g) => g.assetId === assetId),
+    [geocodedAssets]
+  )
+
+  // Map style based on theme
+  const mapStyle = isDarkMode
+    ? "mapbox://styles/mapbox/navigation-night-v1"
+    : "mapbox://styles/mapbox/streets-v12"
 
   // =========================================================================
   // Data Fetching: series (re-fetch on metric/scenario change)
@@ -387,7 +487,7 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
       const pt = series.data.find((d) => d.year === baseYear)
       if (pt) {
         data.push({
-          name: shortAddress(a.address),
+          name: a.region_name,
           value: pt.value,
           color: ASSET_COLORS[globalIdx % ASSET_COLORS.length],
         })
@@ -395,6 +495,52 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
     })
     return data.sort((a, b) => b.value - a.value)
   }, [assets, visibleAssets, seriesMap, baseYear])
+
+  // =========================================================================
+  // Portfolio insight sentence (derived from existing state)
+  // =========================================================================
+
+  const insightSentence = useMemo(() => {
+    if (assets.length < 2 || signalsLoading) return null
+
+    // Count archetypes across assets
+    const archetypeCounts = new Map<string, number>()
+    assets.forEach((a) => {
+      const arch = signalsMap[a.region_code]?.archetype
+      if (arch) archetypeCounts.set(arch, (archetypeCounts.get(arch) ?? 0) + 1)
+    })
+
+    // Find majority archetype (2+ sharing same archetype)
+    let archetypePart = ""
+    for (const [arch, count] of archetypeCounts) {
+      if (count >= 2) {
+        archetypePart = `${count} of ${assets.length} locations in ${arch}s`
+        break
+      }
+    }
+
+    // Find leading location on the selected metric (highest indexed value at latest year)
+    let leaderPart = ""
+    if (chartData.length > 0) {
+      const lastRow = chartData[chartData.length - 1]
+      let maxIdx = -1
+      let maxVal = -Infinity
+      assets.forEach((a, idx) => {
+        const val = (lastRow[`a${idx}_fcst`] ?? lastRow[`a${idx}_hist`]) as number | undefined
+        if (val != null && val > maxVal) {
+          maxVal = val
+          maxIdx = idx
+        }
+      })
+      if (maxIdx >= 0 && maxVal > 100) {
+        leaderPart = `${assets[maxIdx].region_name} leading on ${selectedMetricConfig.label}`
+      }
+    }
+
+    const parts = [archetypePart, leaderPart].filter(Boolean)
+    if (parts.length === 0) return null
+    return parts.join(". ") + "."
+  }, [assets, signalsMap, signalsLoading, chartData, selectedMetricConfig])
 
   // =========================================================================
   // Tooltips (recycled from GPComparisonSection)
@@ -412,7 +558,7 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
         const idxMatch = entry.dataKey.match(/^a(\d+)/)
         if (!idxMatch) return
         const idx = parseInt(idxMatch[1], 10)
-        const name = shortAddress(assets[idx]?.address ?? "Asset")
+        const name = assets[idx]?.region_name ?? "Location"
         if (!uniqueEntries.has(name)) {
           uniqueEntries.set(name, {
             name,
@@ -468,10 +614,18 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
   // ---- Owner dropdown state ----
   const [ownerDropdownOpen, setOwnerDropdownOpen] = useState(false)
 
+  // Default map center (UK) for initial view before fitBounds
+  const defaultCenter = useMemo(() => {
+    if (geocodedAssets.length > 0) {
+      return { lat: geocodedAssets[0].lat, lng: geocodedAssets[0].lng }
+    }
+    return { lat: 53.5, lng: -1.5 } // UK center
+  }, [geocodedAssets])
+
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
       {/* ---- Header ---- */}
-      <div className="mb-8">
+      <div className="mb-6">
         <Link
           href="/admin/assets"
           className="text-sm text-muted-foreground hover:text-foreground mb-2 inline-flex items-center gap-1"
@@ -505,58 +659,37 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
             {!ownerFilter && (
               <div>
                 <h1 className="text-2xl font-bold text-foreground tracking-tight">
-                  Portfolio Comparison
+                  Portfolio Overview
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Cross-asset economic comparison &middot; {assets.length} assets
+                  Cross-location economic comparison &middot; {assets.length} assets
                 </p>
               </div>
             )}
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Owner filter dropdown */}
-            {allOwners.length > 0 && (
+            {/* Owner filter dropdown -- ONLY shown when no owner filter is active */}
+            {!ownerFilter && allOwners.length > 0 && (
               <div className="relative">
                 <button
                   onClick={() => setOwnerDropdownOpen((p) => !p)}
-                  className={cn(
-                    "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all border",
-                    ownerFilter
-                      ? "bg-primary/10 border-primary/30 text-primary"
-                      : "bg-muted/50 border-border/50 text-muted-foreground hover:text-foreground"
-                  )}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all border bg-muted/50 border-border/50 text-muted-foreground hover:text-foreground"
                 >
-                  {ownerFilter && (
-                    <CompanyLogo
-                      name={ownerFilter}
-                      size={18}
-                      showFallback={false}
-                      className="rounded"
-                    />
-                  )}
-                  <span>{ownerFilter ?? "All Owners"}</span>
+                  <span>All Owners</span>
                   <ChevronDown className="h-3.5 w-3.5" />
                 </button>
 
                 {ownerDropdownOpen && (
                   <>
-                    {/* Backdrop */}
                     <div
                       className="fixed inset-0 z-40"
                       onClick={() => setOwnerDropdownOpen(false)}
                     />
-                    {/* Dropdown */}
                     <div className="absolute right-0 top-full mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[200px] animate-in fade-in-0 zoom-in-95 duration-150">
-                      {/* "All" option */}
                       <Link
                         href="/admin/portfolio"
-                        className={cn(
-                          "flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors",
-                          !ownerFilter
-                            ? "text-primary font-medium"
-                            : "text-foreground"
-                        )}
+                        className="flex items-center gap-2 px-3 py-2 text-sm text-primary font-medium hover:bg-muted/50 transition-colors"
                         onClick={() => setOwnerDropdownOpen(false)}
                       >
                         <Building2 className="h-4 w-4 text-muted-foreground" />
@@ -567,12 +700,7 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
                         <Link
                           key={o}
                           href={`/admin/portfolio?owner=${encodeURIComponent(o)}`}
-                          className={cn(
-                            "flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors",
-                            ownerFilter === o
-                              ? "text-primary font-medium"
-                              : "text-foreground"
-                          )}
+                          className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted/50 transition-colors"
                           onClick={() => setOwnerDropdownOpen(false)}
                         >
                           <CompanyLogo
@@ -590,7 +718,7 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
               </div>
             )}
 
-            {/* Clear filter chip (when filtered) */}
+            {/* Clear filter chip (when filtered) -- subtle admin escape hatch */}
             {ownerFilter && (
               <Link
                 href="/admin/portfolio"
@@ -602,106 +730,240 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
               </Link>
             )}
 
-            {/* Scenario toggle */}
-            <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
-              {(["baseline", "upside", "downside"] as Scenario[]).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setScenario(s)}
-                  className={cn(
-                    "px-3 py-1.5 rounded-md text-xs font-medium transition-all capitalize",
-                    scenario === s
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
+            {/* Scenario toggle removed for clean demo -- hardcoded to baseline */}
           </div>
         </div>
+
+        {/* Dynamic portfolio insight */}
+        {insightSentence && (
+          <p className="text-sm text-muted-foreground mt-1 italic">
+            {insightSentence}
+          </p>
+        )}
       </div>
 
       {/* ================================================================== */}
-      {/* Section A: Asset Summary Strip                                      */}
+      {/* Section A: Cards (left) + Map (right)                               */}
       {/* ================================================================== */}
-      <div className="mb-8">
-        <div className="flex flex-wrap gap-3">
-          {assets.map((asset, i) => {
-            const Icon = getAssetClassIcon(asset.asset_class)
-            const color = ASSET_COLORS[i % ASSET_COLORS.length]
-            const archetype = signalsMap[asset.region_code]?.archetype
-            const isVisible = visible[i]
+      <div className="mb-8 grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
+        {/* Left column: Asset cards */}
+        <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {assets.map((asset, i) => {
+              const Icon = getAssetClassIcon(asset.asset_class)
+              const color = ASSET_COLORS[i % ASSET_COLORS.length]
+              const archetype = signalsMap[asset.region_code]?.archetype
+              const isVisible = visible[i]
+              const geo = getGeoForAsset(asset.id)
 
-            return (
-              <button
-                key={asset.id}
-                onClick={() => toggleAsset(i)}
-                className={cn(
-                  "group relative flex items-start gap-3 p-3 rounded-xl border transition-all text-left",
-                  isVisible
-                    ? "bg-card border-border/60 hover:border-border"
-                    : "bg-muted/30 border-border/30 opacity-60 hover:opacity-80"
-                )}
-                style={{
-                  borderLeftWidth: 3,
-                  borderLeftColor: isVisible ? color : "transparent",
+              // Mapbox static image URL for card thumbnail
+              const staticMapUrl = geo
+                ? `https://api.mapbox.com/styles/v1/mapbox/${isDarkMode ? "navigation-night-v1" : "streets-v12"}/static/${geo.lng},${geo.lat},13,0/400x200@2x?access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN}`
+                : null
+
+              return (
+                <div
+                  key={asset.id}
+                  className={cn(
+                    "group relative rounded-xl border transition-all overflow-hidden",
+                    isVisible
+                      ? "bg-card border-border/60 hover:border-border hover:shadow-md"
+                      : "bg-muted/30 border-border/30 opacity-60 hover:opacity-80"
+                  )}
+                  style={{
+                    borderLeftWidth: 3,
+                    borderLeftColor: isVisible ? color : "transparent",
+                  }}
+                >
+                  {/* Click-through to GP page */}
+                  <Link href={`/gp/${asset.slug}`} className="block">
+                    {/* Thumbnail */}
+                    <div className="relative h-[80px] w-full overflow-hidden bg-muted/20">
+                      {staticMapUrl ? (
+                        <img
+                          src={staticMapUrl}
+                          alt={`Map of ${asset.address}`}
+                          className={cn(
+                            "w-full h-full object-cover transition-all",
+                            isVisible ? "opacity-100" : "opacity-40 grayscale"
+                          )}
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-muted/40 to-muted/20 flex items-center justify-center">
+                          <MapPin className="h-5 w-5 text-muted-foreground/30" />
+                        </div>
+                      )}
+                      {/* Color accent strip at bottom of thumbnail */}
+                      <div
+                        className="absolute bottom-0 left-0 right-0 h-0.5"
+                        style={{ backgroundColor: isVisible ? color : "transparent" }}
+                      />
+                    </div>
+
+                    {/* Card body */}
+                    <div className="p-3">
+                      <div className="flex items-start gap-2">
+                        <div
+                          className="p-1.5 rounded-lg flex-shrink-0 mt-0.5"
+                          style={{ backgroundColor: `${color}15` }}
+                        >
+                          <Icon className="h-3.5 w-3.5" style={{ color }} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {asset.address}
+                          </p>
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                            <MapPin className="h-3 w-3 flex-shrink-0" />
+                            <span className="truncate">{asset.region_name}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-2 pl-7">
+                        {asset.asset_class && (
+                          <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded">
+                            {asset.asset_class}
+                          </span>
+                        )}
+                        {archetype && (
+                          <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 rounded">
+                            {archetype}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+
+                  {/* Visibility toggle (separate from card navigation) */}
+                  <button
+                    className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-background/70 backdrop-blur-sm hover:bg-background/90 transition-colors"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleAsset(i) }}
+                    title={isVisible ? "Hide from charts" : "Show in charts"}
+                  >
+                    {isVisible ? (
+                      <Eye className="h-3 w-3 text-muted-foreground/70 hover:text-foreground transition-colors" />
+                    ) : (
+                      <EyeOff className="h-3 w-3 text-muted-foreground/40" />
+                    )}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Right column: Portfolio map (sticky on desktop) */}
+        <div className="relative lg:sticky lg:top-4 lg:self-start">
+          <div className="h-[250px] lg:h-[420px] rounded-2xl overflow-hidden border border-border/40">
+            {mapLoading ? (
+              <div className="w-full h-full bg-muted/30 flex items-center justify-center">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="text-sm">Loading map...</span>
+                </div>
+              </div>
+            ) : geocodedAssets.length === 0 ? (
+              <div className="w-full h-full bg-muted/30 flex items-center justify-center">
+                <div className="text-center text-muted-foreground">
+                  <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Map unavailable</p>
+                </div>
+              </div>
+            ) : (
+              <MapboxMap
+                ref={mapRef}
+                mapLib={MAPBOX_LIB}
+                mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN}
+                initialViewState={{
+                  latitude: defaultCenter.lat,
+                  longitude: defaultCenter.lng,
+                  zoom: 5.5,
+                }}
+                style={{ width: "100%", height: "100%" }}
+                mapStyle={mapStyle}
+                attributionControl={false}
+                logoPosition="bottom-right"
+                onLoad={(evt) => {
+                  if (geocodedAssets.length > 0) {
+                    fitMapBounds(evt.target, geocodedAssets)
+                  }
                 }}
               >
-                <div
-                  className="p-1.5 rounded-lg flex-shrink-0"
-                  style={{ backgroundColor: `${color}15` }}
-                >
-                  <Icon className="h-4 w-4" style={{ color }} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate max-w-[180px]">
-                    {asset.address}
-                  </p>
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                    <MapPin className="h-3 w-3 flex-shrink-0" />
-                    <span className="truncate">{asset.region_name}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-1.5">
-                    {asset.asset_class && (
-                      <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded">
-                        {asset.asset_class}
-                      </span>
-                    )}
-                    {archetype && (
-                      <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 rounded">
-                        {archetype}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="absolute top-2 right-2">
-                  {isVisible ? (
-                    <Eye className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
-                  ) : (
-                    <EyeOff className="h-3.5 w-3.5 text-muted-foreground/40" />
-                  )}
-                </div>
-              </button>
-            )
-          })}
+                <NavigationControl position="top-right" showCompass={false} />
+                {geocodedAssets.map((geo) => {
+                  const assetIndex = assets.findIndex((a) => a.id === geo.assetId)
+                  if (assetIndex === -1) return null
+                  const asset = assets[assetIndex]
+                  const color = ASSET_COLORS[assetIndex % ASSET_COLORS.length]
+                  const isVisible = visible[assetIndex]
+
+                  return (
+                    <Marker
+                      key={geo.assetId}
+                      latitude={geo.lat}
+                      longitude={geo.lng}
+                      anchor="bottom"
+                      onClick={() => toggleAsset(assetIndex)}
+                    >
+                      <div className="relative group cursor-pointer">
+                        {/* Pin */}
+                        <div
+                          className={cn(
+                            "flex items-center justify-center w-8 h-8 rounded-full border-2 border-white shadow-lg transition-all",
+                            isVisible ? "scale-100" : "scale-75 opacity-50"
+                          )}
+                          style={{ backgroundColor: color }}
+                        >
+                          <MapPin className="h-4 w-4 text-white" />
+                        </div>
+                        {/* Tooltip on hover */}
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+                          <div className="bg-popover/95 backdrop-blur-sm border border-border rounded-lg shadow-lg px-3 py-2 whitespace-nowrap">
+                            <p className="text-xs font-medium text-foreground">{shortAddress(asset.address, 35)}</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">{asset.region_name}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </Marker>
+                  )
+                })}
+              </MapboxMap>
+            )}
+          </div>
+
+          {/* Owner logo overlay on map (when filtered) */}
+          {ownerFilter && !mapLoading && geocodedAssets.length > 0 && (
+            <div className="absolute top-4 left-4 z-10 bg-background/80 backdrop-blur-sm border border-border/50 rounded-xl px-4 py-3 shadow-lg flex items-center gap-3">
+              <CompanyLogo
+                name={ownerFilter}
+                size={28}
+                showFallback={true}
+                className="rounded-lg"
+              />
+              <div>
+                <p className="text-sm font-semibold text-foreground">{ownerFilter}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {assets.length} asset{assets.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* ================================================================== */}
-      {/* Section B: Cross-Asset Indexed Charts                               */}
+      {/* Section B: Cross-Location Indexed Charts                              */}
       {/* ================================================================== */}
       <div className="space-y-6 mb-10">
         {/* Section header */}
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-foreground">
-              Cross-Asset Comparison
+              Cross-Location Comparison
             </h3>
             <p className="text-sm text-muted-foreground">
-              All assets indexed from {baseYear} = 100 &middot;{" "}
-              <span className="capitalize">{scenario}</span> scenario
+              All locations indexed from {baseYear} = 100
             </p>
           </div>
         </div>
@@ -804,7 +1066,7 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
                           key={`a${idx}_hist`}
                           type="monotone"
                           dataKey={`a${idx}_hist`}
-                          name={shortAddress(a.address)}
+                          name={a.region_name}
                           stroke={color}
                           strokeWidth={2.5}
                           dot={false}
@@ -814,7 +1076,7 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
                           key={`a${idx}_fcst`}
                           type="monotone"
                           dataKey={`a${idx}_fcst`}
-                          name={`${shortAddress(a.address)} (F)`}
+                          name={`${a.region_name} (F)`}
                           stroke={color}
                           strokeWidth={2.5}
                           dot={false}
@@ -839,7 +1101,7 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
                         style={{ backgroundColor: color }}
                       />
                       <span className="text-foreground font-medium">
-                        {shortAddress(a.address, 22)}
+                        {a.region_name}
                       </span>
                       <span className="text-muted-foreground/60">
                         ({a.region_name})
@@ -963,6 +1225,9 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
                   <th className="text-left p-3 text-xs font-medium text-muted-foreground w-[120px]">
                     Archetype
                   </th>
+                  <th className="text-left p-3 text-xs font-medium text-muted-foreground w-[180px]">
+                    Summary
+                  </th>
                   {SIGNAL_IDS.map((sid) => (
                     <th
                       key={sid}
@@ -1009,6 +1274,15 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
                         {regionSignals?.archetype ? (
                           <span className="inline-flex px-2 py-0.5 text-[10px] font-medium bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 rounded-full">
                             {regionSignals.archetype}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/50">--</span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        {regionSignals?.signals ? (
+                          <span className="text-xs text-muted-foreground italic">
+                            {signalDigest(regionSignals.signals)}
                           </span>
                         ) : (
                           <span className="text-muted-foreground/50">--</span>

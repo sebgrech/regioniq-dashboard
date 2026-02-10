@@ -1,7 +1,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase-admin"
 import { requireAdmin } from "@/lib/api/require-admin"
 import { redirect } from "next/navigation"
-import { PortfolioView } from "@/components/portfolio-view"
+import { PortfolioViewV2 } from "@/components/portfolio/portfolio-view-v2"
 
 export const dynamic = "force-dynamic"
 
@@ -160,7 +160,7 @@ export default async function PortfolioPage({ searchParams }: PageProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      <PortfolioView
+      <PortfolioViewV2
         assets={deduped}
         ownerFilter={ownerFilter}
         allOwners={allOwners}
