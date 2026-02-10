@@ -276,6 +276,9 @@ export function PortfolioViewV2({
               hoveredAssetIndex={data.hoveredAssetIndex}
               onAssetHover={data.setHoveredAssetIndex}
               signalsMap={data.signalsMap}
+              selectedMetric={data.selectedMetric}
+              setSelectedMetric={data.setSelectedMetric}
+              baseYear={data.baseYear}
             />
           </div>
         </div>

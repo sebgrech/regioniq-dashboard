@@ -25,7 +25,8 @@ import Image from "next/image"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import type { PortfolioAssetItem, GeocodedAsset, RegionSignals } from "./portfolio-types"
-import { ASSET_COLORS, shortAddress, getAssetClassIcon } from "./portfolio-types"
+import { ASSET_COLORS, METRICS, shortAddress, getAssetClassIcon } from "./portfolio-types"
+import { MapOverlaysDynamic } from "@/components/map-overlays-dynamic"
 
 // Stable mapbox lib reference (prevents re-initialization)
 const MAPBOX_LIB = import("mapbox-gl")
@@ -55,6 +56,10 @@ interface PortfolioMapProps {
   hoveredAssetIndex: number | null
   onAssetHover: (index: number | null) => void
   signalsMap: Record<string, RegionSignals>
+  /** For choropleth in fullscreen mode */
+  selectedMetric: string
+  setSelectedMetric: (id: string) => void
+  baseYear: number
 }
 
 export function PortfolioMap({
@@ -68,6 +73,9 @@ export function PortfolioMap({
   hoveredAssetIndex,
   onAssetHover,
   signalsMap,
+  selectedMetric,
+  setSelectedMetric,
+  baseYear,
 }: PortfolioMapProps) {
   const { theme } = useTheme()
   const isDarkMode = theme === "dark"
@@ -77,6 +85,10 @@ export function PortfolioMap({
 
   // ---- Fullscreen state ----
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [showChoropleth, setShowChoropleth] = useState(true)
+
+  // Portfolio LAD codes — used to mask the choropleth (portfolio at full opacity, rest faded)
+  const maskCodes = useMemo(() => assets.map((a) => a.region_code), [assets])
 
   // Lock body scroll when fullscreen
   useEffect(() => {
@@ -231,6 +243,20 @@ export function PortfolioMap({
           }}
         >
           <NavigationControl position="top-right" showCompass={false} />
+
+          {/* ---- Fullscreen choropleth overlay (all LADs shaded by metric) ---- */}
+          {isFullscreen && showChoropleth && (
+            <MapOverlaysDynamic
+              show={true}
+              metric={selectedMetric}
+              year={baseYear}
+              scenario="baseline"
+              level="LAD"
+              mapMode="value"
+              maskRegionCodes={maskCodes}
+              mapId="default"
+            />
+          )}
 
           {/* ---- LAD boundary layers ---- */}
           {showBoundaries && ladGeoData && (
@@ -432,13 +458,51 @@ export function PortfolioMap({
                 </span>
               </div>
 
-              <button
-                onClick={() => setIsFullscreen(false)}
-                className="p-2 rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
-                title="Close fullscreen (Esc)"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-3">
+                {/* Metric segmented control */}
+                <div className="flex gap-0.5 p-0.5 rounded-lg bg-muted/40">
+                  {METRICS.map((metric) => (
+                    <button
+                      key={metric.id}
+                      onClick={() => setSelectedMetric(metric.id)}
+                      className={cn(
+                        "px-2.5 py-1 rounded-md text-xs font-medium transition-all",
+                        selectedMetric === metric.id
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {metric.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Divider */}
+                <div className="h-5 w-px bg-border/50" />
+
+                {/* Choropleth toggle */}
+                <button
+                  className={cn(
+                    "p-1.5 rounded-lg border transition-all text-xs font-medium",
+                    showChoropleth
+                      ? "bg-primary/90 border-primary text-primary-foreground"
+                      : "bg-background/80 border-border/60 text-muted-foreground hover:text-foreground"
+                  )}
+                  onClick={() => setShowChoropleth((p) => !p)}
+                  title={showChoropleth ? "Hide choropleth shading" : "Show choropleth shading"}
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                </button>
+
+                {/* Close */}
+                <button
+                  onClick={() => setIsFullscreen(false)}
+                  className="p-2 rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+                  title="Close fullscreen (Esc)"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
             {/* Map fills the viewport */}

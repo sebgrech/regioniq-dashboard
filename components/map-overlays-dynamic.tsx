@@ -1178,8 +1178,8 @@ export function MapOverlaysDynamic({
               ? ([
                   "case",
                   ["==", ["get", "__inParent"], true],
-                  0.72,
-                  0.08,
+                  1.0,
+                  0.3,
                 ] as any)
               : level === "UK" ? 0.5 : 0.72, // Slightly more transparent for UK
           }}
