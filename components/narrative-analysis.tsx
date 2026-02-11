@@ -258,9 +258,14 @@ export function NarrativeAnalysis({
           <CompanyLogo
             domain="openai.com"
             size={18}
-            showFallback={false}
+            showFallback={true}
             className="ml-1 rounded-sm opacity-60"
             alt="Powered by OpenAI"
+            fallback={
+              <span className="ml-1 text-[10px] font-medium text-muted-foreground/60 border border-border/40 rounded px-1.5 py-0.5">
+                OpenAI
+              </span>
+            }
           />
         </CardTitle>
         <CardDescription>
