@@ -1011,19 +1011,18 @@ export function MapOverlaysDynamic({
 
   // Track the last selected region to detect when switching between regions
   const lastSelectedRegionRef = useRef<string | null>(null)
-  // Time-based mount guard: suppress auto-zoom to selected region during the initial
-  // load cascade (mount → metadata arrives → level auto-changes). The entire cascade
-  // typically completes within ~800ms. Using a timestamp instead of a boolean flag
-  // ensures we survive multiple effect re-runs during the cascade.
-  const mountTimestampRef = useRef(Date.now())
-  const MOUNT_GUARD_MS = 1500 // Suppress fitBounds-to-region for 1.5s after mount
+  // Track the initial (URL-derived) region code so we never auto-zoom to it.
+  // Only genuinely new user clicks (different code) should trigger zoom-to-region.
+  const initialRegionCodeRef = useRef<string | null>(null)
+  // Once the user has clicked a different region, allow zooming even back to the initial one.
+  const hasUserNavigatedRef = useRef(false)
   
   // 5) Auto-zoom to selected region (priority) or fit bounds to all regions (initial load only)
   useEffect(() => {
     if (!mapbox || !enriched) return
     
     // If selectedRegion is provided and matches current level, center and zoom to it
-    // BUT skip during the initial mount window so the map shows the broader view first
+    // BUT only when the user has actually clicked a different region (not the initial URL-derived one)
     if (selectedRegion && selectedRegion.level === level) {
       const regionBbox = selectedRegion.bbox
       
@@ -1032,24 +1031,37 @@ export function MapOverlaysDynamic({
           regionBbox[0] >= -180 && regionBbox[0] <= 180 && regionBbox[1] >= -90 && regionBbox[1] <= 90 &&
           regionBbox[2] >= -180 && regionBbox[2] <= 180 && regionBbox[3] >= -90 && regionBbox[3] <= 90) {
         
+        // Record the very first region code we see — this is the URL-derived region from page load
+        if (initialRegionCodeRef.current === null) {
+          initialRegionCodeRef.current = selectedRegion.code
+        }
+        
         // Check if this is a different region than the last one
         const isNewRegion = lastSelectedRegionRef.current !== selectedRegion.code
         const wasAlreadyFitted = didFitRef.current[level]
         lastSelectedRegionRef.current = selectedRegion.code
         
-        // During the initial mount window, suppress zoom-to-region so the user sees the full UK map.
-        // This covers the entire mount → metadata → level-change cascade.
-        const isWithinMountGuard = Date.now() - mountTimestampRef.current < MOUNT_GUARD_MS
+        // Mark that the user has navigated if we see a genuinely different code
+        if (isNewRegion && selectedRegion.code !== initialRegionCodeRef.current) {
+          hasUserNavigatedRef.current = true
+        }
         
-        if (isWithinMountGuard) {
+        // Suppress auto-zoom for the initial (URL-derived) region.
+        // This prevents the mount cascade (component mounts → metadata arrives → level auto-changes)
+        // from zooming into the pre-selected region. The user should see the full UK overview first.
+        // Once the user has clicked a different region, allow zooming even back to the initial one.
+        const isInitialRegion = selectedRegion.code === initialRegionCodeRef.current && !hasUserNavigatedRef.current
+        
+        if (isInitialRegion) {
           didFitRef.current[level] = true
           // Fall through to the level-wide fitBounds below instead of zooming to the region
+        } else if (!isNewRegion && wasAlreadyFitted) {
+          // Same region, already fitted at this level — no need to re-zoom
+          return
         } else {
-          // If switching between regions at the same level, use smooth transition
-          // Otherwise, use standard fitBounds
+          // User selected a different region → zoom to it
           const isRegionSwitch = isNewRegion && wasAlreadyFitted
           
-          // Center and zoom to the selected region on user-initiated region changes
           mapbox.fitBounds(
             [[regionBbox[0], regionBbox[1]], [regionBbox[2], regionBbox[3]]],
             { 

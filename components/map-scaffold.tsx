@@ -7,7 +7,7 @@ import { Map, useMap, type MapRef } from "@vis.gl/react-mapbox"
 import { useTheme } from "next-themes"
 import "mapbox-gl/dist/mapbox-gl.css"
 
-import { ZoomIn, ZoomOut, Maximize, Info, MapPin, Search, Download, Clock, Copy, X, Target } from "lucide-react"
+import { ZoomIn, ZoomOut, Maximize, Info, MapPin, Search, Download, Copy, X, Target, ArrowLeft } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -365,17 +365,19 @@ function MapResizeHandler({ isFullscreen, mapId }: { isFullscreen: boolean; mapI
   return null
 }
 
-/** Fullscreen top toolbar - shows year slider, scenario, and export (no region picker) */
+/** Fullscreen top toolbar - shows year slider, scenario, and back button */
 function FullscreenToolbar({
   year,
   scenario,
   onYearChange,
   onScenarioChange,
+  onBack,
 }: {
   year: number
   scenario: Scenario
   onYearChange?: (year: number) => void
   onScenarioChange?: (scenario: Scenario) => void
+  onBack?: () => void
 }) {
   // Calculate the position of the year label
   const getYearLabelPosition = () => {
@@ -462,13 +464,16 @@ function FullscreenToolbar({
             ))}
           </div>
 
-          {/* Updated + Export */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="h-3 w-3" />
-              <span>Updated 2 min ago</span>
-            </div>
-          </div>
+          {/* Back button */}
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -1321,6 +1326,7 @@ function MapContainerInner({
             scenario={scenario as Scenario}
             onYearChange={onYearChange}
             onScenarioChange={onScenarioChange}
+            onBack={() => setIsFullscreen(false)}
           />
           <FullscreenControls
             currentMetric={metric}

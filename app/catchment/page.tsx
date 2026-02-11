@@ -41,6 +41,7 @@ import { useGeofence } from "@/hooks/use-geofence"
 import { GeofenceDrawControls } from "@/components/geofence-draw-controls"
 import { GeofenceResults } from "@/components/geofence-results"
 import { MapboxDrawControl } from "@/components/mapbox-draw-control"
+import { MapOverlaysDynamic } from "@/components/map-overlays-dynamic"
 import type { Polygon, MultiPolygon } from "geojson"
 
 // Stable mapbox lib reference to prevent re-initialization
@@ -139,6 +140,8 @@ function CatchmentContent() {
   const [circleRadius, setCircleRadius] = useState(10) // km
   const [catchmentLevel, setCatchmentLevel] = useState<CatchmentLevel>("MSOA")
   const [mapStyleOption, setMapStyleOption] = useState<MapStyleOption>("auto")
+  const [choroplethMetric] = useState("population_total")
+  const [showChoropleth, setShowChoropleth] = useState(true)
 
   // Year range and forecast availability per level
   const LEVEL_YEAR_CONFIG: Record<CatchmentLevel, { min: number; max: number; hasForecasts: boolean }> = {
@@ -604,6 +607,18 @@ function CatchmentContent() {
                 mapId={MAP_ID}
                 sourceRegion={sourceRegion}
                 onFitComplete={handleFitComplete}
+              />
+            )}
+
+            {/* Choropleth background — coloured regional data */}
+            {isMapReady && showChoropleth && (
+              <MapOverlaysDynamic
+                show={true}
+                metric={choroplethMetric}
+                year={year}
+                scenario={scenario}
+                level="LAD"
+                mapId={MAP_ID}
               />
             )}
 
