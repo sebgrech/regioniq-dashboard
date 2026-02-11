@@ -498,7 +498,7 @@ function FullscreenControls({
   const levels: RegionLevel[] = ["UK", "ITL1", "ITL2", "ITL3", "LAD"]
 
   return (
-    <div className="absolute bottom-16 right-4 z-[10] flex flex-col gap-3">
+    <div className="absolute bottom-16 right-4 z-[10] flex flex-col gap-3 max-w-[calc(100vw-2rem)]">
       {/* Map Display Mode Toggle */}
       {onMapModeChange && (
         <div className="bg-background/90 backdrop-blur-md rounded-lg border border-border/50 shadow-lg p-3">
@@ -509,7 +509,7 @@ function FullscreenControls({
               size="sm"
               onClick={() => onMapModeChange("value")}
               className={cn(
-                "flex-1 text-xs px-2",
+                "flex-1 text-xs px-2 whitespace-nowrap",
                 currentMapMode === "value"
                   ? "text-foreground font-medium"
                   : "text-muted-foreground"
@@ -522,7 +522,7 @@ function FullscreenControls({
               size="sm"
               onClick={() => onMapModeChange("growth")}
               className={cn(
-                "flex-1 text-xs px-2",
+                "flex-1 text-xs px-2 whitespace-nowrap",
                 currentMapMode === "growth"
                   ? "text-foreground font-medium"
                   : "text-muted-foreground"
@@ -584,7 +584,7 @@ function FullscreenControls({
 
       {/* Metric Selector */}
       {onMetricChange && (
-        <div className="bg-background/90 backdrop-blur-md rounded-lg border border-border/50 shadow-lg p-4 min-w-[200px] max-w-[280px]">
+        <div className="bg-background/90 backdrop-blur-md rounded-lg border border-border/50 shadow-lg p-4 w-[260px]">
           <h4 className="text-sm font-semibold mb-3 text-foreground/90">Indicators</h4>
           <div className="space-y-1 max-h-[400px] overflow-y-auto">
             {METRICS.map((m) => {
@@ -596,7 +596,7 @@ function FullscreenControls({
                   size="sm"
                   onClick={() => onMetricChange(m.id)}
                   className={cn(
-                    "w-full justify-start gap-2 h-8 text-xs",
+                    "w-full justify-start gap-2 h-auto min-h-[2rem] py-1.5 text-xs",
                     isSelected
                       ? "bg-primary/10 text-primary font-medium"
                       : "text-muted-foreground hover:text-foreground"
@@ -608,7 +608,7 @@ function FullscreenControls({
                       isSelected ? "bg-primary" : "border border-current opacity-50"
                     )}
                   />
-                  <span className="truncate">{m.title}</span>
+                  <span className="text-left leading-snug">{m.title}</span>
                 </Button>
               )
             })}

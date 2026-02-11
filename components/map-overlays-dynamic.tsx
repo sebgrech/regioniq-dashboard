@@ -1011,16 +1011,19 @@ export function MapOverlaysDynamic({
 
   // Track the last selected region to detect when switching between regions
   const lastSelectedRegionRef = useRef<string | null>(null)
-  // Track initial mount — skip auto-zoom to selected region on first load so the user
-  // sees the full UK overview instead of being immediately zoomed into a single LAD.
-  const isInitialMountRef = useRef(true)
+  // Time-based mount guard: suppress auto-zoom to selected region during the initial
+  // load cascade (mount → metadata arrives → level auto-changes). The entire cascade
+  // typically completes within ~800ms. Using a timestamp instead of a boolean flag
+  // ensures we survive multiple effect re-runs during the cascade.
+  const mountTimestampRef = useRef(Date.now())
+  const MOUNT_GUARD_MS = 1500 // Suppress fitBounds-to-region for 1.5s after mount
   
   // 5) Auto-zoom to selected region (priority) or fit bounds to all regions (initial load only)
   useEffect(() => {
     if (!mapbox || !enriched) return
     
     // If selectedRegion is provided and matches current level, center and zoom to it
-    // BUT skip on initial mount so the map shows the broader view first
+    // BUT skip during the initial mount window so the map shows the broader view first
     if (selectedRegion && selectedRegion.level === level) {
       const regionBbox = selectedRegion.bbox
       
@@ -1034,9 +1037,11 @@ export function MapOverlaysDynamic({
         const wasAlreadyFitted = didFitRef.current[level]
         lastSelectedRegionRef.current = selectedRegion.code
         
-        // On initial mount, record the region but don't zoom in — let the user see the full map
-        if (isInitialMountRef.current) {
-          isInitialMountRef.current = false
+        // During the initial mount window, suppress zoom-to-region so the user sees the full UK map.
+        // This covers the entire mount → metadata → level-change cascade.
+        const isWithinMountGuard = Date.now() - mountTimestampRef.current < MOUNT_GUARD_MS
+        
+        if (isWithinMountGuard) {
           didFitRef.current[level] = true
           // Fall through to the level-wide fitBounds below instead of zooming to the region
         } else {
