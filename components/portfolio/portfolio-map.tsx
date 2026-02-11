@@ -420,151 +420,163 @@ export function PortfolioMap({
             className="fixed inset-0 z-[9999] bg-background"
             style={{ fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif" }}
           >
-            {/* Fullscreen toolbar */}
-            <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-5 py-3 bg-background/80 backdrop-blur-md border-b border-border/40">
-              <div className="flex items-center gap-4">
-                {/* Logo */}
-                <div className="relative h-8 w-8 flex-shrink-0">
-                  <Image
-                    src="/x.png"
-                    alt="RegionIQ"
-                    fill
-                    className="object-contain dark:hidden"
-                    priority
-                  />
-                  <Image
-                    src="/Frame 11.png"
-                    alt="RegionIQ"
-                    fill
-                    className="object-contain hidden dark:block"
-                    priority
-                  />
+            {/* ============================================================= */}
+            {/* Top toolbar — mirrors map-scaffold.tsx FullscreenToolbar        */}
+            {/* Logo (left) · Year slider (center) · Close (right)            */}
+            {/* ============================================================= */}
+            <div className="absolute top-0 left-0 right-0 z-20 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+              <div className="w-full px-6 py-4 flex items-center justify-between">
+                {/* Left cluster: Logo + owner + title */}
+                <div className="flex items-center gap-4 min-w-0 flex-shrink-0">
+                  <div className="relative h-16 w-16 flex-shrink-0">
+                    <Image
+                      src="/x.png"
+                      alt="RegionIQ"
+                      fill
+                      className="object-contain dark:hidden"
+                      priority
+                    />
+                    <Image
+                      src="/Frame 11.png"
+                      alt="RegionIQ"
+                      fill
+                      className="object-contain hidden dark:block"
+                      priority
+                    />
+                  </div>
+                  <div className="h-6 w-px bg-border/50" />
+                  {ownerFilter && (
+                    <CompanyLogo
+                      name={ownerFilter}
+                      size={28}
+                      showFallback={true}
+                      className="rounded-lg ring-1 ring-border/20"
+                    />
+                  )}
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground tracking-tight leading-tight">
+                      Portfolio Map
+                    </h2>
+                    <span className="text-xs text-muted-foreground">
+                      {assets.length} location{assets.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
                 </div>
 
-                {/* Divider */}
-                <div className="h-5 w-px bg-border/50" />
+                {/* Center cluster: Year slider */}
+                <div className="flex-1 px-12">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Year</span>
+                    </div>
+                    <Slider
+                      value={[choroplethYear]}
+                      onValueChange={(value) => setChoroplethYear(value[0])}
+                      min={YEARS.min}
+                      max={YEARS.max}
+                      step={1}
+                      className="w-full"
+                    />
+                    {/* Dynamic year label that follows the thumb */}
+                    <div className="relative h-4">
+                      <div
+                        className="absolute transform -translate-x-1/2 text-sm font-medium pointer-events-none"
+                        style={{
+                          left: `${((choroplethYear - YEARS.min) / (YEARS.max - YEARS.min)) * 100}%`,
+                          transition: "none",
+                        }}
+                      >
+                        {choroplethYear}
+                      </div>
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>{YEARS.min}</span>
+                      <span>{YEARS.max}</span>
+                    </div>
+                  </div>
+                </div>
 
-                {/* Back button */}
-                <button
-                  onClick={() => setIsFullscreen(false)}
-                  className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  Back
-                </button>
-
-                {/* Divider */}
-                <div className="h-5 w-px bg-border/50" />
-
-                {/* Owner logo + Title */}
-                {ownerFilter && (
-                  <CompanyLogo
-                    name={ownerFilter}
-                    size={24}
-                    showFallback={true}
-                    className="rounded-md ring-1 ring-border/20"
-                  />
-                )}
-                <h2 className="text-base font-semibold text-foreground tracking-tight">
-                  Portfolio Map
-                </h2>
-                <span className="text-xs text-muted-foreground">
-                  {assets.length} location{assets.length !== 1 ? "s" : ""}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                {/* Choropleth toggle */}
-                <button
-                  className={cn(
-                    "p-1.5 rounded-lg border transition-all text-xs font-medium",
-                    showChoropleth
-                      ? "bg-primary/90 border-primary text-primary-foreground"
-                      : "bg-background/80 border-border/60 text-muted-foreground hover:text-foreground"
-                  )}
-                  onClick={() => setShowChoropleth((p) => !p)}
-                  title={showChoropleth ? "Hide choropleth shading" : "Show choropleth shading"}
-                >
-                  <Layers className="h-3.5 w-3.5" />
-                </button>
-
-                {/* Close */}
-                <button
-                  onClick={() => setIsFullscreen(false)}
-                  className="p-2 rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
-                  title="Close fullscreen (Esc)"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                {/* Right cluster: Back + Close */}
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <button
+                    onClick={() => setIsFullscreen(false)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Back
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Map fills the viewport */}
-            <div className="absolute inset-0 pt-12">
+            {/* Map fills the viewport (pt-[100px] accounts for taller toolbar with slider) */}
+            <div className="absolute inset-0 pt-[100px]">
               <div className="relative w-full h-full">
                 {mapContent}
               </div>
             </div>
 
-            {/* Floating controls panel (bottom-left) — metric toggle + year slider */}
-            <div className="absolute bottom-5 left-5 z-20 w-[300px]">
-              <div className="rounded-2xl bg-background/90 backdrop-blur-md border border-border/40 shadow-lg overflow-hidden p-4 space-y-4">
-                {/* Metric selector */}
-                <div className="space-y-1.5">
-                  <h4 className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider">
-                    Indicator
-                  </h4>
-                  <div className="flex gap-0.5 p-0.5 rounded-lg bg-muted/40">
-                    {METRICS.map((metric) => (
-                      <button
-                        key={metric.id}
-                        onClick={() => setSelectedMetric(metric.id)}
-                        className={cn(
-                          "flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all",
-                          selectedMetric === metric.id
-                            ? "bg-background text-foreground shadow-sm"
-                            : "text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        {metric.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Year slider */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider">
-                      Year
-                    </h4>
-                    <span className="text-sm font-semibold text-foreground tabular-nums">
-                      {choroplethYear}
-                    </span>
-                  </div>
-                  <Slider
-                    value={[choroplethYear]}
-                    onValueChange={(value) => setChoroplethYear(value[0])}
-                    min={YEARS.min}
-                    max={YEARS.max}
-                    step={1}
-                    className="w-full"
-                  />
-                  <div className="flex justify-between text-[10px] text-muted-foreground/50">
-                    <span>{YEARS.min}</span>
-                    <span className="text-muted-foreground/40">
-                      {choroplethYear > YEARS.forecastStart ? "forecast" : "historical"}
-                    </span>
-                    <span>{YEARS.max}</span>
-                  </div>
+            {/* ============================================================= */}
+            {/* Right-side floating panel — mirrors map-scaffold.tsx           */}
+            {/* FullscreenControls pattern: indicators + controls stacked      */}
+            {/* ============================================================= */}
+            <div className="absolute top-[116px] right-4 z-20 w-[320px] flex flex-col gap-3 max-h-[calc(100vh-132px)]">
+              {/* Indicator selector */}
+              <div className="bg-background/90 backdrop-blur-md rounded-lg border border-border/50 shadow-lg p-3">
+                <h4 className="text-xs font-semibold mb-2 text-foreground/90">Indicators</h4>
+                <div className="space-y-0.5">
+                  {METRICS.map((metric) => (
+                    <button
+                      key={metric.id}
+                      onClick={() => setSelectedMetric(metric.id)}
+                      className={cn(
+                        "w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-2",
+                        selectedMetric === metric.id
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                      )}
+                    >
+                      <span className={cn(
+                        "w-1.5 h-1.5 rounded-full",
+                        selectedMetric === metric.id ? "bg-primary" : "bg-muted-foreground/30"
+                      )} />
+                      {metric.label}
+                    </button>
+                  ))}
                 </div>
               </div>
-            </div>
 
-            {/* Floating asset panel (bottom-right) */}
-            <div className="absolute bottom-5 right-5 z-20 w-[320px] max-h-[calc(100vh-120px)] overflow-y-auto">
-              <div className="rounded-2xl bg-background/90 backdrop-blur-md border border-border/40 shadow-lg overflow-hidden">
-                {/* Asset list */}
+              {/* Choropleth toggle */}
+              <div className="bg-background/90 backdrop-blur-md rounded-lg border border-border/50 shadow-lg p-3">
+                <h4 className="text-xs font-semibold mb-2 text-foreground/90">Map Display</h4>
+                <div className="flex rounded-lg border border-border/40 p-0.5 bg-muted/30">
+                  <button
+                    onClick={() => setShowChoropleth(true)}
+                    className={cn(
+                      "flex-1 text-xs py-1.5 rounded-md font-medium transition-all",
+                      showChoropleth
+                        ? "bg-background shadow-sm text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Choropleth
+                  </button>
+                  <button
+                    onClick={() => setShowChoropleth(false)}
+                    className={cn(
+                      "flex-1 text-xs py-1.5 rounded-md font-medium transition-all",
+                      !showChoropleth
+                        ? "bg-background shadow-sm text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Boundaries
+                  </button>
+                </div>
+              </div>
+
+              {/* Asset list */}
+              <div className="bg-background/90 backdrop-blur-md rounded-lg border border-border/50 shadow-lg overflow-hidden flex-1 min-h-0 overflow-y-auto">
                 <div className="divide-y divide-border/30">
                   {assets.map((asset, i) => {
                     const color = ASSET_COLORS[i % ASSET_COLORS.length]

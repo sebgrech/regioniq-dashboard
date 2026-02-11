@@ -1172,7 +1172,7 @@ function MapContainerInner({
               ref={mapRef as any}
               mapLib={MAPBOX_LIB}
               mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN}
-              initialViewState={{ longitude: -2, latitude: 54.5, zoom: 5 }}
+              initialViewState={{ longitude: -2, latitude: 54.5, zoom: 4.8 }}
         style={{ width: "100%", height: "100%", padding: "0", margin: "0", display: "block" }}
               mapStyle={mapStyle}
               reuseMaps={false}
