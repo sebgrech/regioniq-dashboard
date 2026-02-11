@@ -1052,8 +1052,8 @@ function MapContainerInner({
         // In normal mode: inherits from parent (100% height, no padding)
         isFullscreen
           ? {
-              width: "100vw",
-              height: "100vh",
+              width: "100%",
+              height: "100%",
               padding: "0",
               margin: "0",
             }
@@ -1487,10 +1487,10 @@ export function MapScaffold({
         mounted &&
         createPortal(
           <div
-            className="fixed inset-0 z-[9999] bg-background"
+            className="fixed inset-0 z-[9999] bg-background overflow-hidden"
             style={{
-              width: "100vw",
-              height: "100vh",
+              width: "100%",
+              height: "100%",
               left: 0,
               top: 0,
               right: 0,

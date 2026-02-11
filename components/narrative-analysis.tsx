@@ -255,18 +255,19 @@ export function NarrativeAnalysis({
         <CardTitle className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-primary" />
           Insight
-          <CompanyLogo
-            domain="openai.com"
-            size={18}
-            showFallback={true}
-            className="ml-1 rounded-sm opacity-60"
-            alt="Powered by OpenAI"
-            fallback={
-              <span className="ml-1 text-[10px] font-medium text-muted-foreground/60 border border-border/40 rounded px-1.5 py-0.5">
-                OpenAI
-              </span>
-            }
-          />
+          <span className="ml-1.5 inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground/50">
+            Powered by
+            <CompanyLogo
+              domain="openai.com"
+              size={16}
+              showFallback={true}
+              className="rounded-sm opacity-70"
+              alt="OpenAI"
+              fallback={
+                <span className="font-semibold text-muted-foreground/60">OpenAI</span>
+              }
+            />
+          </span>
         </CardTitle>
         <CardDescription>
           What matters in {regionData?.name} • {year}
