@@ -1330,11 +1330,12 @@ export function MapOverlaysDynamic({
         />
       </Source>
 
-      {/* Hover tooltip - Recharts style (rendered via React state, updated via requestAnimationFrame) */}
+      {/* Hover tooltip — uses design tokens + explicit Jakarta Sans (matches portfolio-map) */}
       {hoverInfo && (
         <div
-          className="font-sans bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 min-w-[200px] z-50 pointer-events-auto"
+          className="bg-popover/95 backdrop-blur-sm border border-border rounded-lg shadow-lg p-3 min-w-[200px] z-50 pointer-events-auto"
           style={{ 
+            fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif",
             position: "absolute",
             left: hoverInfo.x + 10, 
             top: hoverInfo.y + 10,
@@ -1342,7 +1343,7 @@ export function MapOverlaysDynamic({
           }}
         >
           <div className="flex items-center gap-2 mb-2">
-            <span className="font-medium text-gray-900 dark:text-gray-100">
+            <span className="font-medium text-foreground">
               {hoverInfo.name}
             </span>
             {hoverInfo.code && (
@@ -1388,13 +1389,13 @@ export function MapOverlaysDynamic({
                     />
                   )
                 })()}
-                <span className="text-sm text-gray-700 dark:text-gray-300">
+                <span className="text-sm text-muted-foreground">
                   {mapMode === "growth" 
                     ? `${metricInfo?.title || metric} Growth Rate${growthPeriod === 1 ? " (YoY)" : ` (${growthPeriod}yr)`}`
                     : metricInfo?.title || metric}
                 </span>
               </div>
-              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              <span className="text-sm font-medium text-foreground">
                 {hoverInfo.value !== null 
                   ? mapMode === "growth"
                     ? `${hoverInfo.value >= 0 ? "+" : ""}${hoverInfo.value.toFixed(1)}%`
@@ -1407,18 +1408,18 @@ export function MapOverlaysDynamic({
               </span>
             </div>
             {(hoverInfo.rank != null && hoverInfo.n != null && hoverInfo.n > 0) ? (
-              <div className="text-xs text-gray-600 dark:text-gray-300 flex items-center justify-between">
+              <div className="text-xs text-muted-foreground flex items-center justify-between">
                 <span>{mapMode === "growth" ? "Growth Rank" : "Rank"}</span>
-                <span className="font-medium">
+                <span className="font-medium text-foreground">
                   {hoverInfo.rank}/{hoverInfo.n}
                   {hoverInfo.percentile != null ? ` • ${Math.round(hoverInfo.percentile)}th pct` : ""}
                 </span>
               </div>
             ) : null}
             {(hoverInfo.pinnedName && (hoverInfo.deltaAbs != null || hoverInfo.deltaPct != null)) ? (
-              <div className="text-xs text-gray-600 dark:text-gray-300 flex items-center justify-between">
+              <div className="text-xs text-muted-foreground flex items-center justify-between">
                 <span>Δ vs {hoverInfo.pinnedName}</span>
-                <span className="font-medium">
+                <span className="font-medium text-foreground">
                   {hoverInfo.deltaAbs != null
                     ? mapMode === "growth"
                       ? `${hoverInfo.deltaAbs >= 0 ? "+" : ""}${hoverInfo.deltaAbs.toFixed(1)}pp`
@@ -1437,7 +1438,7 @@ export function MapOverlaysDynamic({
           </div>
           {/* Navigation button to metric detail page */}
           {hoverInfo.code && (
-            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <div className="mt-3 pt-3 border-t border-border">
               <Button
                 variant="outline"
                 size="sm"
