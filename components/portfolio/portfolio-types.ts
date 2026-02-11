@@ -13,10 +13,23 @@ import {
   Warehouse,
   UtensilsCrossed,
 } from "lucide-react"
-import type { PortfolioAssetItem } from "@/app/admin/portfolio/page"
+// =============================================================================
+// Core portfolio asset type — canonical definition
+// =============================================================================
 
-// Re-export the page type for convenience
-export type { PortfolioAssetItem }
+export interface PortfolioAssetItem {
+  id: string
+  slug: string
+  address: string
+  postcode: string | null
+  region_code: string
+  region_name: string
+  asset_type: string | null
+  asset_class: string | null
+  sq_ft: number | null
+  portfolio_owner: string | null
+  source: "deal" | "portfolio" | "user"
+}
 
 // =============================================================================
 // Metric definitions
@@ -172,6 +185,12 @@ export function signalDigest(signals: Record<string, SignalData>): string {
   const parts: string[] = []
   if (strong.length)
     parts.push("Strong " + strong.slice(0, 2).join(" & ").toLowerCase())
-  if (weak.length) parts.push("weak " + weak.slice(0, 1)[0]?.toLowerCase())
+  if (weak.length) {
+    const weakLabel = weak.slice(0, 1)[0]
+    // If the label came from an override, use it as-is (it already reads naturally)
+    const weakId = Object.entries(signals).filter(([, s]) => s.strength === 1).map(([id]) => id)[0]
+    const isOverride = weakId && WEAK_OVERRIDE[weakId]
+    parts.push(isOverride ? weakLabel : "weak " + weakLabel?.toLowerCase())
+  }
   return parts.join("; ") || "Balanced profile"
 }

@@ -55,6 +55,7 @@ export const config = {
     "/analysis/:path*",
     "/admin/:path*",
     "/developers/:path*",
+    "/portfolio/:path*",
   ],
 }
 

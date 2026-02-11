@@ -12,7 +12,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { ChevronDown, Check, Settings2, FileText } from "lucide-react"
+import { ChevronDown, Check, Settings2, FileText, LayoutGrid } from "lucide-react"
 import { YEARS, type Scenario } from "@/lib/metrics.config"
 import { RegionSearch, type RegionMetadata } from "@/components/region-search"
 import { cn } from "@/lib/utils"
@@ -269,6 +269,19 @@ export function DashboardControls({
               </Button>
             </>
           )}
+
+          {/* Portfolio — all authenticated users */}
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+          >
+            <Link href="/portfolio" id="tour-portfolio-button">
+              <LayoutGrid className="h-4 w-4" />
+              <span className="hidden sm:inline">Portfolio</span>
+            </Link>
+          </Button>
 
           {/* User menu - account dropdown */}
           <div id="tour-api-button">

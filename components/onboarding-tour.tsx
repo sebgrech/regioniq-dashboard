@@ -138,6 +138,15 @@ export function OnboardingTour(props: {
       },
     ]
 
+    // Portfolio — always shown for all authenticated users
+    base.push({
+      id: "portfolio",
+      title: "Your portfolio",
+      description:
+        "Add sites by postcode to track forecasts, metrics, and regional signals across your locations.",
+      targetId: "tour-portfolio-button",
+    })
+
     // Only show API step if user has API access
     if (apiAccess !== false) {
       base.push({

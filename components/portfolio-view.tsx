@@ -41,7 +41,7 @@ import { REGIONS, type Scenario } from "@/lib/metrics.config"
 import { fetchSeries } from "@/lib/data-service"
 import { cn } from "@/lib/utils"
 import { CompanyLogo } from "@/components/company-logo"
-import type { PortfolioAssetItem } from "@/app/admin/portfolio/page"
+import type { PortfolioAssetItem } from "@/components/portfolio/portfolio-types"
 
 // Stable mapbox lib reference (prevents re-initialization)
 const MAPBOX_LIB = import("mapbox-gl")

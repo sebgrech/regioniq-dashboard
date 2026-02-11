@@ -76,6 +76,15 @@ export function usePortfolioData(assets: PortfolioAssetItem[]) {
   const [selectedMetric, setSelectedMetric] = useState(METRICS[0].id)
   const [scenario] = useState<Scenario>("baseline")
   const [visible, setVisible] = useState<boolean[]>(() => assets.map(() => true))
+
+  // Keep visible array in sync when assets change (e.g. after adding a new site)
+  useEffect(() => {
+    setVisible((prev) => {
+      if (prev.length === assets.length) return prev
+      return assets.map((_, i) => prev[i] ?? true)
+    })
+  }, [assets])
+
   const [seriesMap, setSeriesMap] = useState<Record<string, AssetSeriesData>>({})
   const [signalsMap, setSignalsMap] = useState<Record<string, RegionSignals>>({})
   const [isLoading, setIsLoading] = useState(true)

@@ -2,26 +2,9 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin"
 import { requireAdmin } from "@/lib/api/require-admin"
 import { redirect } from "next/navigation"
 import { PortfolioViewV2 } from "@/components/portfolio/portfolio-view-v2"
+import type { PortfolioAssetItem } from "@/components/portfolio/portfolio-types"
 
 export const dynamic = "force-dynamic"
-
-// =============================================================================
-// Types - shared with PortfolioView
-// =============================================================================
-
-export interface PortfolioAssetItem {
-  id: string
-  slug: string
-  address: string
-  postcode: string | null
-  region_code: string
-  region_name: string
-  asset_type: string | null
-  asset_class: string | null
-  sq_ft: number | null
-  portfolio_owner: string | null
-  source: "deal" | "portfolio"
-}
 
 // =============================================================================
 // Server Component

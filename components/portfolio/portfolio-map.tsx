@@ -67,6 +67,8 @@ interface PortfolioMapProps {
   baseYear: number
   /** Owner name for company logo in fullscreen toolbar */
   ownerFilter?: string | null
+  /** "user" mode links to /site/[slug]?from=portfolio, "admin" to /gp/[slug] */
+  mode?: "user" | "admin"
 }
 
 export function PortfolioMap({
@@ -84,6 +86,7 @@ export function PortfolioMap({
   setSelectedMetric,
   ownerFilter,
   baseYear,
+  mode = "admin",
 }: PortfolioMapProps) {
   const { theme } = useTheme()
   const isDarkMode = theme === "dark"
@@ -675,7 +678,7 @@ export function PortfolioMap({
                     return (
                       <Link
                         key={asset.id}
-                        href={`/gp/${asset.slug}`}
+                        href={mode === "user" ? `/site/${asset.slug}?from=portfolio` : `/gp/${asset.slug}`}
                         className={cn(
                           "flex items-center gap-3 px-3.5 py-3 transition-colors group",
                           isHovered ? "bg-muted/40" : "hover:bg-muted/20"

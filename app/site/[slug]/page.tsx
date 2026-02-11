@@ -1,14 +1,14 @@
 "use client"
 
 import { useState, useEffect, Suspense } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
-import { Loader2, MapPin, Building2, Sparkles, ExternalLink } from "lucide-react"
+import { Loader2, MapPin, Building2, Sparkles, ExternalLink, ArrowLeft } from "lucide-react"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { REGIONS, type Scenario } from "@/lib/metrics.config"
 import { fetchSeries, type DataPoint } from "@/lib/data-service"
-import { createClient } from "@supabase/supabase-js"
+import { createBrowserClient } from "@supabase/ssr"
 
 // Components
 import { AssetCatchmentMap } from "@/components/asset-catchment-map"
@@ -30,6 +30,7 @@ interface SiteEvaluationData {
   region_code: string
   region_name: string
   site_name: string | null
+  headline: string | null
   brand: string | null
   brand_logo_url: string | null
   asset_class: string | null
@@ -39,10 +40,10 @@ interface SiteEvaluationData {
 }
 
 // -----------------------------------------------------------------------------
-// Supabase client for public access
+// Supabase browser client (session-aware, reads auth cookies)
 // -----------------------------------------------------------------------------
 
-const supabase = createClient(
+const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
@@ -56,6 +57,7 @@ interface SiteHeaderProps {
   postcode?: string | null
   regionName: string
   siteName?: string | null
+  headline?: string | null
   brand?: string | null
   brandLogoUrl?: string | null
   assetClass?: string | null
@@ -68,6 +70,7 @@ function SiteHeader({
   postcode,
   regionName,
   siteName,
+  headline,
   brand,
   brandLogoUrl,
   assetClass,
@@ -136,6 +139,13 @@ function SiteHeader({
           <p className="text-sm text-muted-foreground">{address}</p>
         )}
 
+        {/* Headline / description */}
+        {headline && (
+          <p className="text-base text-muted-foreground leading-relaxed mb-4">
+            {headline}
+          </p>
+        )}
+
         {/* Spacer to push metrics to bottom */}
         <div className="flex-grow" />
 
@@ -159,7 +169,9 @@ function SiteHeader({
 
 function SitePageContent() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const slug = params.slug as string
+  const fromPortfolio = searchParams.get("from") === "portfolio"
 
   const [site, setSite] = useState<SiteEvaluationData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -350,15 +362,25 @@ function SitePageContent() {
           
           <div className="hidden sm:flex items-center gap-3">
             <ThemeToggle />
-            <Link
-              href="https://regioniq.io"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Get full access
-              <ExternalLink className="h-3 w-3" />
-            </Link>
+            {fromPortfolio ? (
+              <Link
+                href="/portfolio"
+                className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back to Portfolio
+              </Link>
+            ) : (
+              <Link
+                href="https://regioniq.io"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Get full access
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -374,6 +396,7 @@ function SitePageContent() {
               postcode={site.postcode}
               regionName={site.region_name}
               siteName={site.site_name}
+              headline={site.headline}
               brand={site.brand}
               brandLogoUrl={site.brand_logo_url}
               assetClass={site.asset_class}

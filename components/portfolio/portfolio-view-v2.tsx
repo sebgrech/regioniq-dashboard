@@ -16,8 +16,10 @@ import {
   Building2,
   ChevronDown,
   LayoutGrid,
+  Plus,
   X,
 } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { CompanyLogo } from "@/components/company-logo"
 import type { PortfolioAssetItem } from "./portfolio-types"
 import { usePortfolioData } from "./use-portfolio-data"
@@ -27,19 +29,28 @@ import { PortfolioCharts } from "./portfolio-charts"
 import { PortfolioSignals } from "./portfolio-signals"
 
 // =============================================================================
-// Props (same interface as v1 for drop-in swap)
+// Props
 // =============================================================================
 
 interface PortfolioViewV2Props {
   assets: PortfolioAssetItem[]
   ownerFilter?: string | null
   allOwners?: string[]
+  /** "user" = user-facing portfolio, "admin" = admin view (default) */
+  mode?: "user" | "admin"
+  /** User email — used for company logo in user mode */
+  userEmail?: string | null
+  /** Callback to open the Add Site sheet (user mode) */
+  onAddSite?: () => void
 }
 
 export function PortfolioViewV2({
   assets,
   ownerFilter,
   allOwners = [],
+  mode = "admin",
+  userEmail,
+  onAddSite,
 }: PortfolioViewV2Props) {
   const data = usePortfolioData(assets)
   const [ownerDropdownOpen, setOwnerDropdownOpen] = useState(false)
@@ -109,13 +120,13 @@ export function PortfolioViewV2({
             </div>
           </div>
 
-          {/* Back to assets */}
+          {/* Back link — context-dependent */}
           <Link
-            href="/admin/assets"
+            href={mode === "user" ? "/dashboard" : "/admin/assets"}
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Back to Assets
+            {mode === "user" ? "Back to Dashboard" : "Back to Assets"}
           </Link>
         </div>
       </header>
@@ -128,8 +139,49 @@ export function PortfolioViewV2({
         <div className="mb-10 animate-fade-up rounded-2xl bg-muted/15 border border-border/30 px-6 py-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-            {/* Owner logo + name (when filtered) */}
-            {ownerFilter && (
+
+            {/* User mode — show company logo from email */}
+            {mode === "user" && (
+              <div className="flex items-center gap-4">
+                {userEmail && (() => {
+                  // Demo overrides — map specific emails to a brand domain
+                  const EMAIL_DOMAIN_OVERRIDES: Record<string, string> = {
+                    "slrgrech@hotmail.com": "kinrise.com",
+                  }
+                  const override = EMAIL_DOMAIN_OVERRIDES[userEmail.toLowerCase()]
+                  const domain = override || userEmail.split("@")[1]
+                  const consumerDomains = new Set(["gmail.com","googlemail.com","yahoo.com","yahoo.co.uk","outlook.com","hotmail.com","hotmail.co.uk","live.com","icloud.com","me.com","aol.com","protonmail.com","proton.me"])
+                  const isConsumer = !override && (!domain || consumerDomains.has(domain.toLowerCase()))
+                  return !isConsumer ? (
+                    <CompanyLogo
+                      domain={domain}
+                      size={52}
+                      showFallback={true}
+                      className="rounded-xl ring-1 ring-border/30 shadow-sm"
+                    />
+                  ) : null
+                })()}
+                <div>
+                  <h1 className="text-2xl font-bold text-foreground tracking-tight">
+                    My Portfolio
+                  </h1>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {assets.length} location{assets.length !== 1 ? "s" : ""}
+                    {" · "}
+                    {uniqueRegionCount} region{uniqueRegionCount !== 1 ? "s" : ""}
+                    {uniqueClasses.length > 0 && ` · ${uniqueClasses.join(", ")}`}
+                  </p>
+                  {editorialLine && (
+                    <p className="text-xs text-muted-foreground/50 mt-1">
+                      {editorialLine}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Admin mode — owner filter view */}
+            {mode === "admin" && ownerFilter && (
               <div className="flex items-center gap-4">
                 <CompanyLogo
                   name={ownerFilter}
@@ -156,8 +208,8 @@ export function PortfolioViewV2({
               </div>
             )}
 
-            {/* Generic heading */}
-            {!ownerFilter && (
+            {/* Admin mode — generic heading */}
+            {mode === "admin" && !ownerFilter && (
               <div>
                 <h1 className="text-2xl font-bold text-foreground tracking-tight">
                   Portfolio Overview
@@ -178,8 +230,19 @@ export function PortfolioViewV2({
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Owner dropdown */}
-            {!ownerFilter && allOwners.length > 0 && (
+            {/* User mode — Add Site button */}
+            {mode === "user" && onAddSite && (
+              <button
+                onClick={onAddSite}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all duration-200 shadow-sm"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Site
+              </button>
+            )}
+
+            {/* Admin mode — Owner dropdown */}
+            {mode === "admin" && !ownerFilter && allOwners.length > 0 && (
               <div className="relative">
                 <button
                   onClick={() => setOwnerDropdownOpen((p) => !p)}
@@ -226,8 +289,8 @@ export function PortfolioViewV2({
               </div>
             )}
 
-            {/* Clear filter */}
-            {ownerFilter && (
+            {/* Admin mode — Clear filter */}
+            {mode === "admin" && ownerFilter && (
               <Link
                 href="/admin/portfolio"
                 className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
@@ -245,10 +308,48 @@ export function PortfolioViewV2({
       {/* Sections — staggered entrance, dramatic spacing                  */}
       {/* ================================================================ */}
       <div className="stagger-children space-y-10">
-        {/* Section 1: Cards (left) + Map (right, matched height) */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
-          {/* Left: Apple-style grouped list */}
-          <div>
+        {/* Section 1: Cards + Map */}
+        {mode === "user" && assets.length >= 2 ? (
+          /* ── User mode, 2+ sites: side-by-side — cards left, map right (height matches cards) ── */
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-stretch">
+            <div>
+              <PortfolioCards
+                assets={assets}
+                visible={data.visible}
+                signalsMap={data.signalsMap}
+                selectedMetricLabel={data.selectedMetricConfig.label}
+                selectedMetricUnit={data.selectedMetricConfig.unit}
+                metricValueForAsset={data.metricValueForAsset}
+                isLoading={data.isLoading}
+                toggleAsset={data.toggleAsset}
+                hoveredAssetIndex={data.hoveredAssetIndex}
+                onAssetHover={data.setHoveredAssetIndex}
+                mode={mode}
+              />
+            </div>
+            <div className="rounded-2xl overflow-hidden border border-border/40 min-h-[280px]">
+              <PortfolioMap
+                assets={assets}
+                geocodedAssets={data.geocodedAssets}
+                visible={data.visible}
+                mapLoading={data.mapLoading}
+                mapRef={data.mapRef}
+                fitMapBounds={data.fitMapBounds}
+                toggleAsset={data.toggleAsset}
+                hoveredAssetIndex={data.hoveredAssetIndex}
+                onAssetHover={data.setHoveredAssetIndex}
+                signalsMap={data.signalsMap}
+                selectedMetric={data.selectedMetric}
+                setSelectedMetric={data.setSelectedMetric}
+                baseYear={data.baseYear}
+                ownerFilter={ownerFilter}
+                mode={mode}
+              />
+            </div>
+          </div>
+        ) : mode === "user" ? (
+          /* ── User mode, 1 site: cards full-width, map below as complementary preview ── */
+          <div className="space-y-5">
             <PortfolioCards
               assets={assets}
               visible={data.visible}
@@ -260,29 +361,67 @@ export function PortfolioViewV2({
               toggleAsset={data.toggleAsset}
               hoveredAssetIndex={data.hoveredAssetIndex}
               onAssetHover={data.setHoveredAssetIndex}
+              mode={mode}
             />
+            <div className="h-[280px] rounded-2xl overflow-hidden border border-border/40">
+              <PortfolioMap
+                assets={assets}
+                geocodedAssets={data.geocodedAssets}
+                visible={data.visible}
+                mapLoading={data.mapLoading}
+                mapRef={data.mapRef}
+                fitMapBounds={data.fitMapBounds}
+                toggleAsset={data.toggleAsset}
+                hoveredAssetIndex={data.hoveredAssetIndex}
+                onAssetHover={data.setHoveredAssetIndex}
+                signalsMap={data.signalsMap}
+                selectedMetric={data.selectedMetric}
+                setSelectedMetric={data.setSelectedMetric}
+                baseYear={data.baseYear}
+                ownerFilter={ownerFilter}
+                mode={mode}
+              />
+            </div>
           </div>
-
-          {/* Right: map — on mobile fixed 280px, on desktop stretches to match cards */}
-          <div className="h-[280px] lg:h-auto rounded-2xl overflow-hidden">
-            <PortfolioMap
-              assets={assets}
-              geocodedAssets={data.geocodedAssets}
-              visible={data.visible}
-              mapLoading={data.mapLoading}
-              mapRef={data.mapRef}
-              fitMapBounds={data.fitMapBounds}
-              toggleAsset={data.toggleAsset}
-              hoveredAssetIndex={data.hoveredAssetIndex}
-              onAssetHover={data.setHoveredAssetIndex}
-              signalsMap={data.signalsMap}
-              selectedMetric={data.selectedMetric}
-              setSelectedMetric={data.setSelectedMetric}
-              baseYear={data.baseYear}
-              ownerFilter={ownerFilter}
-            />
+        ) : (
+          /* ── Admin mode: side-by-side — wide cards left, sidebar map right ── */
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
+            <div>
+              <PortfolioCards
+                assets={assets}
+                visible={data.visible}
+                signalsMap={data.signalsMap}
+                selectedMetricLabel={data.selectedMetricConfig.label}
+                selectedMetricUnit={data.selectedMetricConfig.unit}
+                metricValueForAsset={data.metricValueForAsset}
+                isLoading={data.isLoading}
+                toggleAsset={data.toggleAsset}
+                hoveredAssetIndex={data.hoveredAssetIndex}
+                onAssetHover={data.setHoveredAssetIndex}
+                mode={mode}
+              />
+            </div>
+            <div className="h-[280px] lg:h-auto rounded-2xl overflow-hidden">
+              <PortfolioMap
+                assets={assets}
+                geocodedAssets={data.geocodedAssets}
+                visible={data.visible}
+                mapLoading={data.mapLoading}
+                mapRef={data.mapRef}
+                fitMapBounds={data.fitMapBounds}
+                toggleAsset={data.toggleAsset}
+                hoveredAssetIndex={data.hoveredAssetIndex}
+                onAssetHover={data.setHoveredAssetIndex}
+                signalsMap={data.signalsMap}
+                selectedMetric={data.selectedMetric}
+                setSelectedMetric={data.setSelectedMetric}
+                baseYear={data.baseYear}
+                ownerFilter={ownerFilter}
+                mode={mode}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Section 3: Charts */}
         <div>
