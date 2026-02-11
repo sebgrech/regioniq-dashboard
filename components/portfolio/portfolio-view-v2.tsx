@@ -112,7 +112,7 @@ export function PortfolioViewV2({
           {/* Back to assets */}
           <Link
             href="/admin/assets"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Back to Assets

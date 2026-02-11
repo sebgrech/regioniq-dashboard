@@ -389,7 +389,7 @@ export function PortfolioMap({
       {!mapLoading && geocodedAssets.length > 0 && (
         <button
           className={cn(
-            "absolute z-10 p-2 rounded-lg border shadow-md transition-all",
+            "absolute z-10 p-2 rounded-lg border shadow-md transition-all cursor-pointer",
             isFullscreen ? "bottom-5 left-5" : "bottom-3 left-3",
             showBoundaries
               ? "bg-primary/90 border-primary text-primary-foreground"
@@ -500,7 +500,7 @@ export function PortfolioMap({
                 <div className="flex items-center gap-3 flex-shrink-0">
                   <button
                     onClick={() => setIsFullscreen(false)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
                   >
                     <ArrowLeft className="h-3.5 w-3.5" />
                     Back
@@ -530,7 +530,7 @@ export function PortfolioMap({
                       key={metric.id}
                       onClick={() => setSelectedMetric(metric.id)}
                       className={cn(
-                        "w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-2",
+                        "w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-2 cursor-pointer",
                         selectedMetric === metric.id
                           ? "bg-primary/10 text-primary"
                           : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
@@ -553,7 +553,7 @@ export function PortfolioMap({
                   <button
                     onClick={() => setShowChoropleth(true)}
                     className={cn(
-                      "flex-1 text-xs py-1.5 rounded-md font-medium transition-all",
+                      "flex-1 text-xs py-1.5 rounded-md font-medium transition-all cursor-pointer",
                       showChoropleth
                         ? "bg-background shadow-sm text-foreground"
                         : "text-muted-foreground hover:text-foreground"
@@ -564,7 +564,7 @@ export function PortfolioMap({
                   <button
                     onClick={() => setShowChoropleth(false)}
                     className={cn(
-                      "flex-1 text-xs py-1.5 rounded-md font-medium transition-all",
+                      "flex-1 text-xs py-1.5 rounded-md font-medium transition-all cursor-pointer",
                       !showChoropleth
                         ? "bg-background shadow-sm text-foreground"
                         : "text-muted-foreground hover:text-foreground"
@@ -656,7 +656,7 @@ export function PortfolioMap({
       {/* Fullscreen toggle */}
       {!mapLoading && geocodedAssets.length > 0 && (
         <button
-          className="absolute top-3 left-3 z-10 p-2 rounded-lg bg-background/80 backdrop-blur-sm border border-border/60 shadow-md text-muted-foreground hover:text-foreground hover:scale-110 transition-all"
+          className="absolute top-3 left-3 z-10 p-2 rounded-lg bg-background/80 backdrop-blur-sm border border-border/60 shadow-md text-muted-foreground hover:text-foreground hover:scale-110 transition-all cursor-pointer"
           onClick={() => setIsFullscreen(true)}
           title="Expand map"
         >

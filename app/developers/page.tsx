@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -199,18 +200,52 @@ export default function DevelopersPage() {
         />
       )}
 
-      <div className="container mx-auto max-w-4xl py-8 px-4">
-        {/* Back button */}
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          className="mb-6 -ml-2 text-muted-foreground hover:text-foreground gap-2"
-          onClick={() => router.push("/dashboard")}
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Return to dashboard
-        </Button>
+      {/* Sticky top nav — logo + title + back (matches Portfolio page pattern) */}
+      <header className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+        <div className="w-full px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            {/* RegionIQ logo */}
+            <a href="https://regioniq.io" className="flex items-center gap-2.5">
+              <div className="relative h-9 w-9 flex-shrink-0">
+                <Image
+                  src="/x.png"
+                  alt="RegionIQ"
+                  fill
+                  className="object-contain dark:hidden"
+                  priority
+                />
+                <Image
+                  src="/Frame 11.png"
+                  alt="RegionIQ"
+                  fill
+                  className="object-contain hidden dark:block"
+                  priority
+                />
+              </div>
+              <span className="text-lg font-bold text-foreground tracking-tight">RegionIQ</span>
+            </a>
 
+            <div className="h-6 w-px bg-border/60" />
+
+            {/* Page title */}
+            <div className="flex items-center gap-2">
+              <Terminal className="h-4 w-4 text-primary" />
+              <span className="text-lg font-semibold text-foreground">Developer Portal</span>
+            </div>
+          </div>
+
+          {/* Back to dashboard */}
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Dashboard
+          </button>
+        </div>
+      </header>
+
+      <div className="container mx-auto max-w-4xl py-8 px-4">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">

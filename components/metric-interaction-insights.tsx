@@ -437,8 +437,8 @@ export function MetricInteractionInsights({
             <div
               key={pattern.id}
               className={cn(
-                // Premium tile styling with hover lift
-                "flex items-center gap-5 p-6 rounded-xl border transition-all duration-300",
+                // Compact tile styling with hover lift
+                "flex items-center gap-3.5 p-4 rounded-xl border transition-all duration-300",
                 "hover:-translate-y-0.5 hover:shadow-md",
                 signalColors[pattern.signal],
                 isRelevant && "ring-2 ring-primary/30",
@@ -450,37 +450,37 @@ export function MetricInteractionInsights({
               )}
               style={{ animationFillMode: "backwards" }}
             >
-              {/* Icon - larger, more prominent */}
-              <div className="p-3.5 rounded-lg bg-background/60 flex-shrink-0 shadow-sm">
-                <Icon className="h-6 w-6" />
+              {/* Icon */}
+              <div className="p-2.5 rounded-lg bg-background/60 flex-shrink-0 shadow-sm">
+                <Icon className="h-5 w-5" />
               </div>
               
               {/* Title + Caption */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-xl">{pattern.title}</span>
+                  <span className="font-semibold text-base">{pattern.title}</span>
                   {isRelevant && (
-                    <Badge variant="outline" className="text-sm h-6 px-2.5 bg-primary/10 border-primary/30">
+                    <Badge variant="outline" className="text-xs h-5 px-2 bg-primary/10 border-primary/30">
                       Current
                     </Badge>
                   )}
                 </div>
-                <p className="text-lg opacity-75 leading-snug mt-1">
+                <p className="text-sm opacity-75 leading-snug mt-0.5">
                   {pattern.caption}
                 </p>
               </div>
               
-              {/* Delta pill - more prominent */}
+              {/* Delta pill */}
               {pattern.delta && (
-                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
                   <div className={cn(
-                    "px-4 py-2.5 rounded-lg text-lg font-mono font-semibold shadow-sm",
+                    "px-3 py-1.5 rounded-lg text-sm font-mono font-semibold shadow-sm",
                     deltaPillColors[pattern.signal]
                   )}>
                     {pattern.delta}
                   </div>
                   {pattern.period && (
-                    <span className="text-base text-muted-foreground/60">{pattern.period}</span>
+                    <span className="text-xs text-muted-foreground/60">{pattern.period}</span>
                   )}
                 </div>
               )}

@@ -1011,12 +1011,16 @@ export function MapOverlaysDynamic({
 
   // Track the last selected region to detect when switching between regions
   const lastSelectedRegionRef = useRef<string | null>(null)
+  // Track initial mount — skip auto-zoom to selected region on first load so the user
+  // sees the full UK overview instead of being immediately zoomed into a single LAD.
+  const isInitialMountRef = useRef(true)
   
   // 5) Auto-zoom to selected region (priority) or fit bounds to all regions (initial load only)
   useEffect(() => {
     if (!mapbox || !enriched) return
     
-    // If selectedRegion is provided and matches current level, ALWAYS center and zoom to it
+    // If selectedRegion is provided and matches current level, center and zoom to it
+    // BUT skip on initial mount so the map shows the broader view first
     if (selectedRegion && selectedRegion.level === level) {
       const regionBbox = selectedRegion.bbox
       
@@ -1030,26 +1034,31 @@ export function MapOverlaysDynamic({
         const wasAlreadyFitted = didFitRef.current[level]
         lastSelectedRegionRef.current = selectedRegion.code
         
-        // If switching between regions at the same level, use smooth transition
-        // Otherwise, use standard fitBounds
-        const isRegionSwitch = isNewRegion && wasAlreadyFitted
-        
-        // ALWAYS center and zoom to the selected region
-        // fitBounds automatically centers the view on the bounding box
-        // This ensures the map re-centers every time a new region is clicked
-        mapbox.fitBounds(
-          [[regionBbox[0], regionBbox[1]], [regionBbox[2], regionBbox[3]]],
-          { 
-            padding: 40, 
-            duration: isRegionSwitch ? 600 : 800, // Faster transition when switching
-            pitch: 0, 
-            bearing: 0,
-            maxZoom: 15, // Allow zooming in for detailed regions
-            essential: true // Ensure this animation is not interrupted
-          }
-        )
-        didFitRef.current[level] = true // Mark as fitted so we don't fit to all regions
-        return
+        // On initial mount, record the region but don't zoom in — let the user see the full map
+        if (isInitialMountRef.current) {
+          isInitialMountRef.current = false
+          didFitRef.current[level] = true
+          // Fall through to the level-wide fitBounds below instead of zooming to the region
+        } else {
+          // If switching between regions at the same level, use smooth transition
+          // Otherwise, use standard fitBounds
+          const isRegionSwitch = isNewRegion && wasAlreadyFitted
+          
+          // Center and zoom to the selected region on user-initiated region changes
+          mapbox.fitBounds(
+            [[regionBbox[0], regionBbox[1]], [regionBbox[2], regionBbox[3]]],
+            { 
+              padding: 40, 
+              duration: isRegionSwitch ? 600 : 800,
+              pitch: 0, 
+              bearing: 0,
+              maxZoom: 15,
+              essential: true
+            }
+          )
+          didFitRef.current[level] = true
+          return
+        }
       } else {
         console.warn(`⚠️ [Map] Invalid bbox for region ${selectedRegion.code}:`, regionBbox)
       }
