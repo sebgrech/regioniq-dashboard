@@ -1,12 +1,12 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import ReactMarkdown from "react-markdown"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { RefreshCw, Sparkles, Clock, MessageSquare, ArrowLeft, TrendingUp, TrendingDown, Minus, ArrowRight } from "lucide-react"
 import { REGIONS, type Scenario } from "@/lib/metrics.config"
+import { CompanyLogo } from "@/components/company-logo"
 
 interface NarrativeAnalysisProps {
   region: string
@@ -42,7 +42,7 @@ function extractText(children: React.ReactNode): string {
   if (children && typeof children === 'object') {
     // Handle React elements
     if ('props' in children && children.props) {
-      return extractText(children.props.children)
+      return extractText((children.props as { children?: React.ReactNode }).children)
     }
     // Handle other object types
     if ('toString' in children) {
@@ -107,6 +107,9 @@ export function NarrativeAnalysis({
   const [lastGenerated, setLastGenerated] = useState<Date | null>(null)
   const [usingPlaceholder, setUsingPlaceholder] = useState(false)
   const [chatMode, setChatMode] = useState(false)
+  const chatScrollRef = useRef<HTMLDivElement>(null)
+  // Track whether the user has actively interacted (AI refresh or chat send)
+  const hasUserContent = useRef(false)
 
   const regionData = REGIONS.find((r) => r.code === region)
 
@@ -124,18 +127,38 @@ export function NarrativeAnalysis({
     return scenarioText
   }
 
+  // Only reset narrative on actual region/year/scenario changes — NOT on array ref changes.
+  // Skip reset entirely when user is mid-conversation or has generated content.
   useEffect(() => {
-    if (!isLoading && allMetricsData.length > 0) {
-      const initialNarrative = generateFallbackNarrative()
-      setNarrative(initialNarrative)
-      setMessages([{ role: "assistant", content: initialNarrative }])
-      setLastGenerated(new Date())
+    if (isLoading || allMetricsData.length === 0) return
+    // If the user is in chat mode or has already generated AI content, don't blow away their state
+    if (chatMode || hasUserContent.current) return
+    const initialNarrative = generateFallbackNarrative()
+    setNarrative(initialNarrative)
+    setMessages([{ role: "assistant", content: initialNarrative }])
+    setLastGenerated(new Date())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [region, year, scenario, isLoading])
+
+  // Reset user content flag when region/year/scenario changes (so next effect can set initial state)
+  useEffect(() => {
+    hasUserContent.current = false
+  }, [region, year, scenario])
+
+  // Auto-scroll chat to bottom when new messages arrive or generating indicator shows
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTo({
+        top: chatScrollRef.current.scrollHeight,
+        behavior: "smooth",
+      })
     }
-  }, [region, year, scenario, allMetricsData, allMetricsSeriesData, isLoading])
+  }, [messages, isGenerating])
 
   const handleRefresh = async () => {
     setIsGenerating(true)
     setUsingPlaceholder(false)
+    hasUserContent.current = true
 
     try {
       const response = await fetch("/api/narrative", {
@@ -174,10 +197,11 @@ export function NarrativeAnalysis({
 
   const handleSend = async () => {
     if (!input.trim()) return
-    const newMessages = [...messages, { role: "user", content: input }]
+    const newMessages: ChatMessage[] = [...messages, { role: "user" as const, content: input }]
     setMessages(newMessages)
     setInput("")
     setIsGenerating(true)
+    hasUserContent.current = true
 
     try {
       const response = await fetch("/api/narrative", {
@@ -203,13 +227,13 @@ export function NarrativeAnalysis({
       const data = await response.json()
       setMessages([
         ...newMessages,
-        { role: "assistant", content: data.error || data.fallback ? generateFallbackNarrative() : data.narrative },
+        { role: "assistant" as const, content: data.error || data.fallback ? generateFallbackNarrative() : data.narrative },
       ])
       setUsingPlaceholder(!!data.fallback)
       setLastGenerated(new Date(data.timestamp || new Date()))
     } catch (error) {
       console.error("Narrative fetch error:", error)
-      setMessages([...newMessages, { role: "assistant", content: generateFallbackNarrative() }])
+      setMessages([...newMessages, { role: "assistant" as const, content: generateFallbackNarrative() }])
       setUsingPlaceholder(true)
     } finally {
       setIsGenerating(false)
@@ -231,9 +255,13 @@ export function NarrativeAnalysis({
         <CardTitle className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-primary" />
           Insight
-          <Badge variant="outline" className="text-[10px] font-normal ml-1 px-1.5 py-0.5">
-            Powered by OpenAI
-          </Badge>
+          <CompanyLogo
+            domain="openai.com"
+            size={18}
+            showFallback={false}
+            className="ml-1 rounded-sm opacity-60"
+            alt="Powered by OpenAI"
+          />
         </CardTitle>
         <CardDescription>
           What matters in {regionData?.name} • {year}
@@ -349,7 +377,7 @@ export function NarrativeAnalysis({
         ) : (
           // Chat mode
           <div className="flex flex-col h-[400px]">
-            <div className="flex-1 overflow-y-auto space-y-4 text-sm pr-1">
+            <div ref={chatScrollRef} className="flex-1 overflow-y-auto space-y-4 text-sm pr-1">
               {messages.map((m, i) =>
                 m.role === "user" ? (
                   <div key={i} className="font-medium text-foreground bg-background/50 border border-border/50 rounded-lg p-3">
