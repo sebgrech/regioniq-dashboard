@@ -215,7 +215,7 @@ const VERDICT_VISUALS = [
   },
   { 
     type: "workforceSlack" as const, 
-    label: "Labour Capacity", 
+    label: "Labour Availability", 
     signal: "labour_capacity",
     metaphor: "Elastic tension - labour markets tighten like elastic",
     animation: "Bands bow inward + micro vibration (tight) vs relaxed straight (slack)"

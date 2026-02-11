@@ -20,7 +20,7 @@ interface ScenarioRobustnessProps {
 const SIGNAL_LABELS: Record<string, string> = {
   employment_density: "Job draw",
   income_capture: "Income retention",
-  labour_capacity: "Workforce capacity",
+  labour_capacity: "Labour Availability",
   productivity_strength: "Output per job",
   growth_composition: "Growth balance"
 }

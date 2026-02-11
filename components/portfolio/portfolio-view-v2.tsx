@@ -279,6 +279,7 @@ export function PortfolioViewV2({
               selectedMetric={data.selectedMetric}
               setSelectedMetric={data.setSelectedMetric}
               baseYear={data.baseYear}
+              ownerFilter={ownerFilter}
             />
           </div>
         </div>

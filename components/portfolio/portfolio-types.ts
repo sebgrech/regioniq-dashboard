@@ -50,7 +50,7 @@ export const SIGNAL_IDS = [
 export const SIGNAL_LABELS: Record<string, string> = {
   employment_density: "Job Draw",
   income_capture: "Income Retention",
-  labour_capacity: "Workforce",
+  labour_capacity: "Labour Availability",
   productivity_strength: "Productivity",
   growth_composition: "Growth Balance",
 }
@@ -153,14 +153,22 @@ export function formatAbsoluteValue(value: number, unit: string): string {
   }
 }
 
+// Signal-specific phrasing overrides for inverted signals
+const STRONG_OVERRIDE: Record<string, string> = {
+  labour_capacity: "Available labour pool",
+}
+const WEAK_OVERRIDE: Record<string, string> = {
+  labour_capacity: "tight labour market",
+}
+
 /** Plain-English signal digest for a region */
 export function signalDigest(signals: Record<string, SignalData>): string {
   const strong = Object.entries(signals)
     .filter(([, s]) => s.strength >= 3)
-    .map(([id]) => SIGNAL_LABELS[id])
+    .map(([id]) => STRONG_OVERRIDE[id] ?? SIGNAL_LABELS[id])
   const weak = Object.entries(signals)
     .filter(([, s]) => s.strength === 1)
-    .map(([id]) => SIGNAL_LABELS[id])
+    .map(([id]) => WEAK_OVERRIDE[id] ?? SIGNAL_LABELS[id])
   const parts: string[] = []
   if (strong.length)
     parts.push("Strong " + strong.slice(0, 2).join(" & ").toLowerCase())

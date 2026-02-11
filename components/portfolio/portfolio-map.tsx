@@ -27,6 +27,9 @@ import Link from "next/link"
 import type { PortfolioAssetItem, GeocodedAsset, RegionSignals } from "./portfolio-types"
 import { ASSET_COLORS, METRICS, shortAddress, getAssetClassIcon } from "./portfolio-types"
 import { MapOverlaysDynamic } from "@/components/map-overlays-dynamic"
+import { CompanyLogo } from "@/components/company-logo"
+import { Slider } from "@/components/ui/slider"
+import { YEARS } from "@/lib/metrics.config"
 
 // Stable mapbox lib reference (prevents re-initialization)
 const MAPBOX_LIB = import("mapbox-gl")
@@ -60,6 +63,8 @@ interface PortfolioMapProps {
   selectedMetric: string
   setSelectedMetric: (id: string) => void
   baseYear: number
+  /** Owner name for company logo in fullscreen toolbar */
+  ownerFilter?: string | null
 }
 
 export function PortfolioMap({
@@ -75,6 +80,7 @@ export function PortfolioMap({
   signalsMap,
   selectedMetric,
   setSelectedMetric,
+  ownerFilter,
   baseYear,
 }: PortfolioMapProps) {
   const { theme } = useTheme()
@@ -86,6 +92,7 @@ export function PortfolioMap({
   // ---- Fullscreen state ----
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showChoropleth, setShowChoropleth] = useState(true)
+  const [choroplethYear, setChoroplethYear] = useState(baseYear)
 
   // Portfolio LAD codes — used to mask the choropleth (portfolio at full opacity, rest faded)
   const maskCodes = useMemo(() => assets.map((a) => a.region_code), [assets])
@@ -249,7 +256,7 @@ export function PortfolioMap({
             <MapOverlaysDynamic
               show={true}
               metric={selectedMetric}
-              year={baseYear}
+              year={choroplethYear}
               scenario="baseline"
               level="LAD"
               mapMode="value"
@@ -449,7 +456,15 @@ export function PortfolioMap({
                 {/* Divider */}
                 <div className="h-5 w-px bg-border/50" />
 
-                {/* Title */}
+                {/* Owner logo + Title */}
+                {ownerFilter && (
+                  <CompanyLogo
+                    name={ownerFilter}
+                    size={24}
+                    showFallback={true}
+                    className="rounded-md ring-1 ring-border/20"
+                  />
+                )}
                 <h2 className="text-base font-semibold text-foreground tracking-tight">
                   Portfolio Map
                 </h2>
@@ -459,27 +474,6 @@ export function PortfolioMap({
               </div>
 
               <div className="flex items-center gap-3">
-                {/* Metric segmented control */}
-                <div className="flex gap-0.5 p-0.5 rounded-lg bg-muted/40">
-                  {METRICS.map((metric) => (
-                    <button
-                      key={metric.id}
-                      onClick={() => setSelectedMetric(metric.id)}
-                      className={cn(
-                        "px-2.5 py-1 rounded-md text-xs font-medium transition-all",
-                        selectedMetric === metric.id
-                          ? "bg-background text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      {metric.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Divider */}
-                <div className="h-5 w-px bg-border/50" />
-
                 {/* Choropleth toggle */}
                 <button
                   className={cn(
@@ -509,6 +503,61 @@ export function PortfolioMap({
             <div className="absolute inset-0 pt-12">
               <div className="relative w-full h-full">
                 {mapContent}
+              </div>
+            </div>
+
+            {/* Floating controls panel (bottom-left) — metric toggle + year slider */}
+            <div className="absolute bottom-5 left-5 z-20 w-[300px]">
+              <div className="rounded-2xl bg-background/90 backdrop-blur-md border border-border/40 shadow-lg overflow-hidden p-4 space-y-4">
+                {/* Metric selector */}
+                <div className="space-y-1.5">
+                  <h4 className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider">
+                    Indicator
+                  </h4>
+                  <div className="flex gap-0.5 p-0.5 rounded-lg bg-muted/40">
+                    {METRICS.map((metric) => (
+                      <button
+                        key={metric.id}
+                        onClick={() => setSelectedMetric(metric.id)}
+                        className={cn(
+                          "flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all",
+                          selectedMetric === metric.id
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {metric.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Year slider */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider">
+                      Year
+                    </h4>
+                    <span className="text-sm font-semibold text-foreground tabular-nums">
+                      {choroplethYear}
+                    </span>
+                  </div>
+                  <Slider
+                    value={[choroplethYear]}
+                    onValueChange={(value) => setChoroplethYear(value[0])}
+                    min={YEARS.min}
+                    max={YEARS.max}
+                    step={1}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-[10px] text-muted-foreground/50">
+                    <span>{YEARS.min}</span>
+                    <span className="text-muted-foreground/40">
+                      {choroplethYear > YEARS.forecastStart ? "forecast" : "historical"}
+                    </span>
+                    <span>{YEARS.max}</span>
+                  </div>
+                </div>
               </div>
             </div>
 
