@@ -7,7 +7,7 @@ import { Map, useMap, type MapRef } from "@vis.gl/react-mapbox"
 import { useTheme } from "next-themes"
 import "mapbox-gl/dist/mapbox-gl.css"
 
-import { ZoomIn, ZoomOut, Maximize, Info, MapPin, Search, Download, Copy, X, Target, ArrowLeft } from "lucide-react"
+import { ZoomIn, ZoomOut, Maximize, Info, MapPin, Search, Download, X, Target, ArrowLeft, Globe } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -85,8 +85,6 @@ function MapControls({
 }) {
   const maps = useMap() as any
   const map = maps?.[mapId] ?? maps?.default ?? maps?.current
-  const [copied, setCopied] = useState(false)
-
   // Resize map when fullscreen state changes
   useEffect(() => {
     if (!map) return
@@ -123,20 +121,6 @@ function MapControls({
     setIsFullscreen(!isFullscreen)
   }
 
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1200)
-    } catch {
-      // Fallback for environments where clipboard is blocked
-      try {
-        window.prompt("Copy link:", shareUrl)
-      } catch {
-        // ignore
-      }
-    }
-  }
 
   return (
     <div className={cn(
@@ -178,25 +162,6 @@ function MapControls({
         </TooltipTrigger>
         <TooltipContent side="left" align="center" sideOffset={10} className="pointer-events-none">
           Zoom Out
-        </TooltipContent>
-      </Tooltip>
-
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleCopyLink}
-            className={cn(
-              "p-0 opacity-80 hover:opacity-100 transition-opacity",
-              isFullscreen ? "h-8 w-8" : "h-6 w-6"
-            )}
-          >
-            <Copy className={isFullscreen ? "h-3.5 w-3.5" : "h-3 w-3"} />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="left" align="center" sideOffset={10} className="pointer-events-none">
-          {copied ? "Copied!" : "Copy link"}
         </TooltipContent>
       </Tooltip>
 
@@ -388,11 +353,10 @@ function FullscreenToolbar({
   return (
     <div className="absolute top-0 left-0 right-0 z-[10] border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div className="w-full px-6 py-4 flex items-center justify-between">
-        {/* Left cluster: Logo only */}
-        <div className="flex items-center gap-6 min-w-0 flex-shrink-0">
+        {/* Left cluster: Logo + title */}
+        <div className="flex items-center gap-4 min-w-0 flex-shrink-0">
           {/* Logo */}
-          <div className="relative h-20 w-20 flex-shrink-0">
-            {/* Light mode logo */}
+          <div className="relative h-16 w-16 flex-shrink-0">
             <Image
               src="/x.png"
               alt="RegionIQ"
@@ -400,7 +364,6 @@ function FullscreenToolbar({
               className="object-contain dark:hidden"
               priority
             />
-            {/* Dark mode logo */}
             <Image
               src="/Frame 11.png"
               alt="RegionIQ"
@@ -409,46 +372,55 @@ function FullscreenToolbar({
               priority
             />
           </div>
-        </div>
-
-        {/* Middle cluster: Year slider with dynamic label */}
-        <div className="flex-1 px-12">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Year</span>
+          <div className="h-8 w-px bg-border/50" />
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/10">
+              <Globe className="h-5 w-5 text-primary" />
             </div>
-            
-            <Slider
-              value={[year]}
-              onValueChange={(value) => onYearChange?.(value[0])}
-              min={YEARS.min}
-              max={YEARS.max}
-              step={1}
-              className="w-full"
-            />
-            
-            {/* Dynamic year text below slider */}
-            <div className="relative h-4">
-              <div 
-                className="absolute transform -translate-x-1/2 text-sm font-medium pointer-events-none"
-                style={{ 
-                  left: `${getYearLabelPosition()}%`,
-                  transition: 'none'
-                }}
-              >
-                {year}
-              </div>
-            </div>
-            
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{YEARS.min}</span>
-              <span>{YEARS.max}</span>
-            </div>
+            <h2 className="text-xl font-semibold text-foreground tracking-tight">
+              Regional Map
+            </h2>
           </div>
         </div>
 
-        {/* Right cluster: Scenario + Export */}
+        {/* Right cluster: Year slider + Scenario + Back */}
         <div className="flex items-center gap-6 flex-shrink-0">
+          {/* Year slider */}
+          <div className="w-[280px]">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Year</span>
+              </div>
+              
+              <Slider
+                value={[year]}
+                onValueChange={(value) => onYearChange?.(value[0])}
+                min={YEARS.min}
+                max={YEARS.max}
+                step={1}
+                className="w-full"
+              />
+              
+              {/* Dynamic year text below slider */}
+              <div className="relative h-4">
+                <div 
+                  className="absolute transform -translate-x-1/2 text-sm font-medium pointer-events-none"
+                  style={{ 
+                    left: `${getYearLabelPosition()}%`,
+                    transition: 'none'
+                  }}
+                >
+                  {year}
+                </div>
+              </div>
+              
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{YEARS.min}</span>
+                <span>{YEARS.max}</span>
+              </div>
+            </div>
+          </div>
+
           {/* Scenario Toggle */}
           <div className="flex rounded-lg border p-1">
             {(["baseline", "upside", "downside"] as const).map((s) => (

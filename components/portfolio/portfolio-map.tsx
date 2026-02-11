@@ -20,10 +20,12 @@ import {
   NavigationControl,
 } from "@vis.gl/react-mapbox"
 import "mapbox-gl/dist/mapbox-gl.css"
-import { ArrowLeft, MapPin, Loader2, Layers, Maximize, X } from "lucide-react"
+import { ArrowLeft, MapPin, Loader2, Layers, Maximize, X, ZoomIn, ZoomOut, Target } from "lucide-react"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { PortfolioAssetItem, GeocodedAsset, RegionSignals } from "./portfolio-types"
 import { ASSET_COLORS, METRICS, shortAddress, getAssetClassIcon } from "./portfolio-types"
 import { MapOverlaysDynamic } from "@/components/map-overlays-dynamic"
@@ -249,7 +251,7 @@ export function PortfolioMap({
             }
           }}
         >
-          <NavigationControl position="top-right" showCompass={false} />
+          {!isFullscreen && <NavigationControl position="top-right" showCompass={false} />}
 
           {/* ---- Fullscreen choropleth overlay (all LADs shaded by metric) ---- */}
           {isFullscreen && showChoropleth && (
@@ -367,13 +369,19 @@ export function PortfolioMap({
                     )}
                   >
                     <div
-                      className="bg-popover/95 backdrop-blur-sm border border-border rounded-lg shadow-lg px-3 py-2 whitespace-nowrap"
-                      style={{ fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif" }}
+                      className="font-sans bg-popover/95 backdrop-blur-sm border border-border rounded-lg shadow-lg px-3 py-2 whitespace-nowrap"
+                      style={{ fontFamily: "var(--font-plus-jakarta-sans), 'Plus Jakarta Sans', sans-serif" }}
                     >
-                      <p className="text-xs font-medium text-foreground">
-                        {shortAddress(asset.address, 35)}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                      <div className="flex items-center gap-1.5">
+                        {(() => {
+                          const Icon = getAssetClassIcon(asset.asset_class)
+                          return <Icon className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                        })()}
+                        <p className="text-xs font-medium text-foreground">
+                          {shortAddress(asset.address, 35)}
+                        </p>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 ml-[18px]">
                         {asset.region_name}
                       </p>
                     </div>
@@ -418,7 +426,7 @@ export function PortfolioMap({
         {createPortal(
           <div
             className="fixed inset-0 z-[9999] bg-background"
-            style={{ fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif" }}
+            style={{ fontFamily: "var(--font-plus-jakarta-sans), 'Plus Jakarta Sans', sans-serif" }}
           >
             {/* ============================================================= */}
             {/* Top toolbar — mirrors map-scaffold.tsx FullscreenToolbar        */}
@@ -444,17 +452,17 @@ export function PortfolioMap({
                       priority
                     />
                   </div>
-                  <div className="h-6 w-px bg-border/50" />
+                  <div className="h-8 w-px bg-border/50" />
                   {ownerFilter && (
                     <CompanyLogo
                       name={ownerFilter}
-                      size={28}
+                      size={36}
                       showFallback={true}
                       className="rounded-lg ring-1 ring-border/20"
                     />
                   )}
                   <div>
-                    <h2 className="text-sm font-semibold text-foreground tracking-tight leading-tight">
+                    <h2 className="text-lg font-bold text-foreground tracking-tight leading-tight">
                       Portfolio Map
                     </h2>
                     <span className="text-xs text-muted-foreground">
@@ -463,41 +471,41 @@ export function PortfolioMap({
                   </div>
                 </div>
 
-                {/* Center cluster: Year slider */}
-                <div className="flex-1 px-12">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Year</span>
-                    </div>
-                    <Slider
-                      value={[choroplethYear]}
-                      onValueChange={(value) => setChoroplethYear(value[0])}
-                      min={YEARS.min}
-                      max={YEARS.max}
-                      step={1}
-                      className="w-full"
-                    />
-                    {/* Dynamic year label that follows the thumb */}
-                    <div className="relative h-4">
-                      <div
-                        className="absolute transform -translate-x-1/2 text-sm font-medium pointer-events-none"
-                        style={{
-                          left: `${((choroplethYear - YEARS.min) / (YEARS.max - YEARS.min)) * 100}%`,
-                          transition: "none",
-                        }}
-                      >
-                        {choroplethYear}
+                {/* Right cluster: Year slider + Back */}
+                <div className="flex items-center gap-6 flex-shrink-0">
+                  {/* Year slider — compact width */}
+                  <div className="w-[340px]">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Year</span>
+                      </div>
+                      <Slider
+                        value={[choroplethYear]}
+                        onValueChange={(value) => setChoroplethYear(value[0])}
+                        min={YEARS.min}
+                        max={YEARS.max}
+                        step={1}
+                        className="w-full"
+                      />
+                      {/* Dynamic year label that follows the thumb */}
+                      <div className="relative h-4">
+                        <div
+                          className="absolute transform -translate-x-1/2 text-sm font-medium pointer-events-none"
+                          style={{
+                            left: `${((choroplethYear - YEARS.min) / (YEARS.max - YEARS.min)) * 100}%`,
+                            transition: "none",
+                          }}
+                        >
+                          {choroplethYear}
+                        </div>
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>{YEARS.min}</span>
+                        <span>{YEARS.max}</span>
                       </div>
                     </div>
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>{YEARS.min}</span>
-                      <span>{YEARS.max}</span>
-                    </div>
                   </div>
-                </div>
 
-                {/* Right cluster: Back + Close */}
-                <div className="flex items-center gap-3 flex-shrink-0">
                   <button
                     onClick={() => setIsFullscreen(false)}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
@@ -517,10 +525,90 @@ export function PortfolioMap({
             </div>
 
             {/* ============================================================= */}
+            {/* Zoom + Catchment controls (left side, matching full-width map) */}
+            {/* ============================================================= */}
+            <div className="absolute top-[108px] right-3 z-30 flex flex-col gap-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      const map = mapRef.current
+                      if (!map) return
+                      const z = map.getZoom?.() ?? 5
+                      map.zoomTo?.(Math.min(z + 1, 12), { duration: 250 })
+                    }}
+                    className="p-0 h-8 w-8 opacity-80 hover:opacity-100 transition-opacity"
+                  >
+                    <ZoomIn className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left" align="center" sideOffset={10} className="pointer-events-none">
+                  Zoom In
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      const map = mapRef.current
+                      if (!map) return
+                      const z = map.getZoom?.() ?? 5
+                      map.zoomTo?.(Math.max(z - 1, 3), { duration: 250 })
+                    }}
+                    className="p-0 h-8 w-8 opacity-80 hover:opacity-100 transition-opacity"
+                  >
+                    <ZoomOut className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left" align="center" sideOffset={10} className="pointer-events-none">
+                  Zoom Out
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsFullscreen(false)}
+                    className="p-0 h-8 w-8 opacity-80 hover:opacity-100 transition-opacity"
+                  >
+                    <Maximize className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left" align="center" sideOffset={10} className="pointer-events-none">
+                  Exit Fullscreen
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link href="/catchment">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="p-0 h-8 w-8 opacity-80 hover:opacity-100 transition-opacity bg-primary/10 hover:bg-primary/20"
+                    >
+                      <Target className="h-3.5 w-3.5" />
+                    </Button>
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="left" align="center" sideOffset={10} className="pointer-events-none">
+                  Catchment Analysis
+                </TooltipContent>
+              </Tooltip>
+            </div>
+
+            {/* ============================================================= */}
             {/* Right-side floating panel — mirrors map-scaffold.tsx           */}
             {/* FullscreenControls pattern: indicators + controls stacked      */}
             {/* ============================================================= */}
-            <div className="absolute top-[116px] right-4 z-20 w-[320px] flex flex-col gap-3 max-h-[calc(100vh-132px)]">
+            <div className="absolute top-[260px] right-4 z-20 w-[320px] flex flex-col gap-3 max-h-[calc(100vh-276px)]">
               {/* Indicator selector */}
               <div className="bg-background/90 backdrop-blur-md rounded-lg border border-border/50 shadow-lg p-3">
                 <h4 className="text-xs font-semibold mb-2 text-foreground/90">Indicators</h4>

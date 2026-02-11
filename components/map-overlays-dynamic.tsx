@@ -1011,18 +1011,12 @@ export function MapOverlaysDynamic({
 
   // Track the last selected region to detect when switching between regions
   const lastSelectedRegionRef = useRef<string | null>(null)
-  // Track the initial (URL-derived) region code so we never auto-zoom to it.
-  // Only genuinely new user clicks (different code) should trigger zoom-to-region.
-  const initialRegionCodeRef = useRef<string | null>(null)
-  // Once the user has clicked a different region, allow zooming even back to the initial one.
-  const hasUserNavigatedRef = useRef(false)
   
   // 5) Auto-zoom to selected region (priority) or fit bounds to all regions (initial load only)
   useEffect(() => {
     if (!mapbox || !enriched) return
     
-    // If selectedRegion is provided and matches current level, center and zoom to it
-    // BUT only when the user has actually clicked a different region (not the initial URL-derived one)
+    // If selectedRegion is provided and matches current level, ALWAYS center and zoom to it
     if (selectedRegion && selectedRegion.level === level) {
       const regionBbox = selectedRegion.bbox
       
@@ -1031,51 +1025,31 @@ export function MapOverlaysDynamic({
           regionBbox[0] >= -180 && regionBbox[0] <= 180 && regionBbox[1] >= -90 && regionBbox[1] <= 90 &&
           regionBbox[2] >= -180 && regionBbox[2] <= 180 && regionBbox[3] >= -90 && regionBbox[3] <= 90) {
         
-        // Record the very first region code we see — this is the URL-derived region from page load
-        if (initialRegionCodeRef.current === null) {
-          initialRegionCodeRef.current = selectedRegion.code
-        }
-        
         // Check if this is a different region than the last one
         const isNewRegion = lastSelectedRegionRef.current !== selectedRegion.code
         const wasAlreadyFitted = didFitRef.current[level]
         lastSelectedRegionRef.current = selectedRegion.code
         
-        // Mark that the user has navigated if we see a genuinely different code
-        if (isNewRegion && selectedRegion.code !== initialRegionCodeRef.current) {
-          hasUserNavigatedRef.current = true
-        }
+        // If switching between regions at the same level, use smooth transition
+        // Otherwise, use standard fitBounds
+        const isRegionSwitch = isNewRegion && wasAlreadyFitted
         
-        // Suppress auto-zoom for the initial (URL-derived) region.
-        // This prevents the mount cascade (component mounts → metadata arrives → level auto-changes)
-        // from zooming into the pre-selected region. The user should see the full UK overview first.
-        // Once the user has clicked a different region, allow zooming even back to the initial one.
-        const isInitialRegion = selectedRegion.code === initialRegionCodeRef.current && !hasUserNavigatedRef.current
-        
-        if (isInitialRegion) {
-          didFitRef.current[level] = true
-          // Fall through to the level-wide fitBounds below instead of zooming to the region
-        } else if (!isNewRegion && wasAlreadyFitted) {
-          // Same region, already fitted at this level — no need to re-zoom
-          return
-        } else {
-          // User selected a different region → zoom to it
-          const isRegionSwitch = isNewRegion && wasAlreadyFitted
-          
-          mapbox.fitBounds(
-            [[regionBbox[0], regionBbox[1]], [regionBbox[2], regionBbox[3]]],
-            { 
-              padding: 40, 
-              duration: isRegionSwitch ? 600 : 800,
-              pitch: 0, 
-              bearing: 0,
-              maxZoom: 15,
-              essential: true
-            }
-          )
-          didFitRef.current[level] = true
-          return
-        }
+        // ALWAYS center and zoom to the selected region
+        // fitBounds automatically centers the view on the bounding box
+        // This ensures the map re-centers every time a new region is clicked
+        mapbox.fitBounds(
+          [[regionBbox[0], regionBbox[1]], [regionBbox[2], regionBbox[3]]],
+          { 
+            padding: 40, 
+            duration: isRegionSwitch ? 600 : 800,
+            pitch: 0, 
+            bearing: 0,
+            maxZoom: 15,
+            essential: true
+          }
+        )
+        didFitRef.current[level] = true
+        return
       } else {
         console.warn(`⚠️ [Map] Invalid bbox for region ${selectedRegion.code}:`, regionBbox)
       }
@@ -1342,16 +1316,16 @@ export function MapOverlaysDynamic({
         />
       </Source>
 
-      {/* Hover tooltip — uses design tokens + explicit Jakarta Sans (matches portfolio-map) */}
+      {/* Hover tooltip — inline fontFamily to beat Mapbox GL's unlayered CSS cascade */}
       {hoverInfo && (
         <div
-          className="bg-popover/95 backdrop-blur-sm border border-border rounded-lg shadow-lg p-3 min-w-[200px] z-50 pointer-events-auto"
+          className="font-sans bg-popover/95 backdrop-blur-sm border border-border rounded-lg shadow-lg p-3 min-w-[200px] z-50 pointer-events-auto"
           style={{ 
-            fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif",
+            fontFamily: "var(--font-plus-jakarta-sans), 'Plus Jakarta Sans', sans-serif",
             position: "absolute",
             left: hoverInfo.x + 10, 
             top: hoverInfo.y + 10,
-            transform: "translate(0, -50%)", // Center vertically on cursor
+            transform: "translate(0, -50%)",
           }}
         >
           <div className="flex items-center gap-2 mb-2">
