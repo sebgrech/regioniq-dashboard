@@ -1,6 +1,6 @@
 "use client"
 
-import { MapPin, Plus } from "lucide-react"
+import { ArrowLeft, MapPin, Plus } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 
@@ -45,6 +45,7 @@ export function PortfolioEmpty({ onAddSite, userEmail }: PortfolioEmptyProps) {
             href="/dashboard"
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
+            <ArrowLeft className="h-3.5 w-3.5" />
             Back to Dashboard
           </Link>
         </div>

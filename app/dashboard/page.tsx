@@ -78,7 +78,7 @@ function DashboardContent() {
 
   // Get region: URL param > default to UKI (avoid localStorage during SSR to prevent hydration mismatch)
   const region = getSearchParam(searchParams, "region", "UKI")
-  const year = getSearchParamNumber(searchParams, "year", 2024)
+  const year = getSearchParamNumber(searchParams, "year", 2026)
   const scenario = getSearchParam(searchParams, "scenario", "baseline") as Scenario
 
   const [mapMetric, setMapMetric] = useState("nominal_gva_mn_gbp")
