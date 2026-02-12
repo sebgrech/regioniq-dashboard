@@ -651,28 +651,28 @@ function DashboardContent() {
               
               if (positiveCount === totalCount) {
                 return (
-                  <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
+                  <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
                     <TrendingUp className="h-3 w-3" />
                     All metrics {growVerb}
                   </div>
                 )
               } else if (negativeCount === totalCount) {
                 return (
-                  <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+                  <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-red-500/15 text-red-400 border border-red-500/20">
                     <TrendingDown className="h-3 w-3" />
                     All metrics {declineVerb}
                   </div>
                 )
               } else if (positiveCount > negativeCount) {
                 return (
-                  <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
+                  <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
                     <TrendingUp className="h-3 w-3" />
                     {positiveCount}/{totalCount} {growVerb}
                   </div>
                 )
               } else if (negativeCount > positiveCount) {
                 return (
-                  <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                  <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/20">
                     <TrendingDown className="h-3 w-3" />
                     {negativeCount}/{totalCount} {declineVerb}
                   </div>

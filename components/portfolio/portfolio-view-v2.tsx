@@ -147,6 +147,7 @@ export function PortfolioViewV2({
                   // Demo overrides — map specific emails to a brand domain
                   const EMAIL_DOMAIN_OVERRIDES: Record<string, string> = {
                     "slrgrech@hotmail.com": "kinrise.com",
+                    "seb@regioniq.io": "kinrise.com",
                   }
                   const override = EMAIL_DOMAIN_OVERRIDES[userEmail.toLowerCase()]
                   const domain = override || userEmail.split("@")[1]
