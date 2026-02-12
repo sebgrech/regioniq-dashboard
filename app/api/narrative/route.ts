@@ -123,53 +123,116 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // For chat mode, also fetch comparison region data if mentioned
+    // For chat mode, detect mentioned regions and fetch data accordingly.
+    // Key fix: if the user mentions two regions and neither is the current
+    // dashboard region, override the primary to the first mentioned region
+    // so the answer actually compares what was asked about.
     let comparisonRegionData: any = null
+    let effectiveRegion = region
+    let effectiveRegionName = regionName
+    let effectiveCurrentValues = currentValues
+    let effectiveHistoricalSeries = historicalSeries
+    let effectivePreviousValues = previousValues
+
     if (isChatMode && messages && messages.length > 0) {
       const lastMessage = messages[messages.length - 1]?.content || ""
-      // Check if message mentions another region (simple heuristic - look for region names)
+      // Find all regions mentioned in the user's message
       const regionMentions = REGIONS.filter((r) => 
         lastMessage.toLowerCase().includes(r.name.toLowerCase())
       )
-      if (regionMentions.length > 0) {
-        const comparisonRegion = regionMentions.find((r) => r.code !== region) || regionMentions[0]
-        if (comparisonRegion && comparisonRegion.code !== region) {
-          try {
-            // Fetch data for comparison region
-            const comparisonMetrics = await Promise.all(
-              ["population_total", "nominal_gva_mn_gbp", "gdhi_per_head_gbp", "emp_total_jobs"].map(
-                async (metricId) => {
-                  const data = await fetchSeries({
-                    metricId,
-                    region: comparisonRegion.code,
-                    scenario: scenario as Scenario,
-                  })
-                  return { metricId, data }
-                }
-              )
-            )
-            const comparisonCurrentValues: Record<string, number> = {}
-            const comparisonHistoricalSeries: Record<string, Array<{ year: number; value: number }>> = {}
-            
-            for (const { metricId, data } of comparisonMetrics) {
-              const currentYearData = data.find((d: any) => d.year === year)
-              comparisonCurrentValues[metricId] = currentYearData?.value || 0
-              
-            const historical = data
-              .filter((d: any) => d.year <= year + 5) // Include forecast years for range questions
-              .map((d: any) => ({ year: d.year, value: d.value || 0 }))
-            comparisonHistoricalSeries[metricId] = historical
+      // Deduplicate: if "Leeds" matches both ITL3 and LAD, prefer LAD (more granular)
+      const deduped = regionMentions.reduce((acc, r) => {
+        const existing = acc.find((a) => a.name === r.name)
+        if (!existing) acc.push(r)
+        else if (r.level === "LAD" && existing.level !== "LAD") {
+          acc[acc.indexOf(existing)] = r
+        }
+        return acc
+      }, [] as typeof regionMentions)
+
+      // Helper: fetch all 4 core metrics for a region
+      const fetchRegionData = async (regionCode: string) => {
+        const metrics = await Promise.all(
+          ["population_total", "nominal_gva_mn_gbp", "gdhi_per_head_gbp", "emp_total_jobs"].map(
+            async (metricId) => {
+              const data = await fetchSeries({
+                metricId,
+                region: regionCode,
+                scenario: scenario as Scenario,
+              })
+              return { metricId, data }
             }
-            
+          )
+        )
+        const cv: Record<string, number> = {}
+        const hs: Record<string, Array<{ year: number; value: number }>> = {}
+        const pv: Record<string, number> = {}
+        for (const { metricId, data } of metrics) {
+          const currentYearData = data.find((d: any) => d.year === year)
+          cv[metricId] = currentYearData?.value || 0
+          const prevYearData = data.find((d: any) => d.year === previousYear)
+          if (prevYearData) pv[metricId] = prevYearData.value || 0
+          hs[metricId] = data
+            .filter((d: any) => d.year <= year + 5)
+            .map((d: any) => ({ year: d.year, value: d.value || 0 }))
+        }
+        return { currentValues: cv, historicalSeries: hs, previousValues: pv }
+      }
+
+      if (deduped.length >= 2) {
+        // Two regions mentioned — figure out primary and comparison
+        const matchesDashboard = deduped.find((r) => r.code === region)
+        const others = deduped.filter((r) => r.code !== region)
+
+        let primaryRegion: typeof deduped[0]
+        let compRegion: typeof deduped[0]
+
+        if (matchesDashboard && others.length >= 1) {
+          // One of the mentioned regions IS the dashboard region — keep it as primary
+          primaryRegion = matchesDashboard
+          compRegion = others[0]
+        } else {
+          // Neither matches dashboard — override primary to first mentioned, second as comparison
+          primaryRegion = deduped[0]
+          compRegion = deduped[1]
+        }
+
+        try {
+          // If primary is not the dashboard region, fetch fresh data for it
+          if (primaryRegion.code !== region) {
+            const primaryData = await fetchRegionData(primaryRegion.code)
+            effectiveRegion = primaryRegion.code
+            effectiveRegionName = primaryRegion.name
+            effectiveCurrentValues = primaryData.currentValues
+            effectiveHistoricalSeries = primaryData.historicalSeries
+            effectivePreviousValues = primaryData.previousValues
+          }
+
+          // Fetch comparison region data
+          const compData = await fetchRegionData(compRegion.code)
+          comparisonRegionData = {
+            regionName: compRegion.name,
+            regionCode: compRegion.code,
+            currentValues: compData.currentValues,
+            historicalSeries: compData.historicalSeries,
+          }
+        } catch (error) {
+          console.error("Error fetching region data for comparison:", error)
+        }
+      } else if (deduped.length === 1) {
+        // Single region mentioned — use as comparison if different from dashboard
+        const compRegion = deduped[0]
+        if (compRegion.code !== region) {
+          try {
+            const compData = await fetchRegionData(compRegion.code)
             comparisonRegionData = {
-              regionName: comparisonRegion.name,
-              regionCode: comparisonRegion.code,
-              currentValues: comparisonCurrentValues,
-              historicalSeries: comparisonHistoricalSeries,
+              regionName: compRegion.name,
+              regionCode: compRegion.code,
+              currentValues: compData.currentValues,
+              historicalSeries: compData.historicalSeries,
             }
           } catch (error) {
             console.error("Error fetching comparison region data:", error)
-            // Continue without comparison data
           }
         }
       }
@@ -268,19 +331,19 @@ Now write the insight (or output the "no divergences" message if nothing meaning
     const chatPrompt = isChatMode && messages && messages.length > 0
       ? `You are analyzing UK regional economic data. Answer the user's question using the following data:
 
-**Primary Region: ${regionName || region} (${year}, ${scenario} scenario)**
+**Primary Region: ${effectiveRegionName || effectiveRegion} (${year}, ${scenario} scenario)**
 
 Current Values:
-${JSON.stringify(currentValues, null, 2)}
+${JSON.stringify(effectiveCurrentValues, null, 2)}
 
 Previous Year Values:
-${JSON.stringify(previousValues, null, 2)}
+${JSON.stringify(effectivePreviousValues, null, 2)}
 
 UK Averages (for comparison):
 ${JSON.stringify(ukAverages, null, 2)}
 
 Historical Series (last 10 years):
-${JSON.stringify(historicalSeries, null, 2)}
+${JSON.stringify(effectiveHistoricalSeries, null, 2)}
 
 ${comparisonRegionData ? `
 **Comparison Region: ${comparisonRegionData.regionName}**
