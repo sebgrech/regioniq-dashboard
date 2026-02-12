@@ -111,6 +111,7 @@ const PHASES: PhaseConfig[] = [
       { name: "Commuting Patterns", coverage: "Census 2021", source: "Census", effort: "Medium", icpValue: "Catchment definition", icon: ArrowRightLeft },
       { name: "Planning Pipeline", coverage: "Glenigan / scraping", source: "Glenigan", effort: "High", icpValue: "Development plays", icon: Hammer },
       { name: "SIC Codes / Companies", coverage: "Companies House + BRES", source: "CH / NOMIS", effort: "Medium", icpValue: "Tenant demand, sector depth", icon: Building2 },
+      { name: "Regional Headlines (News)", coverage: "Curated news feeds per LAD", source: "News APIs / RSS", effort: "Medium", icpValue: "Market sentiment, local context", icon: Layers },
     ],
   },
 ]
