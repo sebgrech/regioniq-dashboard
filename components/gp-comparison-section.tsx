@@ -33,6 +33,10 @@ interface GPComparisonSectionProps {
   leaseExpiry?: string | null
   /** Asset class - used to show additional metrics for specific asset types */
   assetClass?: string | null
+  /** Optional override for primary series color (default: purple). */
+  mainColor?: string
+  /** Optional override for peer series colors. */
+  peerColors?: string[]
 }
 
 interface MetricConfig {
@@ -119,7 +123,11 @@ export function GPComparisonSection({
   scenario,
   leaseExpiry,
   assetClass,
+  mainColor,
+  peerColors,
 }: GPComparisonSectionProps) {
+  const activeMainColor = mainColor ?? MAIN_COLOR
+  const activePeerColors = (peerColors && peerColors.length > 0) ? peerColors : PEER_COLORS
   const { theme } = useTheme()
   const isDarkMode = theme === "dark"
   const gridStroke = isDarkMode ? "#333333" : "#E5E7EB"
@@ -424,14 +432,14 @@ export function GPComparisonSection({
     // Get main region value at base year
     const mainPoint = mainData.find(d => d.year === baseYear)
     if (mainPoint) {
-      data.push({ name: regionName, value: mainPoint.value, color: MAIN_COLOR, isMain: true })
+      data.push({ name: regionName, value: mainPoint.value, color: activeMainColor, isMain: true })
     }
     
     // Get peer values at base year
     peersData.forEach((peer, i) => {
       const peerPoint = peer.data.find(d => d.year === baseYear)
       if (peerPoint) {
-        data.push({ name: peer.name, value: peerPoint.value, color: PEER_COLORS[i % PEER_COLORS.length], isMain: false })
+        data.push({ name: peer.name, value: peerPoint.value, color: activePeerColors[i % activePeerColors.length], isMain: false })
       }
     })
     
@@ -674,7 +682,7 @@ export function GPComparisonSection({
                       type="monotone"
                       dataKey={`peer${i}_hist`}
                       name={peer.name}
-                      stroke={PEER_COLORS[i % PEER_COLORS.length]}
+                      stroke={activePeerColors[i % activePeerColors.length]}
                       strokeWidth={2}
                       dot={false}
                       strokeOpacity={0.8}
@@ -688,7 +696,7 @@ export function GPComparisonSection({
                       type="monotone"
                       dataKey={`peer${i}_fcst`}
                       name={`${peer.name} (F)`}
-                      stroke={PEER_COLORS[i % PEER_COLORS.length]}
+                      stroke={activePeerColors[i % activePeerColors.length]}
                       strokeWidth={2}
                       dot={false}
                       strokeDasharray="4 3"
@@ -701,10 +709,10 @@ export function GPComparisonSection({
                     type="monotone"
                     dataKey="main_hist"
                     name={regionName}
-                    stroke={MAIN_COLOR}
+                    stroke={activeMainColor}
                     strokeWidth={3}
                     dot={false}
-                    activeDot={{ r: 4, strokeWidth: 2, fill: MAIN_COLOR }}
+                    activeDot={{ r: 4, strokeWidth: 2, fill: activeMainColor }}
                   />
                   
                   {/* Main region - forecast (dashed, prominent) */}
@@ -712,11 +720,11 @@ export function GPComparisonSection({
                     type="monotone"
                     dataKey="main_fcst"
                     name={`${regionName} (F)`}
-                    stroke={MAIN_COLOR}
+                    stroke={activeMainColor}
                     strokeWidth={3}
                     dot={false}
                     strokeDasharray="6 3"
-                    activeDot={{ r: 4, strokeWidth: 2, fill: MAIN_COLOR }}
+                    activeDot={{ r: 4, strokeWidth: 2, fill: activeMainColor }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -725,12 +733,12 @@ export function GPComparisonSection({
             {/* Legend */}
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11px] px-1 mt-3">
               <span className="flex items-center gap-2">
-                <span className="w-4 h-1 rounded-full" style={{ backgroundColor: MAIN_COLOR }} />
+                <span className="w-4 h-1 rounded-full" style={{ backgroundColor: activeMainColor }} />
                 <span className="text-foreground font-medium">{regionName}</span>
               </span>
               {peersData.map((peer, i) => (
                 <span key={peer.name} className="flex items-center gap-2">
-                  <span className="w-4 h-1 rounded-full" style={{ backgroundColor: PEER_COLORS[i % PEER_COLORS.length] }} />
+                  <span className="w-4 h-1 rounded-full" style={{ backgroundColor: activePeerColors[i % activePeerColors.length] }} />
                   <span className="text-muted-foreground">{peer.name}</span>
                 </span>
               ))}

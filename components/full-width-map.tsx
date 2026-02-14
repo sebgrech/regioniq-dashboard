@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { REGIONS, METRICS, type Scenario } from "@/lib/metrics.config"
+import { REGIONS, METRICS, type Metric, type Scenario } from "@/lib/metrics.config"
 import { formatValue, formatPercentage, calculateChange, type DataPoint, fetchChoropleth } from "@/lib/data-service"
 import { MapScaffold } from "@/components/map-scaffold"
 import { TrendingUp, TrendingDown, MapPin } from "lucide-react"
@@ -14,6 +14,7 @@ import { getGrowthMapType, getMapColorForValue, type MapType, DIVERGING_GROWTH_M
 import type { RegionMetadata, RegionLevel } from "@/components/region-search"
 
 type MapMode = "value" | "growth"
+type FullWidthMapMode = "default" | "map-only"
 
 /** Calculate CAGR (Compound Annual Growth Rate) */
 function calculateCAGR(startValue: number, endValue: number, years: number): number {
@@ -41,6 +42,17 @@ interface FullWidthMapProps {
   onScenarioChange?: (scenario: Scenario) => void
   onExport?: () => void
   onFullscreenChange?: (isFullscreen: boolean) => void
+  mode?: FullWidthMapMode
+  defaultLevel?: RegionLevel
+  lockLevelToDefault?: boolean
+  showPersistentControls?: boolean
+  showGranularityAtAllLevels?: boolean
+  showUkGranularityOption?: boolean
+  showViewDetailsCta?: boolean
+  showCatchmentAction?: boolean
+  metrics?: Metric[]
+  mapControlsSide?: "left" | "right"
+  fullscreenBrandMode?: "default" | "dtre"
 }
 
 export function FullWidthMap({
@@ -57,17 +69,35 @@ export function FullWidthMap({
   onScenarioChange,
   onExport,
   onFullscreenChange,
+  mode = "default",
+  defaultLevel,
+  lockLevelToDefault = false,
+  showPersistentControls = false,
+  showGranularityAtAllLevels = false,
+  showUkGranularityOption = true,
+  showViewDetailsCta = true,
+  showCatchmentAction = true,
+  metrics = METRICS,
+  mapControlsSide = "right",
+  fullscreenBrandMode = "default",
 }: FullWidthMapProps) {
   // Auto-switch level based on selected region metadata
-  const [level, setLevel] = useState<RegionLevel>("ITL1")
+  const [level, setLevel] = useState<RegionLevel>(defaultLevel ?? "ITL1")
   const [mapMode, setMapMode] = useState<MapMode>("value")
   const [growthPeriod, setGrowthPeriod] = useState<number>(5) // Default to 5yr for backward compatibility
   
   useEffect(() => {
+    if (defaultLevel) {
+      setLevel(defaultLevel)
+    }
+  }, [defaultLevel])
+
+  useEffect(() => {
+    if (lockLevelToDefault) return
     if (selectedRegionMetadata) {
       setLevel(selectedRegionMetadata.level)
     }
-  }, [selectedRegionMetadata])
+  }, [selectedRegionMetadata, lockLevelToDefault])
   const [rankData, setRankData] = useState<{
     rank: number
     total: number
@@ -82,7 +112,7 @@ export function FullWidthMap({
   const [isLoadingRank, setIsLoadingRank] = useState(false)
 
   const region = REGIONS.find((r) => r.code === selectedRegion)
-  const selectedMetric = METRICS.find((m) => m.id === mapMetric)
+  const selectedMetric = metrics.find((m) => m.id === mapMetric)
   
   // Calculate YoY change if time series data is available
   const metricSeriesData = allMetricsSeriesData?.find((d) => d.metricId === mapMetric)
@@ -241,6 +271,44 @@ export function FullWidthMap({
     }
   }, [mapMetric, level, year, scenario, selectedRegion, growthPeriod])
 
+  if (mode === "map-only") {
+    return (
+      <div className="w-full h-[680px] bg-neutral-50/80 dark:bg-neutral-900/30 border border-border/50 overflow-hidden shadow-sm">
+        <MapScaffold
+          selectedRegion={selectedRegion}
+          selectedRegionMetadata={selectedRegionMetadata}
+          metrics={metrics}
+          metric={mapMetric}
+          year={year}
+          scenario={scenario}
+          level={level}
+          mapMode={mapMode}
+          growthPeriod={growthPeriod}
+          onLevelChange={setLevel}
+          onRegionSelect={onRegionSelect}
+          onMetricChange={onMapMetricChange}
+          onMapModeChange={setMapMode}
+          onGrowthPeriodChange={setGrowthPeriod}
+          onYearChange={onYearChange}
+          onScenarioChange={onScenarioChange}
+          onExport={onExport}
+          onFullscreenChange={onFullscreenChange}
+          showPersistentControls={showPersistentControls}
+          showGranularityAtAllLevels={showGranularityAtAllLevels}
+          showUkGranularityOption={showUkGranularityOption}
+          showViewDetailsCta={showViewDetailsCta}
+          showCatchmentAction={showCatchmentAction}
+          mapControlsSide={mapControlsSide}
+          fullscreenBrandMode={fullscreenBrandMode}
+          mapId="dashboard-map"
+          className="h-full"
+          showRegionInfo={false}
+          hideHeader={true}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="w-full bg-neutral-50/80 dark:bg-neutral-900/30 rounded-xl border border-border/50 overflow-hidden shadow-sm">
       {/* Full-width contextual header with badge inline */}
@@ -310,6 +378,7 @@ export function FullWidthMap({
             <MapScaffold
               selectedRegion={selectedRegion}
               selectedRegionMetadata={selectedRegionMetadata}
+              metrics={metrics}
               metric={mapMetric}
               year={year}
               scenario={scenario}
@@ -325,6 +394,9 @@ export function FullWidthMap({
               onScenarioChange={onScenarioChange}
               onExport={onExport}
               onFullscreenChange={onFullscreenChange}
+              showUkGranularityOption={showUkGranularityOption}
+              mapControlsSide={mapControlsSide}
+              fullscreenBrandMode={fullscreenBrandMode}
               mapId="dashboard-map"
               className="h-full"
               showRegionInfo={false}
@@ -432,7 +504,7 @@ export function FullWidthMap({
               <div className="space-y-2 mb-3">
               <h4 className="text-xs font-medium tracking-wide text-neutral-500 dark:text-neutral-400 uppercase">Indicators</h4>
               <div className="grid grid-cols-2 lg:grid-cols-1 gap-0.5">
-                {METRICS.map((metric) => {
+                {metrics.map((metric) => {
                   const isSelected = metric.id === mapMetric
                   return (
                     <Button

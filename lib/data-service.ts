@@ -23,6 +23,8 @@ export interface ChoroplethData {
   values: Record<string, number>
 }
 
+const DERIVED_GVA_PER_JOB_METRIC_ID = "gva_per_job"
+
 // Generate metadata
 // Note: version/vintage should come from the Data API /version endpoint, not hard-coded here.
 // This function provides fallback metadata for client-side Supabase queries.
@@ -250,6 +252,34 @@ export async function fetchSeries(params: {
   region: string  // ITL/LAD code from UI (e.g., "UKI" or "E06000001")
   scenario: Scenario
 }): Promise<DataPoint[]> {
+  if (params.metricId === DERIVED_GVA_PER_JOB_METRIC_ID) {
+    const [gvaSeries, jobsSeries] = await Promise.all([
+      fetchSeries({ metricId: "nominal_gva_mn_gbp", region: params.region, scenario: params.scenario }),
+      fetchSeries({ metricId: "emp_total_jobs", region: params.region, scenario: params.scenario }),
+    ])
+
+    const gvaByYear = new Map(gvaSeries.map((d) => [d.year, d]))
+    const jobsByYear = new Map(jobsSeries.map((d) => [d.year, d]))
+    const commonYears = Array.from(gvaByYear.keys())
+      .filter((year) => jobsByYear.has(year))
+      .sort((a, b) => a - b)
+
+    return commonYears
+      .map((year) => {
+        const gva = gvaByYear.get(year)
+        const jobs = jobsByYear.get(year)
+        if (!gva || !jobs || !isFinite(gva.value) || !isFinite(jobs.value) || jobs.value <= 0) return null
+        return {
+          year,
+          // GVA is £m, so scale to £ before dividing by jobs.
+          value: (gva.value * 1_000_000) / jobs.value,
+          type: gva.type === "forecast" || jobs.type === "forecast" ? "forecast" : "historical",
+          data_quality: gva.data_quality ?? jobs.data_quality ?? null,
+        } as DataPoint
+      })
+      .filter((point): point is DataPoint => point !== null)
+  }
+
   const { scenario } = params
 
   // Handle NI-specific metric/table quirks (jobs metric_id + ITL1 storage)
@@ -368,6 +398,32 @@ export async function fetchChoropleth(params: {
 }): Promise<ChoroplethData> {
   const { level, year, scenario } = params
   const metricId = params.metricId
+
+  if (metricId === DERIVED_GVA_PER_JOB_METRIC_ID) {
+    const [gvaData, jobsData] = await Promise.all([
+      fetchChoropleth({ metricId: "nominal_gva_mn_gbp", level, year, scenario }),
+      fetchChoropleth({ metricId: "emp_total_jobs", level, year, scenario }),
+    ])
+
+    const values: Record<string, number> = {}
+    let min = Number.POSITIVE_INFINITY
+    let max = Number.NEGATIVE_INFINITY
+
+    Object.entries(gvaData.values).forEach(([code, gva]) => {
+      const jobs = jobsData.values[code]
+      if (!isFinite(gva) || !isFinite(jobs) || jobs <= 0) return
+      const value = (gva * 1_000_000) / jobs
+      values[code] = value
+      min = Math.min(min, value)
+      max = Math.max(max, value)
+    })
+
+    if (Object.keys(values).length === 0) {
+      return { min: 0, max: 0, values: {} }
+    }
+
+    return { min, max, values }
+  }
 
   // Determine table name based on level
   const tableName = level === "UK" ? "macro_latest_all" :

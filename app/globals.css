@@ -251,6 +251,92 @@ html {
   }
 }
 
+.font-dxtre {
+  font-family: var(--font-plus-jakarta-sans), "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+@font-face {
+  font-family: "Gestura Text";
+  src: url("/fonts/GesturaTextTRIAL-Regular-BF64b755042cf0f.otf") format("opentype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Gestura Text";
+  src: url("/fonts/GesturaTextTRIAL-Regular-BF64b755042cf0f.otf") format("opentype");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Gestura Text";
+  src: url("/fonts/GesturaTextTRIAL-Semibold-BF64b755043a198.otf") format("opentype");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Gestura Text";
+  src: url("/fonts/GesturaTextTRIAL-Bold-BF64b7550477781.otf") format("opentype");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Gestura Display";
+  src: url("/fonts/GesturaDisplayTRIAL-Regular-BF64b755043c4b8.otf") format("opentype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "TT Commons Pro";
+  src: url("/fonts/TT_Commons_Pro_Trial_Regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "TT Commons Pro";
+  src: url("/fonts/TT_Commons_Pro_Trial_Medium.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "TT Commons Pro";
+  src: url("/fonts/TT_Commons_Pro_Trial_DemiBold.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "TT Commons Pro";
+  src: url("/fonts/TT_Commons_Pro_Trial_Bold.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+[data-dtre-mode="true"] {
+  --primary: oklch(0.48 0.18 255);
+  --primary-foreground: oklch(1 0 0);
+}
+
+.dark [data-dtre-mode="true"] {
+  --primary: oklch(0.58 0.15 255);
+  --primary-foreground: oklch(1 0 0);
+}
+
 /* -------- Export capture guardrails (PNG) -------- */
 /* When a node is being captured to PNG, suppress transient UI and export controls. */
 [data-riq-exporting="true"] .recharts-tooltip-wrapper,

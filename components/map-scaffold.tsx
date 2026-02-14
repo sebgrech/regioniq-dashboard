@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Slider } from "@/components/ui/slider"
 import { cn } from "@/lib/utils"
-import { REGIONS, METRICS, YEARS, type Scenario } from "@/lib/metrics.config"
+import { REGIONS, METRICS, YEARS, type Metric, type Scenario } from "@/lib/metrics.config"
 import { formatValue } from "@/lib/data-service"
 
 // ✅ Dynamic overlay
@@ -28,6 +28,8 @@ import type { RegionMetadata, RegionLevel } from "@/components/region-search"
 import type { ChoroplethStats } from "@/lib/map/choropleth-stats"
 import { INTERACTIVE_LAYER_IDS, PROPERTY_MAP, SOURCE_ID, canonicalRegionCode, fillLayerId } from "@/lib/map/region-layers"
 type MapMode = "value" | "growth"
+type MapControlsSide = "left" | "right"
+type FullscreenBrandMode = "default" | "dtre"
 
 interface MapScaffoldProps {
   selectedRegion: string
@@ -45,6 +47,7 @@ interface MapScaffoldProps {
   /** Optional: draw a parent outline boundary layer (e.g. ITL1 boundary while showing LAD fills). */
   parentOutline?: { level: RegionLevel; code: string } | null
   onLevelChange?: (level: RegionLevel) => void
+  
   onRegionSelect?: (metadata: RegionMetadata) => void
   onMetricChange?: (metricId: string) => void
   onMapModeChange?: (mode: MapMode) => void
@@ -57,6 +60,14 @@ interface MapScaffoldProps {
   showRegionInfo?: boolean // Control whether to show the bottom-left region info bubble
   hideHeader?: boolean // Control whether to hide the CardHeader
   headerSubtitle?: React.ReactNode // Optional line under "Regional Map" (e.g. region name)
+  showPersistentControls?: boolean // Show map mode/level/indicator controls outside fullscreen
+  showGranularityAtAllLevels?: boolean // Allow granularity toggles even when level is not UK
+  showUkGranularityOption?: boolean // Whether to include UK in granularity options
+  showViewDetailsCta?: boolean // Show "View Details" button in hover card
+  showCatchmentAction?: boolean // Show catchment shortcut in map controls
+  metrics?: Metric[] // Optional metric list override (defaults to global METRICS)
+  mapControlsSide?: MapControlsSide // Position zoom/fullscreen controls
+  fullscreenBrandMode?: FullscreenBrandMode // Fullscreen toolbar logo branding
   mapId: string // Unique map id (required to avoid cross-instance interference)
 }
 
@@ -74,6 +85,8 @@ function MapControls({
   selectedRegion,
   year,
   scenario,
+  showCatchmentAction = true,
+  controlsSide = "right",
 }: {
   isFullscreen: boolean
   setIsFullscreen: (v: boolean) => void
@@ -82,6 +95,8 @@ function MapControls({
   selectedRegion?: string
   year?: number
   scenario?: string
+  showCatchmentAction?: boolean
+  controlsSide?: MapControlsSide
 }) {
   const maps = useMap() as any
   const map = maps?.[mapId] ?? maps?.default ?? maps?.current
@@ -125,7 +140,9 @@ function MapControls({
   return (
     <div className={cn(
       "absolute flex flex-col gap-2 z-30",
-      isFullscreen ? "top-36 right-3" : "top-3 right-3"
+      isFullscreen
+        ? (controlsSide === "left" ? "top-36 left-3" : "top-36 right-3")
+        : (controlsSide === "left" ? "top-3 left-3" : "top-3 right-3")
     )}>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -184,26 +201,27 @@ function MapControls({
         </TooltipContent>
       </Tooltip>
 
-      {/* Catchment Analysis Button */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Link href={`/catchment${selectedRegion ? `?region=${selectedRegion}${year ? `&year=${year}` : ""}${scenario && scenario !== "baseline" ? `&scenario=${scenario}` : ""}` : ""}`}>
-            <Button
-              variant="secondary"
-              size="sm"
-              className={cn(
-                "p-0 opacity-80 hover:opacity-100 transition-opacity bg-primary/10 hover:bg-primary/20",
-                isFullscreen ? "h-8 w-8" : "h-6 w-6"
-              )}
-            >
-              <Target className={isFullscreen ? "h-3.5 w-3.5" : "h-3 w-3"} />
-            </Button>
-          </Link>
-        </TooltipTrigger>
-        <TooltipContent side="left" align="center" sideOffset={10} className="pointer-events-none">
-          Catchment Analysis
-        </TooltipContent>
-      </Tooltip>
+      {showCatchmentAction ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Link href={`/catchment${selectedRegion ? `?region=${selectedRegion}${year ? `&year=${year}` : ""}${scenario && scenario !== "baseline" ? `&scenario=${scenario}` : ""}` : ""}`}>
+              <Button
+                variant="secondary"
+                size="sm"
+                className={cn(
+                  "p-0 opacity-80 hover:opacity-100 transition-opacity bg-primary/10 hover:bg-primary/20",
+                  isFullscreen ? "h-8 w-8" : "h-6 w-6"
+                )}
+              >
+                <Target className={isFullscreen ? "h-3.5 w-3.5" : "h-3 w-3"} />
+              </Button>
+            </Link>
+          </TooltipTrigger>
+          <TooltipContent side="left" align="center" sideOffset={10} className="pointer-events-none">
+            Catchment Analysis
+          </TooltipContent>
+        </Tooltip>
+      ) : null}
     </div>
   )
 }
@@ -337,13 +355,16 @@ function FullscreenToolbar({
   onYearChange,
   onScenarioChange,
   onBack,
+  brandMode = "default",
 }: {
   year: number
   scenario: Scenario
   onYearChange?: (year: number) => void
   onScenarioChange?: (scenario: Scenario) => void
   onBack?: () => void
+  brandMode?: FullscreenBrandMode
 }) {
+  const [dtreLogoLoadError, setDtreLogoLoadError] = useState(false)
   // Calculate the position of the year label
   const getYearLabelPosition = () => {
     const percentage = ((year - YEARS.min) / (YEARS.max - YEARS.min)) * 100
@@ -357,20 +378,37 @@ function FullscreenToolbar({
         <div className="flex items-center gap-4 min-w-0 flex-shrink-0">
           {/* Logo */}
           <div className="relative h-16 w-16 flex-shrink-0">
-            <Image
-              src="/x.png"
-              alt="RegionIQ"
-              fill
-              className="object-contain dark:hidden"
-              priority
-            />
-            <Image
-              src="/Frame 11.png"
-              alt="RegionIQ"
-              fill
-              className="object-contain hidden dark:block"
-              priority
-            />
+            {brandMode === "dtre" ? (
+              !dtreLogoLoadError ? (
+                <img
+                  src="https://img.logo.dev/dtre.com?size=140&format=png"
+                  alt="DTRE"
+                  className="h-16 w-16 object-contain"
+                  onError={() => setDtreLogoLoadError(true)}
+                />
+              ) : (
+                <div className="h-16 w-16 flex items-center justify-center text-sm font-semibold tracking-wide text-foreground">
+                  DTRE
+                </div>
+              )
+            ) : (
+              <>
+                <Image
+                  src="/x.png"
+                  alt="RegionIQ"
+                  fill
+                  className="object-contain dark:hidden"
+                  priority
+                />
+                <Image
+                  src="/Frame 11.png"
+                  alt="RegionIQ"
+                  fill
+                  className="object-contain hidden dark:block"
+                  priority
+                />
+              </>
+            )}
           </div>
           <div className="h-8 w-px bg-border/50" />
           <div className="flex items-center gap-3">
@@ -456,26 +494,34 @@ function FullscreenToolbar({
 function FullscreenControls({
   currentMetric,
   currentLevel,
+  metrics = METRICS,
   currentMapMode,
   currentGrowthPeriod,
   onMetricChange,
   onLevelChange,
   onMapModeChange,
   onGrowthPeriodChange,
+  showGranularityAtAllLevels = false,
+  showUkGranularityOption = true,
 }: {
   currentMetric: string
   currentLevel: RegionLevel
+  metrics?: Metric[]
   currentMapMode?: MapMode
   currentGrowthPeriod?: number
   onMetricChange?: (metricId: string) => void
   onLevelChange?: (level: RegionLevel) => void
   onMapModeChange?: (mode: MapMode) => void
   onGrowthPeriodChange?: (period: number) => void
+  showGranularityAtAllLevels?: boolean
+  showUkGranularityOption?: boolean
 }) {
-  const levels: RegionLevel[] = ["UK", "ITL1", "ITL2", "ITL3", "LAD"]
+  const levels: RegionLevel[] = showUkGranularityOption
+    ? ["UK", "ITL1", "ITL2", "ITL3", "LAD"]
+    : ["ITL1", "ITL2", "ITL3", "LAD"]
 
   return (
-    <div className="absolute bottom-16 right-4 z-[10] flex flex-col gap-3 max-w-[calc(100vw-2rem)]">
+    <div className="absolute bottom-10 right-4 z-[10] flex flex-col gap-3 max-w-[calc(100vw-2rem)]">
       {/* Map Display Mode Toggle */}
       {onMapModeChange && (
         <div className="bg-background/90 backdrop-blur-md rounded-lg border border-border/50 shadow-lg p-3">
@@ -535,7 +581,7 @@ function FullscreenControls({
       )}
 
       {/* Level Selector - Only show when UK is selected (other levels navigate via click) */}
-      {onLevelChange && currentLevel === "UK" && (
+      {onLevelChange && (currentLevel === "UK" || showGranularityAtAllLevels) && (
         <div className="bg-background/90 backdrop-blur-md rounded-lg border border-border/50 shadow-lg p-3">
           <h4 className="text-sm font-semibold mb-2 text-foreground/90">Granularity</h4>
           <div className="flex rounded-lg border p-1">
@@ -564,7 +610,7 @@ function FullscreenControls({
         <div className="bg-background/90 backdrop-blur-md rounded-lg border border-border/50 shadow-lg p-4 w-[260px]">
           <h4 className="text-sm font-semibold mb-3 text-foreground/90">Indicators</h4>
           <div className="space-y-1 max-h-[400px] overflow-y-auto">
-            {METRICS.map((m) => {
+            {metrics.map((m) => {
               const isSelected = m.id === currentMetric
               return (
                 <Button
@@ -601,6 +647,7 @@ function MapContainerInner({
   selectedRegion,
   selectedRegionMetadata,
   focusRegionMetadata,
+  metrics = METRICS,
   metric,
   year,
   scenario,
@@ -620,11 +667,19 @@ function MapContainerInner({
   isFullscreen,
   setIsFullscreen,
   showRegionInfo = true,
+  showPersistentControls = false,
+  showGranularityAtAllLevels = false,
+  showUkGranularityOption = true,
+  showViewDetailsCta = true,
+  showCatchmentAction = true,
+  mapControlsSide = "right",
+  fullscreenBrandMode = "default",
   mapId,
 }: {
   selectedRegion: string
   selectedRegionMetadata?: RegionMetadata | null
   focusRegionMetadata?: RegionMetadata | null
+  metrics?: Metric[]
   metric: string
   year: number
   scenario: string
@@ -644,6 +699,13 @@ function MapContainerInner({
   isFullscreen: boolean
   setIsFullscreen: (v: boolean) => void
   showRegionInfo?: boolean
+  showPersistentControls?: boolean
+  showGranularityAtAllLevels?: boolean
+  showUkGranularityOption?: boolean
+  showViewDetailsCta?: boolean
+  showCatchmentAction?: boolean
+  mapControlsSide?: MapControlsSide
+  fullscreenBrandMode?: FullscreenBrandMode
   mapId: string
 }) {
   const router = useRouter()
@@ -697,7 +759,7 @@ function MapContainerInner({
     value: number | null
   } | null>(null)
 
-  const metricInfo = useMemo(() => METRICS.find((m) => m.id === metric), [metric])
+  const metricInfo = useMemo(() => metrics.find((m) => m.id === metric), [metric, metrics])
 
   const shareUrl = useMemo(() => {
     if (typeof window === "undefined") return ""
@@ -1203,6 +1265,7 @@ function MapContainerInner({
                 parentOutline={parentOutline}
                 hoverInfo={hoverInfo}
                 onChoroplethStats={setChoroplethStats}
+                showViewDetailsCta={showViewDetailsCta}
                 mapId={mapId}
               />
 
@@ -1211,9 +1274,14 @@ function MapContainerInner({
                 <div
                   className={cn(
                     "absolute z-30 pointer-events-auto",
-                    // In fullscreen, keep clear of the top-left logo (toolbar) by anchoring under the right-side control stack.
-                    // MapControls in fullscreen starts at `top-36 right-3`; this places the pin just below that stack.
-                    isFullscreen ? "top-72 right-3 left-auto" : "top-3 left-3"
+                    // Keep this under the zoom/fullscreen control stack in both normal and fullscreen modes.
+                    isFullscreen
+                      ? mapControlsSide === "left"
+                        ? "top-72 left-3"
+                        : "top-72 right-3 left-auto"
+                      : mapControlsSide === "left"
+                        ? "top-24 left-3"
+                        : "top-24 right-3 left-auto"
                   )}
                 >
                   <div className="font-sans bg-card/95 backdrop-blur border rounded-lg shadow-sm px-3 py-2 min-w-[240px]">
@@ -1287,6 +1355,8 @@ function MapContainerInner({
                 selectedRegion={selectedRegion}
                 year={year}
                 scenario={scenario}
+                showCatchmentAction={showCatchmentAction}
+                controlsSide={mapControlsSide}
               />
             </Map>
 
@@ -1299,16 +1369,26 @@ function MapContainerInner({
             onYearChange={onYearChange}
             onScenarioChange={onScenarioChange}
             onBack={() => setIsFullscreen(false)}
+            brandMode={fullscreenBrandMode}
           />
+        </>
+      )}
+
+      {/* Map controls are available in fullscreen and optional persistent mode */}
+      {(isFullscreen || showPersistentControls) && (
+        <>
           <FullscreenControls
             currentMetric={metric}
             currentLevel={level}
+            metrics={metrics}
             currentMapMode={mapMode}
             currentGrowthPeriod={growthPeriod}
             onMetricChange={onMetricChange}
             onLevelChange={onLevelChange}
             onMapModeChange={onMapModeChange}
             onGrowthPeriodChange={onGrowthPeriodChange}
+            showGranularityAtAllLevels={showGranularityAtAllLevels}
+            showUkGranularityOption={showUkGranularityOption}
           />
         </>
       )}
@@ -1338,6 +1418,7 @@ export function MapScaffold({
   selectedRegion,
   selectedRegionMetadata,
   focusRegionMetadata,
+  metrics = METRICS,
   metric,
   year,
   scenario,
@@ -1359,6 +1440,13 @@ export function MapScaffold({
   showRegionInfo = true,
   hideHeader = false,
   headerSubtitle,
+  showPersistentControls = false,
+  showGranularityAtAllLevels = false,
+  showUkGranularityOption = true,
+  showViewDetailsCta = true,
+  showCatchmentAction = true,
+  mapControlsSide = "right",
+  fullscreenBrandMode = "default",
   mapId,
 }: MapScaffoldProps) {
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -1404,6 +1492,7 @@ export function MapScaffold({
       selectedRegion={selectedRegion}
       selectedRegionMetadata={selectedRegionMetadata}
       focusRegionMetadata={focusRegionMetadata}
+      metrics={metrics}
       metric={metric}
       year={year}
       scenario={scenario}
@@ -1423,6 +1512,13 @@ export function MapScaffold({
       isFullscreen={isFullscreen}
       setIsFullscreen={setIsFullscreen}
       showRegionInfo={showRegionInfo}
+      showPersistentControls={showPersistentControls}
+      showGranularityAtAllLevels={showGranularityAtAllLevels}
+      showUkGranularityOption={showUkGranularityOption}
+      showViewDetailsCta={showViewDetailsCta}
+      showCatchmentAction={showCatchmentAction}
+      mapControlsSide={mapControlsSide}
+      fullscreenBrandMode={fullscreenBrandMode}
       mapId={mapId}
     />
   )

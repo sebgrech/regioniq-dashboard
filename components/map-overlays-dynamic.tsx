@@ -39,6 +39,14 @@ function calculateCAGR(startValue: number, endValue: number, years: number): num
   return (Math.pow(endValue / startValue, 1 / years) - 1) * 100
 }
 
+function formatMetricId(metricId: string): string {
+  if (metricId === "gva_per_job") return "GVA per Job"
+  return metricId
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ")
+}
+
 interface MapOverlaysDynamicProps {
   show: boolean
   metric: string
@@ -69,6 +77,7 @@ interface MapOverlaysDynamicProps {
     growthRate?: number | null // Growth rate for growth mode (YoY % or CAGR)
   } | null
   onChoroplethStats?: (stats: ChoroplethStats | null) => void
+  showViewDetailsCta?: boolean
   mapId: string
 }
 
@@ -201,6 +210,7 @@ export function MapOverlaysDynamic({
   parentOutline,
   hoverInfo,
   onChoroplethStats,
+  showViewDetailsCta = true,
   mapId,
 }: MapOverlaysDynamicProps) {
   const router = useRouter()
@@ -271,6 +281,7 @@ export function MapOverlaysDynamic({
   const metricInfo = useMemo(() => {
     return METRICS.find(m => m.id === metric)
   }, [metric])
+  const metricDisplayName = metricInfo?.title ?? formatMetricId(metric)
 
   // Determine table name based on level
   const tableName = level === "UK" ? "macro_latest_all" :
@@ -357,7 +368,13 @@ export function MapOverlaysDynamic({
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const key = getCacheKey([level, metric, year, scenario])
+      const key = getCacheKey([
+        level,
+        metric,
+        year,
+        scenario,
+        metric === "gva_per_job" ? "derived-v2" : "raw-v1",
+      ])
       const cached = getCached<typeof metricRows>(key)
       if (cached) {
         setMetricRows(cached)
@@ -373,7 +390,87 @@ export function MapOverlaysDynamic({
         // For "jobs" maps, we merge emp_total_jobs + emp_total_jobs_ni so NI doesn't appear blank.
         let data: any[] | null = null
 
-        if (metric === "emp_total_jobs") {
+        if (metric === "gva_per_job") {
+          const pickScenarioValue = (row: any): number | null => {
+            if (row?.data_type === "historical") return row?.value ?? null
+            switch (scenario) {
+              case "downside":
+                return row?.ci_lower ?? row?.value ?? null
+              case "upside":
+                return row?.ci_upper ?? row?.value ?? null
+              default:
+                return row?.value ?? null
+            }
+          }
+
+          const gvaMetricId = level === "UK" ? "uk_nominal_gva_mn_gbp" : "nominal_gva_mn_gbp"
+          const jobsMetricId = level === "UK" ? "uk_emp_total_jobs" : "emp_total_jobs"
+
+          const { data: gvaRows, error: gvaErr } = await supabase
+            .from(tableName)
+            .select("region_code, value, ci_lower, ci_upper, data_type")
+            .eq("metric_id", gvaMetricId)
+            .eq("period", year)
+          if (gvaErr) throw new Error(gvaErr.message)
+
+          const { data: baseJobs, error: baseJobsErr } = await supabase
+            .from(tableName)
+            .select("region_code, value, ci_lower, ci_upper, data_type")
+            .eq("metric_id", jobsMetricId)
+            .eq("period", year)
+          if (baseJobsErr) throw new Error(baseJobsErr.message)
+
+          let jobsRows = baseJobs ?? []
+          if (level === "ITL1") {
+            const { data: niRows, error: niErr } = await supabase
+              .from("itl2_latest_all")
+              .select("region_code, value, ci_lower, ci_upper, data_type")
+              .eq("metric_id", "emp_total_jobs_ni")
+              .eq("period", year)
+              .eq("region_code", "TLN0")
+              .limit(1)
+            if (niErr) throw new Error(niErr.message)
+            jobsRows = [...jobsRows, ...(niRows ?? []).map((r) => ({ ...r, region_code: "N92000002" }))]
+          } else if (level !== "UK") {
+            const { data: niRows, error: niErr } = await supabase
+              .from(tableName)
+              .select("region_code, value, ci_lower, ci_upper, data_type")
+              .eq("metric_id", "emp_total_jobs_ni")
+              .eq("period", year)
+            if (niErr) throw new Error(niErr.message)
+            jobsRows = [...jobsRows, ...(niRows ?? [])]
+          }
+
+          const jobsByRegion = new Map(
+            jobsRows.map((row) => [row.region_code, pickScenarioValue(row)])
+          )
+
+          data = (gvaRows ?? [])
+            .map((gvaRow) => {
+              const gvaValue = pickScenarioValue(gvaRow)
+              const jobsValue = jobsByRegion.get(gvaRow.region_code)
+              if (
+                gvaValue == null ||
+                jobsValue == null ||
+                !isFinite(gvaValue) ||
+                !isFinite(jobsValue) ||
+                jobsValue <= 0
+              ) {
+                return null
+              }
+              return {
+                region_code: gvaRow.region_code,
+                value: (gvaValue * 1_000_000) / jobsValue,
+                ci_lower: null,
+                ci_upper: null,
+                data_type:
+                  gvaRow.data_type === "forecast" || (jobsRows.find((j) => j.region_code === gvaRow.region_code)?.data_type === "forecast")
+                    ? "forecast"
+                    : "historical",
+              }
+            })
+            .filter((row): row is NonNullable<typeof row> => row !== null)
+        } else if (metric === "emp_total_jobs") {
           const { data: baseRows, error: baseErr } = await supabase
         .from(tableName)
         .select("region_code, value, ci_lower, ci_upper, data_type")
@@ -467,7 +564,15 @@ export function MapOverlaysDynamic({
     let cancelled = false
     const pastYear = year - growthPeriod
     ;(async () => {
-      const key = getCacheKey([level, metric, pastYear, scenario, "past", growthPeriod])
+      const key = getCacheKey([
+        level,
+        metric,
+        pastYear,
+        scenario,
+        "past",
+        growthPeriod,
+        metric === "gva_per_job" ? "derived-v2" : "raw-v1",
+      ])
       const cached = getCached<typeof metricRowsPast>(key)
       if (cached) {
         setMetricRowsPast(cached)
@@ -480,7 +585,87 @@ export function MapOverlaysDynamic({
         const processedRows = await getOrFetch<typeof metricRowsPast>(key, async () => {
           let data: any[] | null = null
 
-          if (metric === "emp_total_jobs") {
+          if (metric === "gva_per_job") {
+            const pickScenarioValue = (row: any): number | null => {
+              if (row?.data_type === "historical") return row?.value ?? null
+              switch (scenario) {
+                case "downside":
+                  return row?.ci_lower ?? row?.value ?? null
+                case "upside":
+                  return row?.ci_upper ?? row?.value ?? null
+                default:
+                  return row?.value ?? null
+              }
+            }
+
+            const gvaMetricId = level === "UK" ? "uk_nominal_gva_mn_gbp" : "nominal_gva_mn_gbp"
+            const jobsMetricId = level === "UK" ? "uk_emp_total_jobs" : "emp_total_jobs"
+
+            const { data: gvaRows, error: gvaErr } = await supabase
+              .from(tableName)
+              .select("region_code, value, ci_lower, ci_upper, data_type")
+              .eq("metric_id", gvaMetricId)
+              .eq("period", pastYear)
+            if (gvaErr) throw new Error(gvaErr.message)
+
+            const { data: baseJobs, error: baseJobsErr } = await supabase
+              .from(tableName)
+              .select("region_code, value, ci_lower, ci_upper, data_type")
+              .eq("metric_id", jobsMetricId)
+              .eq("period", pastYear)
+            if (baseJobsErr) throw new Error(baseJobsErr.message)
+
+            let jobsRows = baseJobs ?? []
+            if (level === "ITL1") {
+              const { data: niRows, error: niErr } = await supabase
+                .from("itl2_latest_all")
+                .select("region_code, value, ci_lower, ci_upper, data_type")
+                .eq("metric_id", "emp_total_jobs_ni")
+                .eq("period", pastYear)
+                .eq("region_code", "TLN0")
+                .limit(1)
+              if (niErr) throw new Error(niErr.message)
+              jobsRows = [...jobsRows, ...(niRows ?? []).map((r) => ({ ...r, region_code: "N92000002" }))]
+            } else if (level !== "UK") {
+              const { data: niRows, error: niErr } = await supabase
+                .from(tableName)
+                .select("region_code, value, ci_lower, ci_upper, data_type")
+                .eq("metric_id", "emp_total_jobs_ni")
+                .eq("period", pastYear)
+              if (niErr) throw new Error(niErr.message)
+              jobsRows = [...jobsRows, ...(niRows ?? [])]
+            }
+
+            const jobsByRegion = new Map(
+              jobsRows.map((row) => [row.region_code, pickScenarioValue(row)])
+            )
+
+            data = (gvaRows ?? [])
+              .map((gvaRow) => {
+                const gvaValue = pickScenarioValue(gvaRow)
+                const jobsValue = jobsByRegion.get(gvaRow.region_code)
+                if (
+                  gvaValue == null ||
+                  jobsValue == null ||
+                  !isFinite(gvaValue) ||
+                  !isFinite(jobsValue) ||
+                  jobsValue <= 0
+                ) {
+                  return null
+                }
+                return {
+                  region_code: gvaRow.region_code,
+                  value: (gvaValue * 1_000_000) / jobsValue,
+                  ci_lower: null,
+                  ci_upper: null,
+                  data_type:
+                    gvaRow.data_type === "forecast" || (jobsRows.find((j) => j.region_code === gvaRow.region_code)?.data_type === "forecast")
+                      ? "forecast"
+                      : "historical",
+                }
+              })
+              .filter((row): row is NonNullable<typeof row> => row !== null)
+          } else if (metric === "emp_total_jobs") {
             const { data: baseRows, error: baseErr } = await supabase
             .from(tableName)
             .select("region_code, value, ci_lower, ci_upper, data_type")
@@ -1377,8 +1562,8 @@ export function MapOverlaysDynamic({
                 })()}
                 <span className="text-sm text-muted-foreground">
                   {mapMode === "growth" 
-                    ? `${metricInfo?.title || metric} Growth Rate${growthPeriod === 1 ? " (YoY)" : ` (${growthPeriod}yr)`}`
-                    : metricInfo?.title || metric}
+                    ? `${metricDisplayName} Growth Rate${growthPeriod === 1 ? " (YoY)" : ` (${growthPeriod}yr)`}`
+                    : metricDisplayName}
                 </span>
               </div>
               <span className="text-sm font-medium text-foreground">
@@ -1423,7 +1608,7 @@ export function MapOverlaysDynamic({
             ) : null}
           </div>
           {/* Navigation button to metric detail page */}
-          {hoverInfo.code && (
+          {showViewDetailsCta && hoverInfo.code && (
             <div className="mt-3 pt-3 border-t border-border">
               <Button
                 variant="outline"

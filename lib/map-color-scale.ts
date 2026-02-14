@@ -106,6 +106,20 @@ function interpolateColor(color1: string, color2: string, t: number): string {
  */
 function getGradientColors(): { low: string; mid: string; high: string; nodata: string } {
   const isDark = typeof window !== "undefined" && document.documentElement.classList.contains("dark")
+  const isDtreMock =
+    typeof document !== "undefined" &&
+    !!document.querySelector('[data-dtre-mode="true"]')
+
+  // DTRE palette: white -> light blue -> dark blue (scoped to DTRE container).
+  if (isDtreMock) {
+    return {
+      low: isDark ? "#dbeafe" : "#ffffff",
+      mid: isDark ? "#60a5fa" : "#93c5fd",
+      high: isDark ? "#1d4ed8" : "#0b3a8a",
+      nodata: isDark ? "#374151" : "#e5e7eb",
+    }
+  }
+
   return {
     low: isDark ? GRADIENT_COLORS.dark.low : GRADIENT_COLORS.light.low,
     mid: isDark ? GRADIENT_COLORS.dark.mid : GRADIENT_COLORS.light.mid,
@@ -229,11 +243,45 @@ export function buildMapboxColorRamp(
   } | null,
   invert?: boolean
 ): any[] {
-  const [min, max] = domain
+  let [min, max] = domain
   const colors = getGradientColors()
+
+  // Guardrail: Mapbox interpolate stops must be strictly ascending.
+  // Normalize domain ordering and handle degenerate/invalid ranges safely.
+  if (!isFinite(min) || !isFinite(max)) {
+    return [
+      "case",
+      ["==", ["get", "value"], null],
+      colors.nodata,
+      colors.mid,
+    ]
+  }
+
+  if (min > max) {
+    const tmp = min
+    min = max
+    max = tmp
+  }
+
+  const range = max - min
+  const EPS = 1e-9
+  if (range <= EPS) {
+    return [
+      "case",
+      ["==", ["get", "value"], null],
+      colors.nodata,
+      colors.mid,
+    ]
+  }
   
   // Calculate midpoint (median if available, otherwise arithmetic mean)
-  const mid = percentiles?.p50 ?? midpoint ?? (min + max) / 2
+  const midRaw = percentiles?.p50 ?? midpoint ?? (min + max) / 2
+  let mid = Number.isFinite(midRaw) ? midRaw : (min + max) / 2
+  // Clamp midpoint into domain then ensure strict ordering: min < mid < max
+  mid = Math.max(min, Math.min(max, mid))
+  if (mid <= min + EPS || mid >= max - EPS) {
+    mid = min + range / 2
+  }
   
   // Choose colors based on inversion
   const lowColor = invert ? colors.high : colors.low   // Invert: low value = indigo
