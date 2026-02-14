@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/tooltip"
 import { DemandContextCard } from "@/components/demand-context-card"
 import { inferTenantSector, type TenantSector } from "@/lib/tenant-sector"
+import { deriveLogisticsImplications, type LogisticsImplication } from "@/lib/insights/logistics-implications"
 
 // =============================================================================
 // Types (same as PlaceInsights)
@@ -63,6 +64,8 @@ interface AssetEconomicContextProps {
   yieldInfo?: string | null
   /** Hide the LAD comparison charts (render separately via AssetComparisonCharts) */
   hideCharts?: boolean
+  /** Hide verdict sentence and signal chips in condensed embeds */
+  hideSignalsSummary?: boolean
   /** Inferred tenant sector for future signal tailoring */
   tenantSector?: "retail" | "office" | "residential" | "leisure" | "industrial" | "f_and_b" | "other"
 }
@@ -790,6 +793,142 @@ function ImplicationCard({ text, id, index }: { text: string; id: string; index:
 
 
 // =============================================================================
+// Logistics Positioning Block — used when lens === "industrial"
+// Renders 1 lead + 3 supporting with hover "why" on each
+// =============================================================================
+
+const LOGISTICS_SIGNAL_ICONS: Record<string, LucideIcon> = {
+  logistics_labour_available: Users,
+  logistics_labour_constrained: Users,
+  logistics_labour_balanced: Users,
+  logistics_expansion_favourable: Users,
+  logistics_expansion_contested: Users,
+  logistics_slack_plus_employment_growth: Users,
+  logistics_population_led_growth: TrendingUp,
+  logistics_employment_led_growth: TrendingUp,
+  logistics_growth_balanced: TrendingUp,
+  logistics_labour_intensive_economy: Briefcase,
+  logistics_knowledge_economy: Briefcase,
+  logistics_standard_productivity: Briefcase,
+  logistics_low_income_catchment: Banknote,
+  logistics_affluent_catchment: Banknote,
+}
+
+function LogisticsPositioningBlock({
+  lead,
+  supporting,
+  assetType,
+  assetClass,
+}: {
+  lead: LogisticsImplication
+  supporting: LogisticsImplication[]
+  assetType?: string | null
+  assetClass?: string | null
+}) {
+  const LeadIcon = LOGISTICS_SIGNAL_ICONS[lead.id] || Target
+
+  return (
+    <div className="relative overflow-visible rounded-xl border border-primary/20 bg-gradient-to-br from-primary/8 via-primary/3 to-transparent">
+      <div
+        className="absolute -top-24 -right-24 w-48 h-48 rounded-full blur-3xl opacity-20 animate-pulse"
+        style={{ background: "radial-gradient(circle, rgba(124,58,237,0.4) 0%, transparent 70%)" }}
+      />
+
+      <div className="relative p-5 space-y-4">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-primary/15 flex items-center justify-center animate-in zoom-in-95 duration-500">
+            <Target className="h-5 w-5 text-primary" />
+          </div>
+          <div className="animate-in fade-in-0 slide-in-from-left-3 duration-500">
+            <p className="text-sm font-semibold text-foreground">
+              Key datapoints for positioning
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {assetType || assetClass || "Logistics"}
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-3 pt-1">
+          {/* Lead insight, highlighted */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="relative rounded-xl border border-primary/30 bg-primary/5 p-3.5 cursor-default animate-in fade-in-0 slide-in-from-bottom-3"
+                style={{ animationDelay: "100ms", animationFillMode: "backwards" }}
+              >
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                    Primary
+                  </span>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/15">
+                    <LeadIcon className="h-3.5 w-3.5 text-primary" />
+                  </div>
+                  <p className="text-sm font-medium leading-relaxed text-foreground">
+                    {lead.text}
+                  </p>
+                </div>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent
+              side="top"
+              align="end"
+              className="max-w-sm bg-card/95 backdrop-blur-sm text-foreground border border-border/50 shadow-xl rounded-xl px-4 py-3"
+              sideOffset={8}
+            >
+              <div className="space-y-1.5">
+                <p className="text-xs font-bold uppercase tracking-wider text-primary">Why</p>
+                <p className="text-sm font-medium leading-relaxed text-foreground/90">{lead.why}</p>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Supporting insights */}
+          {supporting.map((item, i) => {
+            const ItemIcon = LOGISTICS_SIGNAL_ICONS[item.id] || Activity
+            return (
+              <Tooltip key={item.id}>
+                <TooltipTrigger asChild>
+                  <div
+                    className={cn(
+                      "group relative flex items-start gap-4 p-3 rounded-lg",
+                      "bg-background/50 border border-border/30",
+                      "hover:border-primary/30 hover:bg-background/80",
+                      "transition-all duration-300 animate-in fade-in-0 slide-in-from-bottom-3 cursor-default"
+                    )}
+                    style={{ animationDelay: `${250 + i * 120}ms`, animationFillMode: "backwards" }}
+                  >
+                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 group-hover:scale-110 transition-all duration-300">
+                      <ItemIcon className="h-3.5 w-3.5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-foreground leading-relaxed">{item.text}</p>
+                    </div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  align="end"
+                  className="max-w-sm bg-card/95 backdrop-blur-sm text-foreground border border-border/50 shadow-xl rounded-xl px-4 py-3"
+                  sideOffset={8}
+                >
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-bold uppercase tracking-wider text-primary">Why</p>
+                    <p className="text-sm font-medium leading-relaxed text-foreground/90">{item.why}</p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// =============================================================================
 // Positioning Bullet Type & Asset-Aware Scoring
 // =============================================================================
 
@@ -858,12 +997,19 @@ function resolveAssetLens(
   assetClass: string | null | undefined,
   tenantSector: string | null | undefined
 ): string {
-  const type = (assetType || assetClass || tenantSector || "").toLowerCase()
-  if (type.includes("office")) return "office"
-  if (type.includes("retail") || type.includes("f&b") || type.includes("food") || type.includes("shop")) return "retail"
-  if (type.includes("industrial") || type.includes("logistics") || type.includes("warehouse")) return "industrial"
-  if (type.includes("resi") || type.includes("apartment") || type.includes("housing") || type.includes("btl")) return "residential"
-  if (type.includes("leisure") || type.includes("hotel") || type.includes("gym") || type.includes("cinema")) return "leisure"
+  // Check ALL provided fields, not just the first truthy one.
+  // Priority: assetClass > tenantSector > assetType (more specific wins).
+  const candidates = [assetClass, tenantSector, assetType]
+    .filter(Boolean)
+    .map((s) => (s as string).toLowerCase())
+
+  for (const token of candidates) {
+    if (token.includes("office")) return "office"
+    if (token.includes("retail") || token.includes("f&b") || token.includes("food") || token.includes("shop")) return "retail"
+    if (token.includes("industrial") || token.includes("logistics") || token.includes("warehouse")) return "industrial"
+    if (token.includes("resi") || token.includes("apartment") || token.includes("housing") || token.includes("btl")) return "residential"
+    if (token.includes("leisure") || token.includes("hotel") || token.includes("gym") || token.includes("cinema")) return "leisure"
+  }
   return "general"
 }
 
@@ -890,6 +1036,7 @@ export function AssetEconomicContext({
   tenant,
   yieldInfo,
   hideCharts = false,
+  hideSignalsSummary = false,
   tenantSector,
 }: AssetEconomicContextProps) {
   const [data, setData] = useState<PlaceInsightsResponse | null>(null)
@@ -1101,6 +1248,19 @@ export function AssetEconomicContext({
     
     return scoredImplications.length > 0 ? [scoredImplications[0]] : []
   }, [implications, assetType, assetClass, tenantSector])
+
+  // Logistics-specific implications — replaces generic positioning + implication
+  // cards when the asset lens resolves to "industrial"
+  const isLogisticsLens = resolveAssetLens(assetType, assetClass, tenantSector) === "industrial"
+  const logisticsInsights = useMemo(() => {
+    if (!isLogisticsLens || !ui?.signals || ui.signals.length === 0) return null
+    const signalInputs = ui.signals.map((s) => ({
+      id: s.id,
+      outcome: s.outcome,
+      value: null,
+    }))
+    return deriveLogisticsImplications(signalInputs)
+  }, [isLogisticsLens, ui?.signals])
   
   // Loading state - premium shimmer (AFTER all hooks)
   if (isLoading) {
@@ -1142,127 +1302,157 @@ export function AssetEconomicContext({
   
   return (
     <div className="space-y-5">
-      {/* Verdict sentence with visual glyph - no header, archetype now in asset header */}
-      <div className="-mt-2 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-border/40 bg-muted/30">
-        <div className="flex flex-col md:flex-row gap-3 md:gap-4 items-center">
-          {/* Verdict Visual Glyph */}
-          {ui.verdictVisual?.type && (
-            <div className="flex-shrink-0 animate-in fade-in-0 zoom-in-95 duration-500">
-              <VerdictVisual 
-                type={ui.verdictVisual.type as "boundary" | "outputVsJobs" | "workforceSlack" | "weekdayPull"} 
-                payload={ui.verdictVisual.payload}
+      {!hideSignalsSummary ? (
+        <>
+          {/* Verdict sentence with visual glyph - no header, archetype now in asset header */}
+          <div className="-mt-2 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-border/40 bg-muted/30">
+            <div className="flex flex-col md:flex-row gap-3 md:gap-4 items-center">
+              {/* Verdict Visual Glyph */}
+              {ui.verdictVisual?.type && (
+                <div className="flex-shrink-0 animate-in fade-in-0 zoom-in-95 duration-500">
+                  <VerdictVisual
+                    type={ui.verdictVisual.type as "boundary" | "outputVsJobs" | "workforceSlack" | "weekdayPull"}
+                    payload={ui.verdictVisual.payload}
+                  />
+                </div>
+              )}
+              {/* Verdict text with bold key terms */}
+              <p className="text-base md:text-lg text-foreground/90 leading-relaxed flex-1">
+                {formatVerdictWithBold(ui.verdictSentence)}
+              </p>
+            </div>
+          </div>
+
+          {/* Signal chips - grouped by category, with Demand Context card */}
+          <div className="flex gap-4">
+            {/* Signals - left side */}
+            <div className="flex-1 space-y-4">
+              {/* Economic structure */}
+              {structureSignals.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Economic structure
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {structureSignals.map((signal, i) => (
+                      <div
+                        key={signal.id}
+                        className="animate-in fade-in-0 slide-in-from-bottom-2"
+                        style={{ animationDelay: `${i * 60}ms`, animationFillMode: "backwards" }}
+                      >
+                        <SignalChipMini
+                          label={SIGNAL_LABELS[signal.id] || signal.label}
+                          strength={signal.strength}
+                          detail={signal.detail}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Labour capacity */}
+              {capacitySignals.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Labour capacity
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {capacitySignals.map((signal, i) => (
+                      <div
+                        key={signal.id}
+                        className="animate-in fade-in-0 slide-in-from-bottom-2"
+                        style={{ animationDelay: `${(structureSignals.length + i) * 60}ms`, animationFillMode: "backwards" }}
+                      >
+                        <SignalChipMini
+                          label={SIGNAL_LABELS[signal.id] || signal.label}
+                          strength={signal.strength}
+                          detail={signal.detail}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Demand Context card - right side (temporarily hidden, code preserved) */}
+            {/* TODO: Re-enable when ready
+            {ui.signals && ui.signals.length > 0 && (
+              <DemandContextCard
+                sector={(tenantSector as TenantSector) || inferTenantSector(tenant)}
+                signals={ui.signals}
+                regionName={regionName}
               />
-            </div>
-          )}
-          {/* Verdict text with bold key terms */}
-          <p className="text-base md:text-lg text-foreground/90 leading-relaxed flex-1">
-            {formatVerdictWithBold(ui.verdictSentence)}
-          </p>
-        </div>
-      </div>
+            )}
+            */}
+          </div>
+        </>
+      ) : null}
       
-      {/* Signal chips - grouped by category, with Demand Context card */}
-      <div className="flex gap-4">
-        {/* Signals - left side */}
-        <div className="flex-1 space-y-4">
-          {/* Economic structure */}
-          {structureSignals.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Economic structure
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {structureSignals.map((signal, i) => (
-                  <div 
-                    key={signal.id}
-                    className="animate-in fade-in-0 slide-in-from-bottom-2"
-                    style={{ animationDelay: `${i * 60}ms`, animationFillMode: "backwards" }}
-                  >
-                    <SignalChipMini 
-                      label={SIGNAL_LABELS[signal.id] || signal.label}
-                      strength={signal.strength}
-                      detail={signal.detail}
-                    />
+      {/* Positioning Insights — logistics engine or generic */}
+      {logisticsInsights ? (
+        <LogisticsPositioningBlock
+          lead={logisticsInsights.lead}
+          supporting={logisticsInsights.supporting}
+          assetType={assetType}
+          assetClass={assetClass}
+        />
+      ) : (
+        <>
+          {/* Asset-Specific Positioning Insights - Enhanced with animations */}
+          {positioningBullets.length > 0 && (
+            <div className="relative overflow-visible rounded-xl border border-primary/20 bg-gradient-to-br from-primary/8 via-primary/3 to-transparent">
+              {/* Animated gradient glow */}
+              <div 
+                className="absolute -top-24 -right-24 w-48 h-48 rounded-full blur-3xl opacity-20 animate-pulse"
+                style={{ background: "radial-gradient(circle, rgba(124,58,237,0.4) 0%, transparent 70%)" }}
+              />
+              
+              <div className="relative p-5 space-y-4">
+                {/* Header with icon */}
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-primary/15 flex items-center justify-center animate-in zoom-in-95 duration-500">
+                    <Target className="h-5 w-5 text-primary" />
                   </div>
-                ))}
+                  <div className="animate-in fade-in-0 slide-in-from-left-3 duration-500">
+                    <p className="text-sm font-semibold text-foreground">
+                      Key datapoints for positioning
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {assetType || assetClass || "Economic Positioning"}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Bullets with staggered animations */}
+                <div className="space-y-3 pt-1">
+                  {positioningBullets.map((bullet, i) => (
+                    <PositioningBulletItem
+                      key={bullet.id}
+                      bullet={bullet}
+                      index={i}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           )}
-          
-          {/* Labour capacity */}
-          {capacitySignals.length > 0 && (
+
+          {/* Implications - card-style bullets with icons */}
+          {implications.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Labour capacity
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {capacitySignals.map((signal, i) => (
-                  <div 
-                    key={signal.id}
-                    className="animate-in fade-in-0 slide-in-from-bottom-2"
-                    style={{ animationDelay: `${(structureSignals.length + i) * 60}ms`, animationFillMode: "backwards" }}
-                  >
-                    <SignalChipMini 
-                      label={SIGNAL_LABELS[signal.id] || signal.label}
-                      strength={signal.strength}
-                      detail={signal.detail}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-        
-        {/* Demand Context card - right side (temporarily hidden, code preserved) */}
-        {/* TODO: Re-enable when ready
-        {ui.signals && ui.signals.length > 0 && (
-          <DemandContextCard
-            sector={(tenantSector as TenantSector) || inferTenantSector(tenant)}
-            signals={ui.signals}
-            regionName={regionName}
-          />
-        )}
-        */}
-      </div>
-      
-      {/* Asset-Specific Positioning Insights - Enhanced with animations */}
-      {positioningBullets.length > 0 && (
-        <div className="relative overflow-visible rounded-xl border border-primary/20 bg-gradient-to-br from-primary/8 via-primary/3 to-transparent">
-          {/* Animated gradient glow */}
-          <div 
-            className="absolute -top-24 -right-24 w-48 h-48 rounded-full blur-3xl opacity-20 animate-pulse"
-            style={{ background: "radial-gradient(circle, rgba(124,58,237,0.4) 0%, transparent 70%)" }}
-          />
-          
-          <div className="relative p-5 space-y-4">
-            {/* Header with icon */}
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-primary/15 flex items-center justify-center animate-in zoom-in-95 duration-500">
-                <Target className="h-5 w-5 text-primary" />
-              </div>
-              <div className="animate-in fade-in-0 slide-in-from-left-3 duration-500">
-                <p className="text-sm font-semibold text-foreground">
-                  Key datapoints for positioning
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {assetType || assetClass || "Economic Positioning"}
-                </p>
-              </div>
-            </div>
-            
-            {/* Bullets with staggered animations */}
-            <div className="space-y-3 pt-1">
-              {positioningBullets.map((bullet, i) => (
-                <PositioningBulletItem
-                  key={bullet.id}
-                  bullet={bullet}
+              {implications.slice(0, 3).map((impl, i) => (
+                <ImplicationCard 
+                  key={impl.id} 
+                  id={impl.id}
+                  text={impl.text}
                   index={i}
                 />
               ))}
             </div>
-          </div>
-        </div>
+          )}
+        </>
       )}
       
       {/* LAD Comparison Chart - only show if not hidden */}
@@ -1302,20 +1492,6 @@ export function AssetEconomicContext({
             <div className="h-2 w-16 skeleton-shimmer rounded" />
             <div className="h-2 w-18 skeleton-shimmer rounded" />
           </div>
-        </div>
-      )}
-      
-      {/* Implications - card-style bullets with icons */}
-      {implications.length > 0 && (
-        <div className="space-y-2">
-          {implications.slice(0, 3).map((impl, i) => (
-            <ImplicationCard 
-              key={impl.id} 
-              id={impl.id}
-              text={impl.text}
-              index={i}
-            />
-          ))}
         </div>
       )}
     </div>

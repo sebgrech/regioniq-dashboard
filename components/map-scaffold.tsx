@@ -1277,11 +1277,11 @@ function MapContainerInner({
                     // Keep this under the zoom/fullscreen control stack in both normal and fullscreen modes.
                     isFullscreen
                       ? mapControlsSide === "left"
-                        ? "top-72 left-3"
-                        : "top-72 right-3 left-auto"
+                        ? "top-80 left-3"
+                        : "top-80 right-3 left-auto"
                       : mapControlsSide === "left"
-                        ? "top-24 left-3"
-                        : "top-24 right-3 left-auto"
+                        ? "top-32 left-3"
+                        : "top-32 right-3 left-auto"
                   )}
                 >
                   <div className="font-sans bg-card/95 backdrop-blur border rounded-lg shadow-sm px-3 py-2 min-w-[240px]">

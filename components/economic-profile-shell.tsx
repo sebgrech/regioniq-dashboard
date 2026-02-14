@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation"
 import {
   Briefcase,
   ChevronDown,
-  Database,
   Download,
   FileSpreadsheet,
   FileBarChart2,
@@ -27,6 +26,7 @@ import { Button } from "@/components/ui/button"
 import { DtreFullWidthMap } from "@/components/dtre/DtreFullWidthMap"
 import { DTRE_MAP_METRICS } from "@/components/dtre/dtre-map-config"
 import { GPComparisonSection } from "@/components/gp-comparison-section"
+import { AssetEconomicContext } from "@/components/asset-economic-context"
 import { METRICS, SCENARIOS, type Scenario } from "@/lib/metrics.config"
 import {
   calculateChange,
@@ -85,28 +85,6 @@ const MOCK_FILTERS = [
   "Building Spec",
   "Use & Sub-use",
   "Country & Region",
-]
-
-const LOGISTICS_POSITIONING_BULLETS: Array<{
-  id: string
-  text: string
-  Icon: typeof Target
-}> = [
-  {
-    id: "hiring_constraints",
-    text: "Hiring is constrained for new occupiers",
-    Icon: Users,
-  },
-  {
-    id: "office_absorption",
-    text: "Office absorption trails GVA growth",
-    Icon: TrendingUp,
-  },
-  {
-    id: "stable_local_demand",
-    text: "Stable local demand with no acute growth pressures",
-    Icon: Briefcase,
-  },
 ]
 
 function toSeed(region: string, year: number, metric: string): number {
@@ -253,7 +231,6 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
       source: DataSource
     }[]
   >([])
-
   useEffect(() => {
     fetch("/processed/region-index.json")
       .then((res) => res.json())
@@ -369,12 +346,6 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
     })
   }, [mapMetric, region, year])
 
-  const dataQuality = allMetricsSeriesData.every((m) => m.source === "real")
-    ? "Live Supabase"
-    : allMetricsSeriesData.some((m) => m.source === "real")
-      ? "Hybrid (Real + Mock Context)"
-      : "Demo Fallback"
-
   const activeWorkspaceLabel = LEFT_SIDEBAR_ITEMS.find((item) => item.id === activeWorkspace)?.label ?? "Economic Profile"
   const workspaceSeed = toSeed(region, year, activeWorkspace)
   const activeRegionName = selectedRegionMetadata?.name ?? region
@@ -437,43 +408,18 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
             />
           </div>
 
-          <div className="relative overflow-visible rounded-xl border border-[#1d4ed8]/20 bg-gradient-to-br from-[#1d4ed8]/10 via-[#93c5fd]/20 to-transparent">
-            <div
-              className="absolute -top-24 -right-24 w-48 h-48 rounded-full blur-3xl opacity-20 animate-pulse"
-              style={{ background: "radial-gradient(circle, rgba(29,78,216,0.35) 0%, transparent 70%)" }}
+          <div className="rounded-xl bg-white/75 p-1.5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+            <AssetEconomicContext
+              regionCode={region}
+              regionName={activeRegionName}
+              year={year}
+              scenario={scenario}
+              assetType="Prime Development Land"
+              assetClass="industrial"
+              hideCharts
+              hideSignalsSummary
+              tenantSector="industrial"
             />
-
-            <div className="relative p-5 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-[#1d4ed8]/15 flex items-center justify-center animate-in zoom-in-95 duration-500">
-                  <Target className="h-5 w-5 text-[#1d4ed8]" />
-                </div>
-                <div className="animate-in fade-in-0 slide-in-from-left-3 duration-500">
-                  <p className="text-sm font-semibold text-foreground">Key datapoints for positioning</p>
-                  <p className="text-xs text-muted-foreground">Logistics</p>
-                </div>
-              </div>
-
-              <div className="space-y-3 pt-1">
-                {LOGISTICS_POSITIONING_BULLETS.map((bullet, index) => {
-                  const Icon = bullet.Icon
-                  return (
-                    <div
-                      key={bullet.id}
-                      className="group relative flex items-start gap-4 p-3 rounded-lg bg-background/50 border border-border/30 hover:border-[#1d4ed8]/30 hover:bg-background/80 transition-all duration-300 animate-in fade-in-0 slide-in-from-bottom-3 cursor-default"
-                      style={{ animationDelay: `${200 + index * 120}ms`, animationFillMode: "backwards" }}
-                    >
-                      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-[#1d4ed8]/10 flex items-center justify-center group-hover:bg-[#1d4ed8]/20 group-hover:scale-110 transition-all duration-300">
-                        <Icon className="h-3.5 w-3.5 text-[#1d4ed8]" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-foreground leading-relaxed">{bullet.text}</p>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -534,7 +480,7 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
 
         <main className="flex-1 min-w-0">
           <div className="border-b border-[#d7dee7] bg-white px-5 py-3">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
               <div>
                 <h1 className="text-xl font-semibold tracking-tight flex items-center gap-2">
                   <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#dbeafe] text-[#1d4ed8]">
@@ -545,10 +491,6 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
                 <p className="text-sm text-[#4d647d]">
                   Embedded RegionIQ module inside DTRE workflow.
                 </p>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded border border-[#cad5e2] bg-[#f8fbff] px-2 py-1 text-xs">
-                <Database className="h-3.5 w-3.5 text-[#1673b1]" />
-                <span>{dataQuality}</span>
               </div>
             </div>
           </div>
