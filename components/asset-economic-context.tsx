@@ -68,6 +68,10 @@ interface AssetEconomicContextProps {
   hideSignalsSummary?: boolean
   /** Inferred tenant sector for future signal tailoring */
   tenantSector?: "retail" | "office" | "residential" | "leisure" | "industrial" | "f_and_b" | "other"
+  /** Override primary series colour (default: purple #7c3aed) */
+  mainColor?: string
+  /** Override peer series colours */
+  peerColors?: string[]
 }
 
 export interface SignalForUI {
@@ -301,6 +305,8 @@ interface LADComparisonChartProps {
   peers: { name: string; data: { year: number; value: number; type?: "historical" | "forecast" }[] }[]
   unit?: string
   forecastYear?: number
+  mainColor?: string
+  peerColors?: string[]
 }
 
 // House styling colors - main region violet, peers blue/coral
@@ -315,8 +321,12 @@ function LADComparisonChart({
   mainRegion, 
   peers, 
   unit = "",
-  forecastYear = 2026 
+  forecastYear = 2026,
+  mainColor: mc,
+  peerColors: pc,
 }: LADComparisonChartProps) {
+  const chartMainColor = mc ?? MAIN_COLOR
+  const chartPeerColors = (pc && pc.length > 0) ? pc : PEER_COLORS
   const { theme } = useTheme()
   const isDarkMode = theme === "dark"
   const gridStroke = isDarkMode ? "#333333" : "#E5E7EB"
@@ -419,12 +429,12 @@ function LADComparisonChart({
     const data: { name: string; value: number; color: string; isMain: boolean }[] = []
     const mainVal = fcstRow.main_fcst ?? fcstRow.main_hist
     if (mainVal != null) {
-      data.push({ name: mainRegion.name, value: mainVal, color: MAIN_COLOR, isMain: true })
+      data.push({ name: mainRegion.name, value: mainVal, color: chartMainColor, isMain: true })
     }
     peers.forEach((peer, i) => {
       const peerVal = fcstRow[`peer${i}_fcst`] ?? fcstRow[`peer${i}_hist`]
       if (peerVal != null) {
-        data.push({ name: peer.name, value: peerVal, color: PEER_COLORS[i % PEER_COLORS.length], isMain: false })
+        data.push({ name: peer.name, value: peerVal, color: chartPeerColors[i % chartPeerColors.length], isMain: false })
       }
     })
     return data.sort((a, b) => b.value - a.value)
@@ -517,7 +527,7 @@ function LADComparisonChart({
                 type="monotone"
                 dataKey={`peer${i}_hist`}
                 name={peer.name}
-                stroke={PEER_COLORS[i % PEER_COLORS.length]}
+                stroke={chartPeerColors[i % chartPeerColors.length]}
                 strokeWidth={2}
                 dot={false}
                 strokeOpacity={0.8}
@@ -531,7 +541,7 @@ function LADComparisonChart({
                 type="monotone"
                 dataKey={`peer${i}_fcst`}
                 name={`${peer.name} (F)`}
-                stroke={PEER_COLORS[i % PEER_COLORS.length]}
+                stroke={chartPeerColors[i % chartPeerColors.length]}
                 strokeWidth={2}
                 dot={false}
                 strokeDasharray="4 3"
@@ -1038,7 +1048,11 @@ export function AssetEconomicContext({
   hideCharts = false,
   hideSignalsSummary = false,
   tenantSector,
+  mainColor: mainColorProp,
+  peerColors: peerColorsProp,
 }: AssetEconomicContextProps) {
+  const activeMainColor = mainColorProp ?? MAIN_COLOR
+  const activePeerColors = (peerColorsProp && peerColorsProp.length > 0) ? peerColorsProp : PEER_COLORS
   const [data, setData] = useState<PlaceInsightsResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
