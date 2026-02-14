@@ -879,7 +879,7 @@ function LogisticsPositioningBlock({
               sideOffset={8}
             >
               <div className="space-y-1.5">
-                <p className="text-xs font-bold uppercase tracking-wider text-primary">Why</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-[#1d4ed8]">Why</p>
                 <p className="text-sm font-medium leading-relaxed text-foreground/90">{lead.why}</p>
               </div>
             </TooltipContent>
@@ -915,7 +915,7 @@ function LogisticsPositioningBlock({
                   sideOffset={8}
                 >
                   <div className="space-y-1.5">
-                    <p className="text-xs font-bold uppercase tracking-wider text-primary">Why</p>
+                    <p className="text-xs font-bold uppercase tracking-wider text-[#1d4ed8]">Why</p>
                     <p className="text-sm font-medium leading-relaxed text-foreground/90">{item.why}</p>
                   </div>
                 </TooltipContent>

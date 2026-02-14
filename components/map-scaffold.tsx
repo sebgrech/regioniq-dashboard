@@ -381,7 +381,7 @@ function FullscreenToolbar({
             {brandMode === "dtre" ? (
               !dtreLogoLoadError ? (
                 <img
-                  src="https://img.logo.dev/dtre.com?size=140&format=png"
+                  src={`https://img.logo.dev/dtre.com?token=${process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN || ""}&size=140&format=png`}
                   alt="DTRE"
                   className="h-16 w-16 object-contain"
                   onError={() => setDtreLogoLoadError(true)}

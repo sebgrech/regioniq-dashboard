@@ -434,7 +434,7 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
           <div className="h-7 w-24 flex items-center">
             {!logoLoadError ? (
               <img
-                src="https://img.logo.dev/dtre.com?size=140&format=png"
+                src={`https://img.logo.dev/dtre.com?token=${process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN || ""}&size=140&format=png`}
                 alt="DTRE"
                 className="h-6 w-auto object-contain brightness-0 invert"
                 onError={() => setLogoLoadError(true)}

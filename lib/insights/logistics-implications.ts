@@ -56,7 +56,7 @@ const LOGISTICS_RULES: LogisticsRule[] = [
     id: "logistics_labour_constrained",
     conditions: [{ signalId: "labour_capacity", outcomes: ["high"] }],
     text: "Tight labour market extends recruitment lead-times and compresses shift-fill rates",
-    why: "Employment rates are elevated across the catchment. New logistics entrants face longer hiring cycles, above-market wage offers, and higher early-stage attrition, all of which delay operational break-even.",
+    why: "Employment rates are high across the catchment. New logistics entrants face longer hiring cycles, above-market wage offers, and higher early-stage attrition, all of which delay operational break-even.",
     priority: 100,
   },
   {
@@ -86,7 +86,7 @@ const LOGISTICS_RULES: LogisticsRule[] = [
       { signalId: "labour_capacity", outcomes: ["high"] },
       { signalId: "growth_composition", outcomes: ["high"] },
     ],
-    text: "Employment-led growth in a tight market with elevated recruitment risk for new occupiers",
+    text: "Employment-led growth in a tight market with higher recruitment risk for new occupiers",
     why: "Jobs are being created faster than population growth in an already-constrained labour market. New logistics operators will compete with expanding incumbents for the same finite operative pool, driving wage inflation and recruitment friction.",
     priority: 98,
   },
@@ -140,7 +140,7 @@ const LOGISTICS_RULES: LogisticsRule[] = [
     id: "logistics_knowledge_economy",
     conditions: [{ signalId: "productivity_strength", outcomes: ["high", "extreme"] }],
     text: "Knowledge-economy catchment where logistics wage rates compete against higher-value sectors",
-    why: "High GVA per job signals a professional and technical workforce. Logistics operators face a structural skills mismatch: the local talent pool skews toward office-based roles, requiring above-market wages to attract and retain warehouse operatives.",
+    why: "High GVA per job indicates higher output per worker across the local economy. Prevailing wage benchmarks in this catchment sit above logistics-typical rates, requiring above-market offers to attract and retain warehouse operatives.",
     priority: 72,
   },
   {
@@ -165,7 +165,7 @@ const LOGISTICS_RULES: LogisticsRule[] = [
     id: "logistics_affluent_catchment",
     conditions: [{ signalId: "income_capture", outcomes: ["high", "extreme_high"] }],
     text: "Affluent residential catchment where operative wage expectations exceed logistics norms",
-    why: "High resident incomes set elevated wage benchmarks across the local economy. Logistics operators must price above their standard rate card to attract shift workers, compressing operating margins relative to lower-income catchments.",
+    why: "Above-average resident incomes set the prevailing wage benchmark across the local economy. Logistics recruitment in this catchment operates against a higher wage floor than lower-income areas.",
     priority: 62,
   },
 ]
