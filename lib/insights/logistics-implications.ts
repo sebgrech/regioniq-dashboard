@@ -1,21 +1,21 @@
 /**
- * Logistics-Specific Implications Engine
+ * Regional Economic Positioning Engine
  *
- * Reinterprets regional signals through a logistics/industrial siting lens.
- * No new data, same ONS pipeline, different decision frame.
- *
- * Single decision axis: Labour availability. Can you staff the site?
+ * Surfaces the most decision-relevant economic characteristics of a catchment
+ * from 5 ONS-derived signals. Asset-class neutral: every statement is a
+ * factual observation about the data. The reader applies their own lens.
  *
  * Hard rules:
  *   - Maximum 4 returned (1 lead + 3 supporting)
  *   - Lead is always the highest-priority match
  *   - No hedging language (may, likely, appears, suggests)
- *   - Every item includes a "why" suitable for IC memo / board deck hover
+ *   - No asset-class interpretation (no "for logistics", "for office", etc.)
+ *   - Every sentence must be defensible if challenged: "how do you know this?"
+ *   - Answer is always: "because this ONS metric is above/below this threshold"
  */
 
 import type { SignalOutcome } from "./region-signals.config"
 
-// Re-export the minimal type the caller needs
 export interface LogisticsSignalInput {
   id: string
   outcome: SignalOutcome
@@ -38,37 +38,37 @@ interface LogisticsRule {
 }
 
 // =============================================================================
-// Rules, ordered by decision relevance for warehouse / distribution siting
+// Rules — ordered by signal salience for siting decisions
 // =============================================================================
 
 const LOGISTICS_RULES: LogisticsRule[] = [
   // ---------------------------------------------------------------------------
-  // SINGLE-SIGNAL: labour capacity
+  // SINGLE-SIGNAL: labour capacity (employment rate)
   // ---------------------------------------------------------------------------
   {
     id: "logistics_labour_available",
     conditions: [{ signalId: "labour_capacity", outcomes: ["low"] }],
-    text: "Available workforce supports new-site ramp-up without acute recruitment friction",
-    why: "Employment rates sit below the tight-market threshold, indicating spare capacity in the working-age population. Warehouse and distribution operators can recruit at scale without competing against structural labour scarcity.",
+    text: "Employment rate is below the national benchmark, indicating spare capacity in the working-age population",
+    why: "A lower employment rate means a larger share of the local working-age population is not currently in work. This represents available labour capacity in the catchment.",
     priority: 100,
   },
   {
     id: "logistics_labour_constrained",
     conditions: [{ signalId: "labour_capacity", outcomes: ["high"] }],
-    text: "High employment rate leaves a smaller available labour pool in this catchment",
-    why: "Employment rates are above the national benchmark, indicating limited spare capacity in the working-age population. Recruitment from a tighter pool typically requires longer hiring cycles.",
+    text: "Employment rate is above the national benchmark, indicating limited spare capacity in the working-age population",
+    why: "A higher employment rate means a smaller share of the local working-age population is not currently in work. The available labour pool in this catchment is structurally smaller.",
     priority: 100,
   },
   {
     id: "logistics_labour_balanced",
     conditions: [{ signalId: "labour_capacity", outcomes: ["neutral"] }],
-    text: "Functional labour market with standard recruitment dynamics",
-    why: "Neither tight nor slack. Typical recruitment timelines and wage rates apply. No structural advantage or constraint for logistics staffing at this location.",
+    text: "Employment rate is in line with the national benchmark",
+    why: "The share of the working-age population in employment sits within the normal range. No structural tightness or slack in the local labour market.",
     priority: 55,
   },
 
   // ---------------------------------------------------------------------------
-  // COMBINATIONS: labour x growth (highest priority when both fire)
+  // COMBINATIONS: labour capacity x growth composition
   // ---------------------------------------------------------------------------
   {
     id: "logistics_expansion_favourable",
@@ -76,8 +76,8 @@ const LOGISTICS_RULES: LogisticsRule[] = [
       { signalId: "labour_capacity", outcomes: ["low"] },
       { signalId: "growth_composition", outcomes: ["low"] },
     ],
-    text: "Expanding resident population meets available workforce, optimal conditions for logistics expansion",
-    why: "Population growth is outpacing local job creation, steadily deepening the recruitment pool. Combined with current labour-market slack, this is the most favourable configuration for a new distribution centre requiring rapid headcount build.",
+    text: "Available labour capacity with population growing faster than employment",
+    why: "The employment rate is below benchmark (spare capacity exists) and population growth is outpacing job creation (the working-age base is expanding faster than demand absorbs it). Both signals point in the same direction.",
     priority: 98,
   },
   {
@@ -86,8 +86,8 @@ const LOGISTICS_RULES: LogisticsRule[] = [
       { signalId: "labour_capacity", outcomes: ["high"] },
       { signalId: "growth_composition", outcomes: ["high"] },
     ],
-    text: "Employment-led growth in a tight market with higher recruitment risk for new occupiers",
-    why: "Jobs are being created faster than population growth in an already-constrained labour market. New logistics operators will compete with expanding incumbents for the same finite operative pool, driving wage inflation and recruitment friction.",
+    text: "Limited labour capacity with employment growing faster than population",
+    why: "The employment rate is above benchmark (limited spare capacity) and jobs are being created faster than population is growing. Both signals point in the same direction: the labour market is tightening.",
     priority: 98,
   },
   {
@@ -96,76 +96,76 @@ const LOGISTICS_RULES: LogisticsRule[] = [
       { signalId: "labour_capacity", outcomes: ["low"] },
       { signalId: "growth_composition", outcomes: ["high"] },
     ],
-    text: "Current workforce slack with employment-led growth, a narrowing window for logistics entry",
-    why: "Available labour capacity exists today, but employment is growing faster than population. The recruitment advantage for new logistics sites diminishes over the forecast horizon as the market tightens.",
+    text: "Current labour capacity exists, but employment is growing faster than population",
+    why: "Spare capacity is present today (employment rate below benchmark), but jobs are being created faster than population is growing. The two signals are moving in opposite directions over the forecast horizon.",
     priority: 92,
   },
 
   // ---------------------------------------------------------------------------
-  // SINGLE-SIGNAL: growth composition
+  // SINGLE-SIGNAL: growth composition (population vs employment growth)
   // ---------------------------------------------------------------------------
   {
     id: "logistics_population_led_growth",
     conditions: [{ signalId: "growth_composition", outcomes: ["low"] }],
-    text: "Residential in-migration is expanding the local labour catchment year-on-year",
-    why: "Population growth exceeds job creation, growing the working-age base faster than employer demand absorbs it. For logistics operators, this translates to a deepening recruitment funnel and more competitive wage positioning over the medium term.",
+    text: "Population growth is outpacing employment growth in this catchment",
+    why: "Net residential in-migration is growing the working-age base faster than local job creation is absorbing it. The ratio of residents to jobs is increasing over the forecast period.",
     priority: 80,
   },
   {
     id: "logistics_employment_led_growth",
     conditions: [{ signalId: "growth_composition", outcomes: ["high"] }],
-    text: "Employment-led growth is increasing competition for warehouse and distribution operatives",
-    why: "Local job creation outpaces population growth. Existing employers are drawing from the same labour pool that a new logistics site would target, creating structural upward pressure on operative wages and recruitment timelines.",
+    text: "Employment growth is outpacing population growth in this catchment",
+    why: "Local job creation exceeds net population growth. The ratio of jobs to residents is increasing over the forecast period.",
     priority: 78,
   },
   {
     id: "logistics_growth_balanced",
     conditions: [{ signalId: "growth_composition", outcomes: ["neutral"] }],
-    text: "Balanced growth with labour supply tracking demand and no structural shift",
-    why: "Population and employment are expanding at similar rates. The recruitment outlook is stable, with neither a tightening nor loosening trend over the forecast horizon.",
+    text: "Population and employment are growing at similar rates",
+    why: "Neither is materially outpacing the other. The balance between residents and jobs is stable over the forecast period.",
     priority: 52,
   },
 
   // ---------------------------------------------------------------------------
-  // SINGLE-SIGNAL: productivity strength
+  // SINGLE-SIGNAL: productivity strength (GVA per job)
   // ---------------------------------------------------------------------------
   {
     id: "logistics_labour_intensive_economy",
     conditions: [{ signalId: "productivity_strength", outcomes: ["low"] }],
-    text: "Labour-intensive local economy with workforce profile aligned to logistics operational needs",
-    why: "Low GVA per job indicates a volume-driven employment base, typically comprising manufacturing, processing, and distribution roles. The local skills profile matches logistics requirements, reducing training investment and accelerating onboarding.",
+    text: "GVA per job is below the national benchmark, indicating a lower-output employment base",
+    why: "Economic output per worker is lower than the national average. This is a structural characteristic of the local economy, reflecting the mix of sectors and roles present in the catchment.",
     priority: 75,
   },
   {
     id: "logistics_knowledge_economy",
     conditions: [{ signalId: "productivity_strength", outcomes: ["high", "extreme"] }],
-    text: "Knowledge-economy catchment where logistics wage rates compete against higher-value sectors",
-    why: "High GVA per job indicates higher output per worker across the local economy. Prevailing wage benchmarks in this catchment sit above logistics-typical rates, requiring above-market offers to attract and retain warehouse operatives.",
+    text: "GVA per job is above the national benchmark, indicating a higher-output employment base",
+    why: "Economic output per worker exceeds the national average. Prevailing wage benchmarks in this catchment are structurally higher as a result.",
     priority: 72,
   },
   {
     id: "logistics_standard_productivity",
     conditions: [{ signalId: "productivity_strength", outcomes: ["neutral"] }],
-    text: "Diversified economy with no structural workforce mismatch for logistics",
-    why: "Productivity is in line with national benchmarks, indicating a mixed sector base. Logistics recruitment operates without significant skills-profile headwinds or tailwinds.",
+    text: "GVA per job is in line with the national benchmark",
+    why: "Economic output per worker sits within the normal range. No structural skew toward higher-output or lower-output employment.",
     priority: 50,
   },
 
   // ---------------------------------------------------------------------------
-  // SINGLE-SIGNAL: income capture
+  // SINGLE-SIGNAL: income capture (GDHI per head vs local output)
   // ---------------------------------------------------------------------------
   {
     id: "logistics_low_income_catchment",
     conditions: [{ signalId: "income_capture", outcomes: ["low", "extreme_low"] }],
-    text: "Lower resident incomes support competitive wage positioning for logistics roles",
-    why: "Household incomes in this catchment sit below the local output benchmark. Logistics-typical wage rates are competitive relative to prevailing expectations, supporting recruitment without a cost premium.",
+    text: "Resident incomes are below the local output benchmark",
+    why: "Gross disposable household income per head is low relative to local GVA. A smaller share of local economic output is translating into resident purchasing power.",
     priority: 65,
   },
   {
     id: "logistics_affluent_catchment",
     conditions: [{ signalId: "income_capture", outcomes: ["high", "extreme_high"] }],
-    text: "Above-average resident incomes indicate a higher local wage floor for recruitment",
-    why: "Above-average resident incomes set the prevailing wage benchmark across the local economy. Logistics recruitment in this catchment operates against a higher wage floor than lower-income areas.",
+    text: "Resident incomes are above the local output benchmark",
+    why: "Gross disposable household income per head is high relative to local GVA. Prevailing wage expectations in this catchment are structurally higher.",
     priority: 62,
   },
 ]
@@ -186,13 +186,13 @@ function ruleMatches(
 
 const DEFAULT_LEAD: LogisticsImplication = {
   id: "logistics_default",
-  text: "Standard economic conditions with no outlier signals for logistics siting",
-  why: "All regional signals (labour capacity, growth composition, productivity, income capture) fall within normal ranges. No structural advantage or constraint for logistics occupiers at this location.",
+  text: "All regional signals fall within normal ranges",
+  why: "Labour capacity, growth composition, productivity, and income capture are all in line with national benchmarks. No structural outlier in this catchment.",
   priority: 40,
 }
 
 /**
- * Derive logistics-specific implications from regional signals.
+ * Derive the most decision-relevant economic characteristics from regional signals.
  *
  * Returns { lead, supporting }:
  *   - lead:       1 item (highest priority match)
@@ -220,15 +220,13 @@ export function deriveLogisticsImplications(signals: LogisticsSignalInput[]): {
   // Sort by priority descending
   matched.sort((a, b) => b.priority - a.priority)
 
-  // Deduplicate: keep only rules that don't overlap on the same signal set
-  // (combination rules supersede their single-signal counterparts)
+  // Deduplicate: combination rules supersede their single-signal counterparts
   const usedSignals = new Set<string>()
   const deduped: LogisticsImplication[] = []
   for (const impl of matched) {
     const rule = LOGISTICS_RULES.find((r) => r.id === impl.id)
     if (!rule) continue
     const ruleSignals = rule.conditions.map((c) => c.signalId)
-    // If this is a single-signal rule and that signal is already covered by a combo, skip
     if (ruleSignals.length === 1 && usedSignals.has(ruleSignals[0])) continue
     for (const sig of ruleSignals) usedSignals.add(sig)
     deduped.push(impl)

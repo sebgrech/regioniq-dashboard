@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Home,
   LayoutGrid,
+  MapPin,
   MapPinned,
   Search,
   SlidersHorizontal,
@@ -387,9 +388,6 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
           <Sparkles className="h-4 w-4" />
         </span>
         <span>Economic Insight</span>
-        {activeRegionName && (
-          <span className="text-lg font-semibold text-[#233a54] ml-1">· {activeRegionName}</span>
-        )}
       </div>
 
       <div className="relative mt-3 rounded-2xl bg-gradient-to-br from-[#f8fcff]/80 to-[#f7f2ff]/80 p-3">
@@ -453,7 +451,7 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
               <img
                 src="/dtrellp_logo.jpeg"
                 alt="DTRE"
-                className="h-6 w-auto object-contain brightness-0 invert"
+                className="h-7 w-auto object-contain rounded"
                 onError={() => setLogoLoadError(true)}
               />
             ) : (
@@ -504,12 +502,9 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
                     <Sparkles className="h-4 w-4" />
                   </span>
                   {activeWorkspaceLabel}
-                  {activeRegionName && activeWorkspace === "economic-profile" && (
-                    <span className="text-xl font-semibold text-[#233a54]">· {activeRegionName}</span>
-                  )}
                 </h1>
                 <p className="text-sm text-[#4d647d]">
-                  Embedded RegionIQ module inside DXTRE.
+                  Embedded RegionIQ module inside DXTRE workflow.
                 </p>
               </div>
             </div>
@@ -519,6 +514,17 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
             <section className="min-w-0 p-4">
               {activeWorkspace === "economic-profile" ? (
                 <div className="space-y-3">
+                  {/* Active region label */}
+                  {activeRegionName && (
+                    <div className="flex items-center gap-2.5 px-1 py-1">
+                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#dbeafe] text-[#1d4ed8]">
+                        <MapPin className="h-3.5 w-3.5" />
+                      </span>
+                      <span className="text-lg font-semibold text-[#233a54] tracking-tight">{activeRegionName}</span>
+                      <span className="text-sm text-[#6b7f94]">{region}</span>
+                    </div>
+                  )}
+
                   <div className="relative overflow-hidden rounded-2xl bg-white/45 backdrop-blur-sm p-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_24px_rgba(16,24,40,0.06)]">
                     <div className="absolute inset-0 pointer-events-none">
                       {particles.map((particle, idx) => (
@@ -684,12 +690,12 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
       </div>
 
       {/* RegionIQ branding — bottom right */}
-      <div className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-lg bg-white/80 backdrop-blur px-3 py-1.5 shadow-sm border border-[#d7dee7]">
-        <span className="text-[10px] text-[#4d647d] tracking-wide">Powered by</span>
+      <div className="fixed bottom-4 right-4 z-40 flex items-center gap-2.5 rounded-lg bg-white/85 backdrop-blur px-4 py-2 shadow-sm border border-[#d7dee7]">
+        <span className="text-xs text-[#4d647d] tracking-wide font-medium">Powered by</span>
         <img
           src="/x.png"
           alt="RegionIQ"
-          className="h-4 w-auto object-contain"
+          className="h-5 w-auto object-contain"
         />
       </div>
     </div>

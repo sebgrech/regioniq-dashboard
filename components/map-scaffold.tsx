@@ -1571,6 +1571,7 @@ export function MapScaffold({
         createPortal(
           <div
             className="fixed inset-0 z-[9999] bg-background overflow-hidden"
+            data-dtre-mode={fullscreenBrandMode === "dtre" ? "true" : undefined}
             style={{
               width: "100%",
               height: "100%",
