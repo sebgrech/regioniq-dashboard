@@ -375,6 +375,9 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
           <Sparkles className="h-4 w-4" />
         </span>
         <span>Economic Insight</span>
+        {activeRegionName && (
+          <span className="text-sm font-normal text-[#4d647d] ml-1">· {activeRegionName}</span>
+        )}
       </div>
 
       <div className="relative mt-3 rounded-2xl bg-gradient-to-br from-[#f8fcff]/80 to-[#f7f2ff]/80 p-3">
@@ -419,6 +422,8 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
               hideCharts
               hideSignalsSummary
               tenantSector="industrial"
+              mainColor="#1d4ed8"
+              peerColors={["#08a8d8", "#6ea3c8"]}
             />
           </div>
         </div>
@@ -434,7 +439,7 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
           <div className="h-7 w-24 flex items-center">
             {!logoLoadError ? (
               <img
-                src={`https://img.logo.dev/dtre.com?token=${process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN || ""}&size=140&format=png`}
+                src={`https://img.logo.dev/dtre.com?${process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN ? `token=${process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN}&` : ""}size=140&format=png`}
                 alt="DTRE"
                 className="h-6 w-auto object-contain brightness-0 invert"
                 onError={() => setLogoLoadError(true)}
@@ -487,6 +492,9 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
                     <Sparkles className="h-4 w-4" />
                   </span>
                   {activeWorkspaceLabel}
+                  {activeRegionName && activeWorkspace === "economic-profile" && (
+                    <span className="text-base font-normal text-[#4d647d]">· {activeRegionName}</span>
+                  )}
                 </h1>
                 <p className="text-sm text-[#4d647d]">
                   Embedded RegionIQ module inside DTRE workflow.

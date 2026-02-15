@@ -554,10 +554,10 @@ function LADComparisonChart({
               type="monotone"
               dataKey="main_hist"
               name={mainRegion.name}
-              stroke={MAIN_COLOR}
+              stroke={chartMainColor}
               strokeWidth={3}
               dot={false}
-              activeDot={{ r: 4, strokeWidth: 2, fill: MAIN_COLOR }}
+              activeDot={{ r: 4, strokeWidth: 2, fill: chartMainColor }}
             />
             
             {/* Main region - forecast (dashed, prominent) */}
@@ -565,11 +565,11 @@ function LADComparisonChart({
               type="monotone"
               dataKey="main_fcst"
               name={`${mainRegion.name} (F)`}
-              stroke={MAIN_COLOR}
+              stroke={chartMainColor}
               strokeWidth={3}
               dot={false}
               strokeDasharray="6 3"
-              activeDot={{ r: 4, strokeWidth: 2, fill: MAIN_COLOR }}
+              activeDot={{ r: 4, strokeWidth: 2, fill: chartMainColor }}
             />
           </LineChart>
         </ResponsiveContainer>
@@ -578,12 +578,12 @@ function LADComparisonChart({
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11px] px-1">
         <span className="flex items-center gap-2">
-          <span className="w-4 h-1 rounded-full" style={{ backgroundColor: MAIN_COLOR }} />
+          <span className="w-4 h-1 rounded-full" style={{ backgroundColor: chartMainColor }} />
           <span className="text-foreground font-medium">{mainRegion.name}</span>
         </span>
         {peers.map((peer, i) => (
           <span key={peer.name} className="flex items-center gap-2">
-            <span className="w-4 h-1 rounded-full" style={{ backgroundColor: PEER_COLORS[i % PEER_COLORS.length] }} />
+            <span className="w-4 h-1 rounded-full" style={{ backgroundColor: chartPeerColors[i % chartPeerColors.length] }} />
             <span className="text-muted-foreground">{peer.name}</span>
           </span>
         ))}
@@ -851,11 +851,8 @@ function LogisticsPositioningBlock({
             <Target className="h-5 w-5 text-primary" />
           </div>
           <div className="animate-in fade-in-0 slide-in-from-left-3 duration-500">
-            <p className="text-sm font-semibold text-foreground">
-              Key datapoints for positioning
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {assetType || assetClass || "Logistics"}
+            <p className="text-base font-semibold text-foreground">
+              Key datapoints
             </p>
           </div>
         </div>
@@ -1489,6 +1486,8 @@ export function AssetEconomicContext({
                   label={comparison.label}
                   mainRegion={comparison.mainRegion}
                   peers={comparison.peers}
+                  mainColor={activeMainColor}
+                  peerColors={activePeerColors}
                 />
               </div>
             ))}

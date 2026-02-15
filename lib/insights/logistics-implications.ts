@@ -55,8 +55,8 @@ const LOGISTICS_RULES: LogisticsRule[] = [
   {
     id: "logistics_labour_constrained",
     conditions: [{ signalId: "labour_capacity", outcomes: ["high"] }],
-    text: "Tight labour market extends recruitment lead-times and compresses shift-fill rates",
-    why: "Employment rates are high across the catchment. New logistics entrants face longer hiring cycles, above-market wage offers, and higher early-stage attrition, all of which delay operational break-even.",
+    text: "Tight labour market increases recruitment lead-times for new occupiers",
+    why: "Employment rates are high across the catchment. A smaller pool of available workers means new logistics entrants face longer hiring cycles and greater competition for recruits.",
     priority: 100,
   },
   {
@@ -164,7 +164,7 @@ const LOGISTICS_RULES: LogisticsRule[] = [
   {
     id: "logistics_affluent_catchment",
     conditions: [{ signalId: "income_capture", outcomes: ["high", "extreme_high"] }],
-    text: "Affluent residential catchment where operative wage expectations exceed logistics norms",
+    text: "Above-average resident incomes indicate a higher local wage floor for recruitment",
     why: "Above-average resident incomes set the prevailing wage benchmark across the local economy. Logistics recruitment in this catchment operates against a higher wage floor than lower-income areas.",
     priority: 62,
   },
