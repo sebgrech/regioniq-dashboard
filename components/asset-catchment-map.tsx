@@ -96,7 +96,8 @@ export function AssetCatchmentMap({
   const [circleRadius, setCircleRadius] = useState(5) // Default 5km for asset-level
   const [isCirclePopoverOpen, setIsCirclePopoverOpen] = useState(false)
   const [shouldClearDraw, setShouldClearDraw] = useState(false)
-  const [showHint, setShowHint] = useState(true)
+  const [hintDismissed, setHintDismissed] = useState(false)
+  const [isHoveringMap, setIsHoveringMap] = useState(false)
   const mapRef = useRef<any>(null)
   
   // Geofence state management
@@ -123,18 +124,12 @@ export function AssetCatchmentMap({
     setShouldClearDraw(false)
   }, [])
   
-  // Hide hint after first interaction or after delay
+  // Dismiss hint once user starts drawing or has a geofence
   useEffect(() => {
     if (geofenceState.geofence || geofenceState.isDrawing) {
-      setShowHint(false)
+      setHintDismissed(true)
     }
   }, [geofenceState.geofence, geofenceState.isDrawing])
-  
-  // Auto-hide hint after 8 seconds
-  useEffect(() => {
-    const timer = setTimeout(() => setShowHint(false), 8000)
-    return () => clearTimeout(timer)
-  }, [])
   
   // Preload LAD GeoJSON on mount for faster calculations
   useEffect(() => {
@@ -264,7 +259,12 @@ export function AssetCatchmentMap({
   }
   
   return (
-    <div className={cn("relative rounded-xl overflow-hidden", className)}>
+    <div
+      className={cn("relative rounded-xl overflow-hidden", className)}
+      onMouseEnter={() => setIsHoveringMap(true)}
+      onMouseLeave={() => setIsHoveringMap(false)}
+      onClick={() => setHintDismissed(true)}
+    >
       <Map
         id={MAP_ID}
         ref={mapRef}
@@ -471,8 +471,8 @@ export function AssetCatchmentMap({
         </div>
       )}
       
-      {/* Tour-style hint card - positioned to the right of draw controls */}
-      {showHint && !hasGeofence && !isDrawing && !isCalculating && mapReady && (
+      {/* Tour-style hint card - show on hover, dismiss on map click */}
+      {!hintDismissed && isHoveringMap && !hasGeofence && !isDrawing && !isCalculating && mapReady && (
         <div 
           className="absolute z-20 animate-in fade-in-0 zoom-in-95 duration-300 flex items-start"
           style={{
@@ -509,7 +509,7 @@ export function AssetCatchmentMap({
               </div>
               <button 
                 className="shrink-0 ml-1 text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => setShowHint(false)}
+                onClick={(e) => { e.stopPropagation(); setHintDismissed(true); }}
               >
                 <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
