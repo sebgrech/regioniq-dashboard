@@ -365,6 +365,15 @@ function FullscreenToolbar({
   brandMode?: FullscreenBrandMode
 }) {
   const [dtreLogoLoadError, setDtreLogoLoadError] = useState(false)
+  const dtreLogoToken = process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN
+  const dtreLogoUrl = useMemo(() => {
+    const params = new URLSearchParams({
+      ...(dtreLogoToken ? { token: dtreLogoToken } : {}),
+      size: "140",
+      format: "png",
+    })
+    return `https://img.logo.dev/dtre.com?${params.toString()}`
+  }, [dtreLogoToken])
   // Calculate the position of the year label
   const getYearLabelPosition = () => {
     const percentage = ((year - YEARS.min) / (YEARS.max - YEARS.min)) * 100
@@ -381,7 +390,7 @@ function FullscreenToolbar({
             {brandMode === "dtre" ? (
               !dtreLogoLoadError ? (
                 <img
-                  src={`https://img.logo.dev/dtre.com?${process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN ? `token=${process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN}&` : ""}size=140&format=png`}
+                  src="/dtrellp_logo.jpeg"
                   alt="DTRE"
                   className="h-16 w-16 object-contain"
                   onError={() => setDtreLogoLoadError(true)}

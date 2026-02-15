@@ -743,7 +743,11 @@ export function GPComparisonSection({
                 </span>
               ))}
               <span className="flex items-center gap-1.5 ml-auto text-muted-foreground/70">
-                <span className="w-3 border-t border-dashed border-muted-foreground" />
+                <span className="w-4 h-[2.5px] rounded-full bg-muted-foreground/60" />
+                <span>history (ONS)</span>
+              </span>
+              <span className="flex items-center gap-1.5 text-muted-foreground/70">
+                <span className="w-4 border-t-[2px] border-dashed border-muted-foreground/60" />
                 <span>forecast</span>
               </span>
             </div>

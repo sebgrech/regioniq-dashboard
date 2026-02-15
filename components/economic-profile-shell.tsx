@@ -222,6 +222,18 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
 
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceTab>("economic-profile")
   const [logoLoadError, setLogoLoadError] = useState(false)
+
+  // Build DTRE logo URL — must reference env var as a standalone expression
+  // so Next.js can statically replace it at build time
+  const dtreLogoToken = process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN
+  const dtreLogoUrl = useMemo(() => {
+    const params = new URLSearchParams({
+      ...(dtreLogoToken ? { token: dtreLogoToken } : {}),
+      size: "140",
+      format: "png",
+    })
+    return `https://img.logo.dev/dtre.com?${params.toString()}`
+  }, [dtreLogoToken])
   const [selectedRegionMetadata, setSelectedRegionMetadata] = useState<RegionMetadata | null>(null)
   const [regionIndex, setRegionIndex] = useState<Record<string, Omit<RegionMetadata, "code">> | null>(null)
   const [allMetricsSeriesData, setAllMetricsSeriesData] = useState<
@@ -376,7 +388,7 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
         </span>
         <span>Economic Insight</span>
         {activeRegionName && (
-          <span className="text-sm font-normal text-[#4d647d] ml-1">· {activeRegionName}</span>
+          <span className="text-lg font-semibold text-[#233a54] ml-1">· {activeRegionName}</span>
         )}
       </div>
 
@@ -439,7 +451,7 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
           <div className="h-7 w-24 flex items-center">
             {!logoLoadError ? (
               <img
-                src={`https://img.logo.dev/dtre.com?${process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN ? `token=${process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN}&` : ""}size=140&format=png`}
+                src="/dtrellp_logo.jpeg"
                 alt="DTRE"
                 className="h-6 w-auto object-contain brightness-0 invert"
                 onError={() => setLogoLoadError(true)}
@@ -493,11 +505,11 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
                   </span>
                   {activeWorkspaceLabel}
                   {activeRegionName && activeWorkspace === "economic-profile" && (
-                    <span className="text-base font-normal text-[#4d647d]">· {activeRegionName}</span>
+                    <span className="text-xl font-semibold text-[#233a54]">· {activeRegionName}</span>
                   )}
                 </h1>
                 <p className="text-sm text-[#4d647d]">
-                  Embedded RegionIQ module inside DTRE workflow.
+                  Embedded RegionIQ module inside DXTRE.
                 </p>
               </div>
             </div>
@@ -669,6 +681,16 @@ export function EconomicProfileShell({ slug: _slug }: EconomicProfileShellProps)
             </aside>
           </div>
         </main>
+      </div>
+
+      {/* RegionIQ branding — bottom right */}
+      <div className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-lg bg-white/80 backdrop-blur px-3 py-1.5 shadow-sm border border-[#d7dee7]">
+        <span className="text-[10px] text-[#4d647d] tracking-wide">Powered by</span>
+        <img
+          src="/x.png"
+          alt="RegionIQ"
+          className="h-4 w-auto object-contain"
+        />
       </div>
     </div>
   )

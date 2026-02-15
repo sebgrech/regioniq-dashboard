@@ -55,8 +55,8 @@ const LOGISTICS_RULES: LogisticsRule[] = [
   {
     id: "logistics_labour_constrained",
     conditions: [{ signalId: "labour_capacity", outcomes: ["high"] }],
-    text: "Tight labour market increases recruitment lead-times for new occupiers",
-    why: "Employment rates are high across the catchment. A smaller pool of available workers means new logistics entrants face longer hiring cycles and greater competition for recruits.",
+    text: "High employment rate leaves a smaller available labour pool in this catchment",
+    why: "Employment rates are above the national benchmark, indicating limited spare capacity in the working-age population. Recruitment from a tighter pool typically requires longer hiring cycles.",
     priority: 100,
   },
   {

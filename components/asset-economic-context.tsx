@@ -588,7 +588,11 @@ function LADComparisonChart({
           </span>
         ))}
         <span className="flex items-center gap-1.5 ml-auto text-muted-foreground/70">
-          <span className="w-3 border-t border-dashed border-muted-foreground" />
+          <span className="w-4 h-[2.5px] rounded-full bg-muted-foreground/60" />
+          <span>history (ONS)</span>
+        </span>
+        <span className="flex items-center gap-1.5 text-muted-foreground/70">
+          <span className="w-4 border-t-[2px] border-dashed border-muted-foreground/60" />
           <span>forecast</span>
         </span>
       </div>
@@ -838,17 +842,17 @@ function LogisticsPositioningBlock({
   const LeadIcon = LOGISTICS_SIGNAL_ICONS[lead.id] || Target
 
   return (
-    <div className="relative overflow-visible rounded-xl border border-primary/20 bg-gradient-to-br from-primary/8 via-primary/3 to-transparent">
+    <div className="relative overflow-visible rounded-xl border border-[#1d4ed8]/20 bg-gradient-to-br from-[#1d4ed8]/8 via-[#1d4ed8]/3 to-transparent">
       <div
         className="absolute -top-24 -right-24 w-48 h-48 rounded-full blur-3xl opacity-20 animate-pulse"
-        style={{ background: "radial-gradient(circle, rgba(124,58,237,0.4) 0%, transparent 70%)" }}
+        style={{ background: "radial-gradient(circle, rgba(29,78,216,0.4) 0%, transparent 70%)" }}
       />
 
       <div className="relative p-5 space-y-4">
         {/* Header */}
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-primary/15 flex items-center justify-center animate-in zoom-in-95 duration-500">
-            <Target className="h-5 w-5 text-primary" />
+          <div className="h-10 w-10 rounded-xl bg-[#1d4ed8]/15 flex items-center justify-center animate-in zoom-in-95 duration-500">
+            <Target className="h-5 w-5 text-[#1d4ed8]" />
           </div>
           <div className="animate-in fade-in-0 slide-in-from-left-3 duration-500">
             <p className="text-base font-semibold text-foreground">
@@ -861,17 +865,17 @@ function LogisticsPositioningBlock({
           {/* Lead insight, highlighted */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="relative rounded-xl border border-primary/30 bg-primary/5 p-3.5 cursor-default animate-in fade-in-0 slide-in-from-bottom-3"
+              <div className="relative rounded-xl border border-[#1d4ed8]/30 bg-[#1d4ed8]/5 p-3.5 cursor-default animate-in fade-in-0 slide-in-from-bottom-3"
                 style={{ animationDelay: "100ms", animationFillMode: "backwards" }}
               >
                 <div className="mb-1.5 flex items-center gap-2">
-                  <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                  <span className="rounded-full bg-[#1d4ed8]/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#1d4ed8]">
                     Primary
                   </span>
                 </div>
                 <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/15">
-                    <LeadIcon className="h-3.5 w-3.5 text-primary" />
+                  <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[#1d4ed8]/15">
+                    <LeadIcon className="h-3.5 w-3.5 text-[#1d4ed8]" />
                   </div>
                   <p className="text-sm font-medium leading-relaxed text-foreground">
                     {lead.text}
@@ -902,13 +906,13 @@ function LogisticsPositioningBlock({
                     className={cn(
                       "group relative flex items-start gap-4 p-3 rounded-lg",
                       "bg-background/50 border border-border/30",
-                      "hover:border-primary/30 hover:bg-background/80",
+                      "hover:border-[#1d4ed8]/30 hover:bg-background/80",
                       "transition-all duration-300 animate-in fade-in-0 slide-in-from-bottom-3 cursor-default"
                     )}
                     style={{ animationDelay: `${250 + i * 120}ms`, animationFillMode: "backwards" }}
                   >
-                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 group-hover:scale-110 transition-all duration-300">
-                      <ItemIcon className="h-3.5 w-3.5 text-primary" />
+                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-[#1d4ed8]/10 flex items-center justify-center group-hover:bg-[#1d4ed8]/20 group-hover:scale-110 transition-all duration-300">
+                      <ItemIcon className="h-3.5 w-3.5 text-[#1d4ed8]" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-foreground leading-relaxed">{item.text}</p>
