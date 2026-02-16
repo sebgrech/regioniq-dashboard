@@ -696,7 +696,7 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
                     />
                     <div className="absolute right-0 top-full mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[200px] animate-in fade-in-0 zoom-in-95 duration-150">
                       <Link
-                        href="/admin/portfolio"
+                        href="/admin/assets"
                         className="flex items-center gap-2 px-3 py-2 text-sm text-primary font-medium hover:bg-muted/50 transition-colors"
                         onClick={() => setOwnerDropdownOpen(false)}
                       >
@@ -707,7 +707,7 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
                       {allOwners.map((o) => (
                         <Link
                           key={o}
-                          href={`/admin/portfolio?owner=${encodeURIComponent(o)}`}
+                          href={`/admin/assets?owner=${encodeURIComponent(o)}`}
                           className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted/50 transition-colors"
                           onClick={() => setOwnerDropdownOpen(false)}
                         >
@@ -729,7 +729,7 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
             {/* Clear filter chip (when filtered) -- subtle admin escape hatch */}
             {ownerFilter && (
               <Link
-                href="/admin/portfolio"
+                href="/admin/assets"
                 className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
                 title="Clear filter"
               >
