@@ -330,6 +330,7 @@ export function PortfolioViewV2({
                 setSelectedMetric={data.setSelectedMetric}
                 baseYear={data.baseYear}
                 ownerFilter={ownerFilter}
+                logoDomain={logoDomain}
                 mode={mode}
               />
             </div>
@@ -366,6 +367,7 @@ export function PortfolioViewV2({
                 setSelectedMetric={data.setSelectedMetric}
                 baseYear={data.baseYear}
                 ownerFilter={ownerFilter}
+                logoDomain={logoDomain}
                 mode={mode}
               />
             </div>
@@ -404,6 +406,7 @@ export function PortfolioViewV2({
                 setSelectedMetric={data.setSelectedMetric}
                 baseYear={data.baseYear}
                 ownerFilter={ownerFilter}
+                logoDomain={logoDomain}
                 mode={layoutMode}
               />
             </div>
