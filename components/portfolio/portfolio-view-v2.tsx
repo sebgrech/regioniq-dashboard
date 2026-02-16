@@ -8,17 +8,16 @@
  * All data flows from a single shared hook.
  */
 
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import {
   ArrowLeft,
-  Building2,
-  ChevronDown,
+  ExternalLink,
   LayoutGrid,
   Plus,
-  X,
 } from "lucide-react"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { cn } from "@/lib/utils"
 import { CompanyLogo } from "@/components/company-logo"
 import type { PortfolioAssetItem } from "./portfolio-types"
@@ -36,12 +35,14 @@ interface PortfolioViewV2Props {
   assets: PortfolioAssetItem[]
   ownerFilter?: string | null
   allOwners?: string[]
-  /** "user" = user-facing portfolio, "admin" = admin view (default) */
-  mode?: "user" | "admin"
+  /** "user" = user-facing portfolio, "admin" = admin view, "shared" = public /p/ link */
+  mode?: "user" | "admin" | "shared"
   /** User email — used for company logo in user mode */
   userEmail?: string | null
   /** Callback to open the Add Site sheet (user mode) */
   onAddSite?: () => void
+  /** Company domain for logo lookup (shared mode, e.g. "kinrise.com") */
+  logoDomain?: string | null
 }
 
 export function PortfolioViewV2({
@@ -51,9 +52,12 @@ export function PortfolioViewV2({
   mode = "admin",
   userEmail,
   onAddSite,
+  logoDomain,
 }: PortfolioViewV2Props) {
   const data = usePortfolioData(assets)
-  const [ownerDropdownOpen, setOwnerDropdownOpen] = useState(false)
+
+  // Shared mode uses admin layout for sub-components
+  const layoutMode: "user" | "admin" = mode === "user" ? "user" : "admin"
 
   // Derived metadata for subtitle — purely factual
   const uniqueRegionNames = useMemo(
@@ -120,14 +124,27 @@ export function PortfolioViewV2({
             </div>
           </div>
 
-          {/* Back link — context-dependent */}
-          <Link
-            href={mode === "user" ? "/dashboard" : "/admin/assets"}
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            {mode === "user" ? "Back to Dashboard" : "Back to Assets"}
-          </Link>
+          {/* Right side — context-dependent */}
+          {mode === "shared" ? (
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
+              <Link
+                href="https://regioniq.io"
+                className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Get full access
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            </div>
+          ) : (
+            <Link
+              href={mode === "user" ? "/dashboard" : "/admin/assets"}
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              {mode === "user" ? "Back to Dashboard" : "Back to Assets"}
+            </Link>
+          )}
         </div>
       </header>
 
@@ -165,6 +182,35 @@ export function PortfolioViewV2({
                 <div>
                   <h1 className="text-2xl font-bold text-foreground tracking-tight">
                     My Portfolio
+                  </h1>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {assets.length} location{assets.length !== 1 ? "s" : ""}
+                    {" · "}
+                    {uniqueRegionCount} region{uniqueRegionCount !== 1 ? "s" : ""}
+                    {uniqueClasses.length > 0 && ` · ${uniqueClasses.join(", ")}`}
+                  </p>
+                  {editorialLine && (
+                    <p className="text-xs text-muted-foreground/50 mt-1">
+                      {editorialLine}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Shared mode — portfolio name heading with logo */}
+            {mode === "shared" && (
+              <div className="flex items-center gap-4">
+                <CompanyLogo
+                  domain={logoDomain ?? undefined}
+                  name={!logoDomain ? (ownerFilter ?? undefined) : undefined}
+                  size={52}
+                  showFallback={true}
+                  className="rounded-xl ring-1 ring-border/30 shadow-sm"
+                />
+                <div>
+                  <h1 className="text-2xl font-bold text-foreground tracking-tight">
+                    {ownerFilter || "Portfolio"}
                   </h1>
                   <p className="text-sm text-muted-foreground mt-0.5">
                     {assets.length} location{assets.length !== 1 ? "s" : ""}
@@ -241,66 +287,6 @@ export function PortfolioViewV2({
                 Add Site
               </button>
             )}
-
-            {/* Admin mode — Owner dropdown */}
-            {mode === "admin" && !ownerFilter && allOwners.length > 0 && (
-              <div className="relative">
-                <button
-                  onClick={() => setOwnerDropdownOpen((p) => !p)}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all border bg-muted/50 border-border/50 text-muted-foreground hover:text-foreground"
-                >
-                  <span>All Owners</span>
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </button>
-                {ownerDropdownOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setOwnerDropdownOpen(false)}
-                    />
-                    <div className="absolute right-0 top-full mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[200px] animate-in fade-in-0 zoom-in-95 duration-150">
-                      <Link
-                        href="/admin/portfolio"
-                        className="flex items-center gap-2 px-3 py-2 text-sm text-primary font-medium hover:bg-muted/50 transition-colors"
-                        onClick={() => setOwnerDropdownOpen(false)}
-                      >
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                        All Owners
-                      </Link>
-                      <div className="h-px bg-border my-1" />
-                      {allOwners.map((o) => (
-                        <Link
-                          key={o}
-                          href={`/admin/portfolio?owner=${encodeURIComponent(o)}`}
-                          className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted/50 transition-colors"
-                          onClick={() => setOwnerDropdownOpen(false)}
-                        >
-                          <CompanyLogo
-                            name={o}
-                            size={20}
-                            showFallback={true}
-                            className="rounded"
-                          />
-                          {o}
-                        </Link>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Admin mode — Clear filter */}
-            {mode === "admin" && ownerFilter && (
-              <Link
-                href="/admin/portfolio"
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-                title="Clear filter"
-              >
-                <X className="h-3 w-3" />
-                Clear
-              </Link>
-            )}
           </div>
         </div>
       </div>
@@ -344,6 +330,7 @@ export function PortfolioViewV2({
                 setSelectedMetric={data.setSelectedMetric}
                 baseYear={data.baseYear}
                 ownerFilter={ownerFilter}
+                logoDomain={logoDomain}
                 mode={mode}
               />
             </div>
@@ -380,12 +367,13 @@ export function PortfolioViewV2({
                 setSelectedMetric={data.setSelectedMetric}
                 baseYear={data.baseYear}
                 ownerFilter={ownerFilter}
+                logoDomain={logoDomain}
                 mode={mode}
               />
             </div>
           </div>
         ) : (
-          /* ── Admin mode: side-by-side — wide cards left, sidebar map right ── */
+          /* ── Admin / Shared mode: side-by-side — wide cards left, sidebar map right ── */
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
             <div>
               <PortfolioCards
@@ -399,7 +387,7 @@ export function PortfolioViewV2({
                 toggleAsset={data.toggleAsset}
                 hoveredAssetIndex={data.hoveredAssetIndex}
                 onAssetHover={data.setHoveredAssetIndex}
-                mode={mode}
+                mode={layoutMode}
               />
             </div>
             <div className="h-[280px] lg:h-auto rounded-2xl overflow-hidden">
@@ -418,7 +406,8 @@ export function PortfolioViewV2({
                 setSelectedMetric={data.setSelectedMetric}
                 baseYear={data.baseYear}
                 ownerFilter={ownerFilter}
-                mode={mode}
+                logoDomain={logoDomain}
+                mode={layoutMode}
               />
             </div>
           </div>

@@ -67,6 +67,8 @@ interface PortfolioMapProps {
   baseYear: number
   /** Owner name for company logo in fullscreen toolbar */
   ownerFilter?: string | null
+  /** Explicit domain for logo lookup (e.g. "kinrise.com") — takes priority over ownerFilter */
+  logoDomain?: string | null
   /** "user" mode links to /site/[slug]?from=portfolio, "admin" to /gp/[slug] */
   mode?: "user" | "admin"
 }
@@ -85,6 +87,7 @@ export function PortfolioMap({
   selectedMetric,
   setSelectedMetric,
   ownerFilter,
+  logoDomain,
   baseYear,
   mode = "admin",
 }: PortfolioMapProps) {
@@ -456,9 +459,10 @@ export function PortfolioMap({
                     />
                   </div>
                   <div className="h-8 w-px bg-border/50" />
-                  {ownerFilter && (
+                  {(logoDomain || ownerFilter) && (
                     <CompanyLogo
-                      name={ownerFilter}
+                      domain={logoDomain ?? undefined}
+                      name={!logoDomain ? (ownerFilter ?? undefined) : undefined}
                       size={36}
                       showFallback={true}
                       className="rounded-lg ring-1 ring-border/20"
