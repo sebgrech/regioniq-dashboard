@@ -251,6 +251,16 @@ html {
   }
 }
 
+/* -------- Mapbox marker tooltip over controls -------- */
+/* Ensure marker hover tooltips render above the NavigationControl (+/- zoom) */
+.mapboxgl-marker {
+  z-index: 3 !important;
+}
+.mapboxgl-marker:hover,
+.mapboxgl-marker:has(.group:hover) {
+  z-index: 4 !important;
+}
+
 /* -------- Export capture guardrails (PNG) -------- */
 /* When a node is being captured to PNG, suppress transient UI and export controls. */
 [data-riq-exporting="true"] .recharts-tooltip-wrapper,
