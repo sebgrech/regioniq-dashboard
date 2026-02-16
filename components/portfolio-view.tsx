@@ -619,9 +619,6 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
 
   const barHeight = Math.max(120, barData.length * 32 + 40)
 
-  // ---- Owner dropdown state ----
-  const [ownerDropdownOpen, setOwnerDropdownOpen] = useState(false)
-
   // Default map center (UK) for initial view before fitBounds
   const defaultCenter = useMemo(() => {
     if (geocodedAssets.length > 0) {
@@ -677,68 +674,7 @@ export function PortfolioView({ assets, ownerFilter, allOwners = [] }: Portfolio
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Owner filter dropdown -- ONLY shown when no owner filter is active */}
-            {!ownerFilter && allOwners.length > 0 && (
-              <div className="relative">
-                <button
-                  onClick={() => setOwnerDropdownOpen((p) => !p)}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all border bg-muted/50 border-border/50 text-muted-foreground hover:text-foreground"
-                >
-                  <span>All Owners</span>
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </button>
-
-                {ownerDropdownOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setOwnerDropdownOpen(false)}
-                    />
-                    <div className="absolute right-0 top-full mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[200px] animate-in fade-in-0 zoom-in-95 duration-150">
-                      <Link
-                        href="/admin/assets"
-                        className="flex items-center gap-2 px-3 py-2 text-sm text-primary font-medium hover:bg-muted/50 transition-colors"
-                        onClick={() => setOwnerDropdownOpen(false)}
-                      >
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                        All Owners
-                      </Link>
-                      <div className="h-px bg-border my-1" />
-                      {allOwners.map((o) => (
-                        <Link
-                          key={o}
-                          href={`/admin/assets?owner=${encodeURIComponent(o)}`}
-                          className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted/50 transition-colors"
-                          onClick={() => setOwnerDropdownOpen(false)}
-                        >
-                          <CompanyLogo
-                            name={o}
-                            size={20}
-                            showFallback={true}
-                            className="rounded"
-                          />
-                          {o}
-                        </Link>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Clear filter chip (when filtered) -- subtle admin escape hatch */}
-            {ownerFilter && (
-              <Link
-                href="/admin/assets"
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-                title="Clear filter"
-              >
-                <X className="h-3 w-3" />
-                Clear
-              </Link>
-            )}
-
-            {/* Scenario toggle removed for clean demo -- hardcoded to baseline */}
+            {/* Scenario toggle removed for clean demo — hardcoded to baseline */}
           </div>
         </div>
 

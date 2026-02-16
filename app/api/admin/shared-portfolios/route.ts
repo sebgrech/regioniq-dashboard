@@ -58,7 +58,9 @@ export async function POST(request: NextRequest) {
     const origin =
       request.headers.get("x-forwarded-host")
         ? `https://${request.headers.get("x-forwarded-host")}`
-        : request.headers.get("origin") ?? ""
+        : request.headers.get("origin")
+          ?? process.env.NEXT_PUBLIC_APP_URL
+          ?? "https://app.regioniq.io"
     const url = `${origin}/p/${data.slug}`
 
     return NextResponse.json({ ...data, url }, { status: 201 })
