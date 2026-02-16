@@ -83,6 +83,7 @@ export function AssetsClient({ dealAssets, portfolioAssets }: AssetsClientProps)
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [portfolioName, setPortfolioName] = useState("")
+  const [logoDomain, setLogoDomain] = useState("")
   const [creating, setCreating] = useState(false)
   const [createdUrl, setCreatedUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -129,6 +130,7 @@ export function AssetsClient({ dealAssets, portfolioAssets }: AssetsClientProps)
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: portfolioName.trim() || undefined,
+          logoDomain: logoDomain.trim() || undefined,
           assetSlugs: [...selected],
         }),
       })
@@ -141,6 +143,7 @@ export function AssetsClient({ dealAssets, portfolioAssets }: AssetsClientProps)
       const data = await res.json()
       setCreatedUrl(data.url || `/p/${data.slug}`)
       setPortfolioName("")
+      setLogoDomain("")
     } catch (err: any) {
       setError(err.message || "Failed to create portfolio")
     } finally {
@@ -649,7 +652,14 @@ export function AssetsClient({ dealAssets, portfolioAssets }: AssetsClientProps)
                 placeholder="Portfolio name (optional)"
                 value={portfolioName}
                 onChange={(e) => setPortfolioName(e.target.value)}
-                className="flex-1 max-w-xs px-3 py-1.5 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="flex-1 max-w-[200px] px-3 py-1.5 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+              <input
+                type="text"
+                placeholder="Logo domain (e.g. kinrise.com)"
+                value={logoDomain}
+                onChange={(e) => setLogoDomain(e.target.value)}
+                className="flex-1 max-w-[220px] px-3 py-1.5 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
 

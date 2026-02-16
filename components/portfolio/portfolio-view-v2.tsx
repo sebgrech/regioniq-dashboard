@@ -44,6 +44,8 @@ interface PortfolioViewV2Props {
   userEmail?: string | null
   /** Callback to open the Add Site sheet (user mode) */
   onAddSite?: () => void
+  /** Company domain for logo lookup (shared mode, e.g. "kinrise.com") */
+  logoDomain?: string | null
 }
 
 export function PortfolioViewV2({
@@ -53,6 +55,7 @@ export function PortfolioViewV2({
   mode = "admin",
   userEmail,
   onAddSite,
+  logoDomain,
 }: PortfolioViewV2Props) {
   const data = usePortfolioData(assets)
   const [ownerDropdownOpen, setOwnerDropdownOpen] = useState(false)
@@ -199,9 +202,16 @@ export function PortfolioViewV2({
               </div>
             )}
 
-            {/* Shared mode — portfolio name heading */}
+            {/* Shared mode — portfolio name heading with logo */}
             {mode === "shared" && (
               <div className="flex items-center gap-4">
+                <CompanyLogo
+                  domain={logoDomain ?? undefined}
+                  name={!logoDomain ? (ownerFilter ?? undefined) : undefined}
+                  size={52}
+                  showFallback={true}
+                  className="rounded-xl ring-1 ring-border/30 shadow-sm"
+                />
                 <div>
                   <h1 className="text-2xl font-bold text-foreground tracking-tight">
                     {ownerFilter || "Portfolio"}

@@ -20,7 +20,7 @@ export default async function SharedPortfolioPage({ params }: PageProps) {
 
   const { data: portfolio, error: portfolioError } = await supabase
     .from("shared_portfolios")
-    .select("id, slug, name, asset_slugs, created_at")
+    .select("id, slug, name, logo_domain, asset_slugs, created_at")
     .eq("slug", slug)
     .single()
 
@@ -72,6 +72,7 @@ export default async function SharedPortfolioPage({ params }: PageProps) {
     <PortfolioViewV2
       assets={deduped}
       ownerFilter={portfolio.name}
+      logoDomain={portfolio.logo_domain}
       mode="shared"
     />
   )

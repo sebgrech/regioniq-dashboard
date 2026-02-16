@@ -21,9 +21,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { name, assetSlugs } = body as {
+    const { name, assetSlugs, logoDomain } = body as {
       name?: string
       assetSlugs?: string[]
+      logoDomain?: string
     }
 
     if (!assetSlugs || assetSlugs.length === 0) {
@@ -43,9 +44,10 @@ export async function POST(request: NextRequest) {
       .insert({
         slug,
         name: portfolioName,
+        logo_domain: logoDomain?.trim() || null,
         asset_slugs: assetSlugs,
       })
-      .select("id, slug, name, asset_slugs, created_at")
+      .select("id, slug, name, logo_domain, asset_slugs, created_at")
       .single()
 
     if (error) {
@@ -75,7 +77,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("shared_portfolios")
-    .select("id, slug, name, asset_slugs, created_at")
+    .select("id, slug, name, logo_domain, asset_slugs, created_at")
     .order("created_at", { ascending: false })
     .limit(50)
 
