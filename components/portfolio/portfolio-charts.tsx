@@ -5,7 +5,7 @@
  * Recycled from v1 with fixes: no duplicate region name in legend.
  */
 
-import { useCallback } from "react"
+import { useCallback, useMemo } from "react"
 import { useTheme } from "next-themes"
 import {
   LineChart,
@@ -16,6 +16,7 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
   ReferenceLine,
+  ReferenceDot,
   BarChart,
   Bar,
   Cell,
@@ -37,6 +38,7 @@ interface PortfolioChartsProps {
   baseYear: number
   forecastStartYear: number
   isLoading: boolean
+  hoveredAssetIndex: number | null
 }
 
 export function PortfolioCharts({
@@ -52,6 +54,7 @@ export function PortfolioCharts({
   baseYear,
   forecastStartYear,
   isLoading,
+  hoveredAssetIndex,
 }: PortfolioChartsProps) {
   const { theme } = useTheme()
   const isDarkMode = theme === "dark"
@@ -59,6 +62,32 @@ export function PortfolioCharts({
   const textColor = isDarkMode ? "#9ca3af" : "#6b7280"
 
   const barHeight = Math.max(120, barData.length * 32 + 40)
+
+  // ---- Adaptive scaling tiers ----
+  const isHighScale = visibleAssets.length >= 10
+  const isMidScale = visibleAssets.length >= 5
+  const restingOpacity = isHighScale ? 0.35 : 1
+
+  // At 10+, auto-detect top and bottom performers by latest indexed value
+  const { topIdx, bottomIdx, topYear, topValue, bottomValue } = useMemo(() => {
+    if (!isHighScale || chartData.length === 0) {
+      return { topIdx: -1, bottomIdx: -1, topYear: 0, topValue: 0, bottomValue: 0 }
+    }
+    const lastRow = chartData[chartData.length - 1]
+    const latestYear = lastRow?.year ?? 0
+    let best = -Infinity, worst = Infinity
+    let bestIdx = -1, worstIdx = -1
+    let bestVal = 0, worstVal = 0
+
+    visibleAssets.forEach((a) => {
+      const idx = assets.indexOf(a)
+      const val = (lastRow[`a${idx}_fcst`] ?? lastRow[`a${idx}_hist`]) as number | undefined
+      if (val == null) return
+      if (val > best) { best = val; bestIdx = idx; bestVal = val }
+      if (val < worst) { worst = val; worstIdx = idx; worstVal = val }
+    })
+    return { topIdx: bestIdx, bottomIdx: worstIdx, topYear: latestYear, topValue: bestVal, bottomValue: worstVal }
+  }, [isHighScale, chartData, visibleAssets, assets])
 
   // ---- Tooltips ----
   const LineTooltip = useCallback(
@@ -183,7 +212,7 @@ export function PortfolioCharts({
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart
                   data={chartData}
-                  margin={{ top: 10, right: 10, left: 0, bottom: 5 }}
+                  margin={{ top: 10, right: isHighScale ? 90 : 10, left: 0, bottom: 5 }}
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -226,6 +255,19 @@ export function PortfolioCharts({
                   {visibleAssets.map((a) => {
                     const idx = assets.indexOf(a)
                     const color = ASSET_COLORS[idx % ASSET_COLORS.length]
+
+                    // Adaptive opacity based on tier and hover state
+                    const isHovered = hoveredAssetIndex === idx
+                    const isAutoHighlighted = isHighScale && (idx === topIdx || idx === bottomIdx)
+                    const lineOpacity = isMidScale
+                      ? hoveredAssetIndex != null
+                        ? (isHovered ? 1 : 0.15)
+                        : (isAutoHighlighted ? 1 : restingOpacity)
+                      : 1
+                    const lineWidth = isMidScale
+                      ? (isHovered ? 3 : (isAutoHighlighted && hoveredAssetIndex == null ? 2.5 : 2))
+                      : 2.5
+
                     return [
                       <Line
                         key={`a${idx}_hist`}
@@ -233,9 +275,11 @@ export function PortfolioCharts({
                         dataKey={`a${idx}_hist`}
                         name={a.region_name}
                         stroke={color}
-                        strokeWidth={2.5}
+                        strokeWidth={lineWidth}
+                        strokeOpacity={lineOpacity}
                         dot={false}
                         activeDot={{ r: 3, strokeWidth: 2, fill: color }}
+                        style={{ transition: "stroke-opacity 200ms ease, stroke-width 200ms ease" }}
                       />,
                       <Line
                         key={`a${idx}_fcst`}
@@ -243,13 +287,49 @@ export function PortfolioCharts({
                         dataKey={`a${idx}_fcst`}
                         name={`${a.region_name} (F)`}
                         stroke={color}
-                        strokeWidth={2.5}
+                        strokeWidth={lineWidth}
+                        strokeOpacity={lineOpacity}
                         dot={false}
                         strokeDasharray="5 3"
                         activeDot={{ r: 3, strokeWidth: 2, fill: color }}
+                        style={{ transition: "stroke-opacity 200ms ease, stroke-width 200ms ease" }}
                       />,
                     ]
                   })}
+
+                  {/* Auto-highlight labels for top/bottom at 10+ (resting state only) */}
+                  {isHighScale && hoveredAssetIndex == null && topIdx >= 0 && bottomIdx >= 0 && topIdx !== bottomIdx && (
+                    <>
+                      <ReferenceDot
+                        key="top-label"
+                        x={topYear}
+                        y={topValue}
+                        r={0}
+                        label={{
+                          value: `▲ ${assets[topIdx]?.region_name}`,
+                          position: "right",
+                          fontSize: 9,
+                          fontWeight: 600,
+                          fill: ASSET_COLORS[topIdx % ASSET_COLORS.length],
+                          dx: 4,
+                        }}
+                      />
+                      <ReferenceDot
+                        key="bottom-label"
+                        x={topYear}
+                        y={bottomValue}
+                        r={0}
+                        label={{
+                          value: `▼ ${assets[bottomIdx]?.region_name}`,
+                          position: "right",
+                          fontSize: 9,
+                          fontWeight: 600,
+                          fill: ASSET_COLORS[bottomIdx % ASSET_COLORS.length],
+                          dx: 4,
+                        }}
+                      />
+                    </>
+                  )}
                 </LineChart>
               </ResponsiveContainer>
             </div>

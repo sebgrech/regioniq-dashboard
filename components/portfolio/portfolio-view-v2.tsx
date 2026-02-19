@@ -296,6 +296,12 @@ export function PortfolioViewV2({
       {/* ================================================================ */}
       <div className="stagger-children space-y-10">
         {/* Section 1: Cards + Map */}
+        <div>
+          <h3 className="text-base font-semibold text-foreground">Assets</h3>
+          <p className="text-xs text-muted-foreground/70 mt-0.5">
+            {assets.length} {assets.length === 1 ? "location" : "locations"}
+          </p>
+        </div>
         {mode === "user" && assets.length >= 2 ? (
           /* ── User mode, 2+ sites: side-by-side — cards left, map right (height matches cards) ── */
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-stretch">
@@ -428,6 +434,7 @@ export function PortfolioViewV2({
             baseYear={data.baseYear}
             forecastStartYear={data.forecastStartYear}
             isLoading={data.isLoading}
+            hoveredAssetIndex={data.hoveredAssetIndex}
           />
         </div>
 
